@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
 
@@ -56,6 +56,7 @@
 *   **Web Dashboard** - 精美的 Web 界面 (http://localhost:8080) 实时监控任务状态
 *   **实时进度跟踪** - VS Code 风格的任务进度展示，支持工具使用实时显示
 *   **定时任务调度** - 支持周期任务和定时任务，QQ 通知执行结果
+*   **Agent 协作系统** - 多 Agent 协作执行复杂任务（代码、浏览器、Shell、搜索等）
 
 ### 运维
 
@@ -435,6 +436,52 @@ npm test              # 运行所有测试
 npm run test:watch    # 监视模式
 npm run test:coverage # 覆盖率报告
 ```
+
+---
+
+## 更新日志
+
+### v1.1.0 (2026-02-22)
+
+#### 新增功能
+
+- **Agent 协作系统** (`src/agents/`)
+  - `CoordinatorAgent`: 智能任务协调器，自动分配子任务
+  - `GLMCoordinatorAgent`: 基于 GLM-4.7 的高性能协调器
+  - `CodeAgent`: 代码分析和生成 Agent
+  - `BrowserAgent`: 浏览器自动化 Agent
+  - `ShellAgent`: 命令行执行 Agent
+  - `WebSearchAgent`: 网页搜索 Agent
+  - `DataAnalysisAgent`: 数据分析 Agent
+
+- **定时任务增强**
+  - 修复 CLI 非交互模式执行问题 (`-p` 参数)
+  - 修复环境变量污染 (CLAUDECODE/VSCODE_*)
+  - 修复间隔计算错误
+  - 优化 QQ 通知目标验证
+  - 周期间隔人性化显示
+
+#### Bug 修复
+
+- 修复 CLI 嵌套会话检测导致的任务失败
+- 修复周期任务执行后无 QQ 通知的问题
+- 修复 Dashboard 缓存导致的配置更新不生效
+- 修复 TaskStore 不支持热重载的问题
+
+#### 配置更新
+
+- 更新 `.gitignore` 排除敏感文件和测试数据
+- 更新 `.env.example` 添加 Agent 系统配置项
+
+### v1.0.0 (2026-02-20)
+
+#### 初始版本
+
+- QQ Bot 集成
+- Web Dashboard
+- 定时任务调度
+- 实时进度跟踪
+- 文件双向传输
 
 ---
 
