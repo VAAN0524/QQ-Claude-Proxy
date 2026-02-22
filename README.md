@@ -30,9 +30,9 @@
 
 <table>
 <tr>
-<td width="33%"><img src="screenshots/IMG_2582.PNG" alt="手机 QQ 对话"></td>
-<td width="33%"><img src="screenshots/IMG_2583.PNG" alt="工具执行状态"></td>
-<td width="33%"><img src="screenshots/IMG_2584.PNG" alt="文件传输"></td>
+<td width="33%"><img src="screenshots/IMG_2582.PNG" alt="视频传输"></td>
+<td width="33%"><img src="screenshots/IMG_2583.PNG" alt="图片传输"></td>
+<td width="33%"><img src="screenshots/IMG_2584.PNG" alt="工具实时状态"></td>
 </tr>
 <tr>
 <td align="center">手机 QQ 对话</td>
