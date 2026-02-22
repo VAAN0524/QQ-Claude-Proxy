@@ -202,26 +202,46 @@ async function executeScheduledTask(taskId) {
   return data;
 }
 
+async function resetScheduledTask(taskId) {
+  const data = await apiRequest('/scheduled-tasks/reset', {
+    method: 'POST',
+    body: JSON.stringify({ taskId }),
+  });
+  if (data.success) {
+    showToast('任务状态已重置', 'success');
+    await fetchScheduledTasks();
+    await fetchScheduledTasksStats();
+  }
+  return data;
+}
+
 // ==================== 定时任务 UI 函数 ====================
 
 function updateScheduledTasksUI(tasks) {
   const container = document.getElementById('scheduledTasksList');
   if (!container) return;
 
+  console.log('[ScheduledTasks] Received tasks:', tasks.length, tasks);
+  console.log('[ScheduledTasks] Current tab:', state.currentTaskTab);
+
   // 根据当前标签过滤
   let filteredTasks = tasks;
   if (state.currentTaskTab !== 'all') {
     filteredTasks = tasks.filter(t => t.type === state.currentTaskTab);
+    console.log('[ScheduledTasks] Filtered tasks:', filteredTasks.length, 'for type:', state.currentTaskTab);
   }
 
   if (filteredTasks.length === 0) {
+    const emptyMsg = state.currentTaskTab === 'all'
+      ? '暂无定时任务'
+      : `暂无${state.currentTaskTab === 'periodic' ? '周期' : '定时'}任务`;
     container.innerHTML = `
       <div class="empty-state" id="scheduledTasksEmptyState">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 6v6l4 2"/>
         </svg>
-        <p>暂无定时任务</p>
+        <p>${emptyMsg}</p>
         <p class="empty-state-hint">点击"创建任务"添加新的定时任务</p>
       </div>
     `;
@@ -290,6 +310,14 @@ function renderScheduledTaskItem(task) {
             <button class="btn-icon-small st-action-btn" data-action="execute" title="立即执行">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            </button>
+          ` : ''}
+          ${task.failureCount > 0 ? `
+            <button class="btn-icon-small st-action-btn st-action-reset" data-action="reset" title="重置状态">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-9 9"/>
+                <path d="M12 7v5l3 3"/>
               </svg>
             </button>
           ` : ''}
@@ -408,7 +436,7 @@ async function saveCreateTask() {
   const description = document.getElementById('taskDescription').value.trim();
   // 从单选按钮获取任务类型
   const type = document.querySelector('input[name="taskType"]:checked')?.value || 'periodic';
-  const command = document.getElementById('taskCommand').value.trim();
+  let command = document.getElementById('taskCommand').value.trim();
   const notifyQQ = document.getElementById('taskNotifyQQ').checked;
   const notifyTarget = document.getElementById('taskNotifyTarget').value.trim();
   const saveResult = document.getElementById('taskSaveResult').checked;
@@ -416,6 +444,11 @@ async function saveCreateTask() {
   if (!name || !command) {
     showToast('请填写任务名称和命令', 'error');
     return;
+  }
+
+  // YOLO 模式：自动添加 --dangerously-skip-permissions 前缀（用户只负责填提示词）
+  if (!command.startsWith('-')) {
+    command = '--dangerously-skip-permissions ' + command;
   }
 
   const params = {
@@ -1039,10 +1072,23 @@ function init() {
   document.getElementById('cancelCreateTaskBtn').addEventListener('click', closeCreateTaskModal);
   document.getElementById('saveCreateTaskBtn').addEventListener('click', saveCreateTask);
 
-  // 任务类型切换（单选按钮）
+  // 任务类型切换（单选按钮和卡片点击）
   document.querySelectorAll('input[name="taskType"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       toggleTaskConfig(e.target.value);
+    });
+  });
+
+  // 为卡片添加点击处理，确保点击卡片也能触发 radio 选择
+  document.querySelectorAll('.task-type-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // 找到对应的 radio input
+      const radio = card.parentElement.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.checked = true;
+        // 手动触发 change 事件
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     });
   });
 
@@ -1083,6 +1129,11 @@ function init() {
         case 'execute':
           if (confirm('确定要立即执行此任务吗？')) {
             await executeScheduledTask(taskId);
+          }
+          break;
+        case 'reset':
+          if (confirm('确定要重置此任务状态吗？这将清空执行历史和失败计数。')) {
+            await resetScheduledTask(taskId);
           }
           break;
         case 'detail':

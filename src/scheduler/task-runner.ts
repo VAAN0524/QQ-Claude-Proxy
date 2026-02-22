@@ -102,11 +102,19 @@ export class TaskRunner {
       let errorOutput = '';
       let outputSize = 0;
 
-      // 启动 Claude CLI 进程
-      const child = spawn('claude', ['--non-interactive', command], {
+      // 如果命令已包含 --dangerously-skip-permissions，则不再添加
+      const cmd = command.startsWith('--dangerously-skip-permissions')
+        ? command
+        : `--dangerously-skip-permissions ${command}`;
+
+      // 使用 npx 来执行 claude 命令，确保跨平台兼容
+      const fullCommand = `npx claude ${cmd}`;
+
+      const child = spawn(fullCommand, [], {
         cwd: this.workspacePath,
         env: { ...process.env },
-        shell: true,
+        shell: true,  // 使用 shell 来解析命令
+        windowsHide: true,
       });
 
       // 记录运行中的任务

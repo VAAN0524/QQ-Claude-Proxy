@@ -368,29 +368,42 @@ export class TaskStore {
   }
 
   /**
-   * 保存到文件
+   * 保存到文件（带重试机制）
    */
   async save(): Promise<void> {
-    try {
-      const data: StorageData = {
-        version: this.VERSION,
-        savedAt: Date.now(),
-        tasks: Array.from(this.tasks.values()).map(this.serializeTask),
-      };
+    const maxRetries = 5;
+    const retryDelay = 100; // 毫秒
 
-      // 先备份
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await fs.access(this.tasksFilePath);
-        await fs.copyFile(this.tasksFilePath, this.backupFilePath);
-      } catch {
-        // 文件不存在，无需备份
-      }
+        const data: StorageData = {
+          version: this.VERSION,
+          savedAt: Date.now(),
+          tasks: Array.from(this.tasks.values()).map(this.serializeTask),
+        };
 
-      // 写入新内容
-      await fs.writeFile(this.tasksFilePath, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (error) {
-      logger.error(`[TaskStore] 保存失败: ${error}`);
-      throw error;
+        // 先备份（仅在第一次尝试时）
+        if (attempt === 1) {
+          try {
+            await fs.access(this.tasksFilePath);
+            await fs.copyFile(this.tasksFilePath, this.backupFilePath);
+          } catch {
+            // 文件不存在，无需备份
+          }
+        }
+
+        // 写入新内容
+        await fs.writeFile(this.tasksFilePath, JSON.stringify(data, null, 2), 'utf-8');
+        return; // 成功则退出
+      } catch (error: any) {
+        if (error.code === 'EBUSY' && attempt < maxRetries) {
+          // 文件被锁定，等待后重试
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
+        }
+        logger.error(`[TaskStore] 保存失败: ${error}`);
+        throw error;
+      }
     }
   }
 

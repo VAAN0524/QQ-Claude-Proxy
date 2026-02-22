@@ -641,12 +641,15 @@ input {
 .modal {
   width: 100%;
   max-width: 480px;
+  max-height: 90vh;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   transform: translateY(20px);
   transition: transform var(--transition-normal);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-overlay.active .modal {
@@ -690,6 +693,16 @@ input {
 
 .modal-body {
   padding: var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.modal-body-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  min-height: 0;
 }
 
 .modal-footer {
@@ -832,6 +845,17 @@ input {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .modal-xl {
+    max-width: 95vw;
+  }
+
+  .modal-body-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+}
+
 @media (max-width: 768px) {
   .header {
     padding: var(--spacing-sm) var(--spacing-md);
@@ -860,8 +884,27 @@ input {
   }
 
   .modal {
-    max-width: calc(100% - var(--spacing-lg) * 2);
+    max-width: calc(100% - var(--spacing-md) * 2);
     margin: var(--spacing-md);
+    max-height: calc(100vh - var(--spacing-md) * 2);
+  }
+
+  .modal-xl {
+    max-width: calc(100% - var(--spacing-md) * 2);
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+  }
+
+  .modal-body-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
   }
 
   .toast-container {
@@ -1092,19 +1135,39 @@ input {
   color: var(--color-error);
 }
 
+.st-action-reset {
+  background: rgba(220, 220, 170, 0.2);
+  color: var(--color-warning);
+}
+
+.st-action-reset:hover {
+  background: rgba(220, 220, 170, 0.3);
+  color: var(--color-warning);
+}
+
 /* Create Task Modal */
 .modal-lg {
   max-width: 600px;
+  max-height: 85vh;
 }
 
 .modal-xl {
-  max-width: 900px;
+  max-width: 1100px;
+  max-height: 90vh;
+}
+
+/* Desktop large screen optimization */
+@media (min-width: 1400px) {
+  .modal-xl {
+    max-width: 1200px;
+  }
 }
 
 .modal-body-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--spacing-lg);
+  min-height: 0;
 }
 
 .form-column {
@@ -1148,6 +1211,7 @@ input {
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
+  user-select: none;
 }
 
 .task-type-card:hover {
@@ -1272,6 +1336,20 @@ input {
   margin-top: 4px;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* YOLO Badge */
+.yolo-badge {
+  display: inline-block;
+  margin-left: var(--spacing-xs);
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Task Detail Modal */

@@ -86,7 +86,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET /api/stats - Get dashboard stats
    */
-  handlers.set('/api/stats', async (req, res) => {
+  handlers.set('GET:/api/stats', async (req, res) => {
     if (req.method !== 'GET') {
       res.writeHead(405, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Method not allowed' }));
@@ -119,7 +119,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET /api/tasks - Get all tasks
    */
-  handlers.set('/api/tasks', async (req, res) => {
+  handlers.set('GET:/api/tasks', async (req, res) => {
     if (req.method !== 'GET') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -132,7 +132,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET /api/tasks/:id - Get specific task
    */
-  handlers.set('/api/tasks/current', async (req, res) => {
+  handlers.set('GET:/api/tasks/current', async (req, res) => {
     if (req.method !== 'GET') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -146,7 +146,8 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET/PUT /api/config - Get or update config
    */
-  handlers.set('/api/config', async (req, res) => {
+  // 为 GET 和 PUT 注册同一个handler
+  const configHandler = async (req, res) => {
     if (req.method === 'GET') {
       // Return safe config (no secrets)
       const safeConfig = {
@@ -191,12 +192,16 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
     }
 
     sendJson(res, { error: 'Method not allowed' }, 405);
-  });
+  };
+
+  // 注册 GET 和 PUT 方法
+  handlers.set('GET:/api/config', configHandler);
+  handlers.set('PUT:/api/config', configHandler);
 
   /**
    * POST /api/restart - Restart service
    */
-  handlers.set('/api/restart', async (req, res) => {
+  handlers.set('POST:/api/restart', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -225,7 +230,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * POST /api/tasks/clear - Clear completed tasks
    */
-  handlers.set('/api/tasks/clear', async (req, res) => {
+  handlers.set('POST:/api/tasks/clear', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -248,7 +253,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET /api/scheduled-tasks - 获取所有定时任务
    */
-  handlers.set('/api/scheduled-tasks', async (req, res) => {
+  handlers.set('GET:/api/scheduled-tasks', async (req, res) => {
     if (req.method !== 'GET') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -266,7 +271,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * POST /api/scheduled-tasks - 创建定时任务
    */
-  handlers.set('/api/scheduled-tasks', async (req, res) => {
+  handlers.set('POST:/api/scheduled-tasks', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -319,7 +324,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * GET /api/scheduled-tasks/:id - 获取单个任务
    */
-  handlers.set('/api/scheduled-tasks/get', async (req, res) => {
+  handlers.set('GET:/api/scheduled-tasks/get', async (req, res) => {
     if (req.method !== 'GET') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -350,7 +355,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * PUT /api/scheduled-tasks/:id - 更新任务
    */
-  handlers.set('/api/scheduled-tasks/update', async (req, res) => {
+  handlers.set('PUT:/api/scheduled-tasks/update', async (req, res) => {
     if (req.method !== 'PUT') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -387,7 +392,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * DELETE /api/scheduled-tasks/:id - 删除任务
    */
-  handlers.set('/api/scheduled-tasks/delete', async (req, res) => {
+  handlers.set('DELETE:/api/scheduled-tasks/delete', async (req, res) => {
     if (req.method !== 'DELETE') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -424,7 +429,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * POST /api/scheduled-tasks/:id/pause - 暂停周期任务
    */
-  handlers.set('/api/scheduled-tasks/pause', async (req, res) => {
+  handlers.set('POST:/api/scheduled-tasks/pause', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -461,7 +466,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * POST /api/scheduled-tasks/:id/resume - 恢复周期任务
    */
-  handlers.set('/api/scheduled-tasks/resume', async (req, res) => {
+  handlers.set('POST:/api/scheduled-tasks/resume', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -498,7 +503,7 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   /**
    * POST /api/scheduled-tasks/:id/execute - 立即执行任务
    */
-  handlers.set('/api/scheduled-tasks/execute', async (req, res) => {
+  handlers.set('POST:/api/scheduled-tasks/execute', async (req, res) => {
     if (req.method !== 'POST') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;
@@ -533,9 +538,63 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
   });
 
   /**
+   * POST /api/scheduled-tasks/:id/reset - 重置任务状态
+   */
+  handlers.set('POST:/api/scheduled-tasks/reset', async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    if (!context.scheduler) {
+      sendJson(res, { error: '调度器未启用' }, 503);
+      return;
+    }
+
+    try {
+      const params = await getBody(req);
+      const { taskId } = params;
+
+      if (!taskId) {
+        sendJson(res, { error: '缺少任务ID' }, 400);
+        return;
+      }
+
+      const task = context.scheduler.getTask(taskId);
+      if (!task) {
+        sendJson(res, { error: '任务不存在' }, 404);
+        return;
+      }
+
+      // 重置任务状态
+      await context.scheduler.updateTask(taskId, {
+        status: 'pending' as any,
+        // 清空执行历史和计数
+        executionHistory: [] as any,
+        executionCount: 0,
+        failureCount: 0,
+      } as any);
+
+      // 重新计算下次执行时间
+      if (task.type === 'periodic' && task.periodicConfig) {
+        const nextTime = Date.now() + task.periodicConfig.interval;
+        await context.scheduler.updateTask(taskId, {
+          nextExecutionTime: nextTime as any,
+        } as any);
+      }
+
+      logger.info(`重置任务状态: ${taskId} (${task.name})`);
+      sendJson(res, { success: true });
+    } catch (error) {
+      logger.error(`重置任务状态失败: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '重置失败' }, 500);
+    }
+  });
+
+  /**
    * GET /api/scheduled-tasks/stats - 获取定时任务统计
    */
-  handlers.set('/api/scheduled-tasks/stats', async (req, res) => {
+  handlers.set('GET:/api/scheduled-tasks/stats', async (req, res) => {
     if (req.method !== 'GET') {
       sendJson(res, { error: 'Method not allowed' }, 405);
       return;

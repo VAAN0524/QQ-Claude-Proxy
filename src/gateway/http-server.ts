@@ -114,9 +114,11 @@ export class HttpServer {
         return;
       }
 
-      // API routes
+      // API routes - use method+path as key to support multiple methods on same path
       if (url.pathname.startsWith('/api/')) {
-        const handler = this.apiHandlers.get(url.pathname);
+        const method = req.method || 'GET';
+        const handlerKey = `${method}:${url.pathname}`;
+        const handler = this.apiHandlers.get(handlerKey);
         if (handler) {
           await handler(req, res);
         } else {

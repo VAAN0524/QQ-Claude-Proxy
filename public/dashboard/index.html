@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QQ-Claude-Proxy Dashboard</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3.4">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 </head>
 <body>
@@ -265,9 +265,12 @@
           </div>
 
           <div class="form-group">
-            <label for="taskCommand">Claude 命令 *</label>
-            <textarea id="taskCommand" class="form-input" rows="4" placeholder="要发送给 Claude 的命令或提示词" required></textarea>
-            <small class="form-hint">这将被作为命令发送给 Claude Code CLI 执行</small>
+            <label for="taskCommand">
+              提示词 *
+              <span class="yolo-badge">YOLO 模式</span>
+            </label>
+            <textarea id="taskCommand" class="form-input" rows="4" placeholder="输入你的提示词，系统将自动跳过权限确认执行" required></textarea>
+            <small class="form-hint">只需填写提示词，系统会自动添加 --dangerously-skip-permissions 参数</small>
           </div>
         </div>
 
@@ -433,6 +436,6 @@
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=3.5"></script>
 </body>
 </html>
