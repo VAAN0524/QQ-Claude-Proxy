@@ -24,6 +24,25 @@
 
 ---
 
+## 📸 演示截图
+
+### QQ 端实时交互
+
+<table>
+<tr>
+<td width="33%"><img src="screenshots/IMG_2582.PNG" alt="手机 QQ 对话"></td>
+<td width="33%"><img src="screenshots/IMG_2583.PNG" alt="工具执行状态"></td>
+<td width="33%"><img src="screenshots/IMG_2584.PNG" alt="文件传输"></td>
+</tr>
+<tr>
+<td align="center">手机 QQ 对话</td>
+<td align="center">工具执行状态</td>
+<td align="center">文件传输</td>
+</tr>
+</table>
+
+---
+
 ## 功能特性
 
 ### 核心
