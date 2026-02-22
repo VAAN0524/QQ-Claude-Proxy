@@ -378,7 +378,9 @@ function closeCreateTaskModal() {
   document.getElementById('taskName').value = '';
   document.getElementById('taskDescription').value = '';
   document.getElementById('taskCommand').value = '';
-  document.getElementById('taskType').value = 'periodic';
+  // 重置任务类型单选按钮
+  document.querySelector('input[name="taskType"][value="periodic"]').checked = true;
+  toggleTaskConfig('periodic');
   document.getElementById('periodicInterval').value = '60';
   document.getElementById('periodicRunImmediately').checked = false;
   document.getElementById('periodicMaxRuns').value = '';
@@ -386,7 +388,6 @@ function closeCreateTaskModal() {
   document.getElementById('taskNotifyQQ').checked = true;
   document.getElementById('taskNotifyTarget').value = '';
   document.getElementById('taskSaveResult').checked = true;
-  toggleTaskConfig('periodic');
 }
 
 function toggleTaskConfig(type) {
@@ -394,18 +395,19 @@ function toggleTaskConfig(type) {
   const scheduledConfig = document.getElementById('scheduledConfig');
 
   if (type === 'periodic') {
-    periodicConfig.style.display = 'block';
-    scheduledConfig.style.display = 'none';
+    periodicConfig.classList.add('config-card-active');
+    scheduledConfig.classList.remove('config-card-active');
   } else {
-    periodicConfig.style.display = 'none';
-    scheduledConfig.style.display = 'block';
+    periodicConfig.classList.remove('config-card-active');
+    scheduledConfig.classList.add('config-card-active');
   }
 }
 
 async function saveCreateTask() {
   const name = document.getElementById('taskName').value.trim();
   const description = document.getElementById('taskDescription').value.trim();
-  const type = document.getElementById('taskType').value;
+  // 从单选按钮获取任务类型
+  const type = document.querySelector('input[name="taskType"]:checked')?.value || 'periodic';
   const command = document.getElementById('taskCommand').value.trim();
   const notifyQQ = document.getElementById('taskNotifyQQ').checked;
   const notifyTarget = document.getElementById('taskNotifyTarget').value.trim();
@@ -1037,9 +1039,11 @@ function init() {
   document.getElementById('cancelCreateTaskBtn').addEventListener('click', closeCreateTaskModal);
   document.getElementById('saveCreateTaskBtn').addEventListener('click', saveCreateTask);
 
-  // 任务类型切换
-  document.getElementById('taskType').addEventListener('change', (e) => {
-    toggleTaskConfig(e.target.value);
+  // 任务类型切换（单选按钮）
+  document.querySelectorAll('input[name="taskType"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      toggleTaskConfig(e.target.value);
+    });
   });
 
   // 任务详情模态框

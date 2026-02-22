@@ -166,13 +166,42 @@ export class CliSessionManager {
               logger.info(`[CliSession ${taskId}] JSON事件: type="${eventType}"${subType ? `, sub="${subType}"` : ''}`);
 
               // 提取不同类型的内容
-              if (json.type === 'message' && json.message?.content) {
+              if ((json.type === 'message' || json.type === 'assistant') && json.message?.content) {
                 const content = json.message.content;
-                output += content;
-                hasOutput = true;
 
-                if (options.onProgress) {
-                  options.onProgress(content);
+                // 检查是否包含工具调用（content 可能是数组）
+                if (Array.isArray(content)) {
+                  for (const item of content) {
+                    if (item.type === 'tool_use') {
+                      // 提取工具调用信息
+                      const toolName = item.name;
+                      const toolInput = item.input;
+
+                      logger.info(`[CliSession ${taskId}] 🔧 工具调用: ${toolName}`);
+
+                      // 传递工具调用信息给 ProgressTracker
+                      if (options.onProgress) {
+                        const toolMessage = `Using ${toolName} tool`;
+                        options.onProgress(toolMessage);
+                      }
+                    } else if (item.type === 'text' && item.text) {
+                      // 文本内容
+                      output += item.text;
+                      hasOutput = true;
+
+                      if (options.onProgress) {
+                        options.onProgress(item.text);
+                      }
+                    }
+                  }
+                } else if (typeof content === 'string') {
+                  // 字符串内容（直接文本）
+                  output += content;
+                  hasOutput = true;
+
+                  if (options.onProgress) {
+                    options.onProgress(content);
+                  }
                 }
               } else if (json.type === 'messageDelta' && json.delta?.content) {
                 const content = json.delta.content;

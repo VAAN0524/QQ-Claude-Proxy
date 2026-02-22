@@ -209,48 +209,9 @@
     </main>
   </div>
 
-  <!-- Settings Modal -->
-  <div class="modal-overlay" id="settingsModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>系统设置</h2>
-        <button class="btn-close" id="closeSettingsBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="gatewayPort">Gateway 端口</label>
-          <input type="number" id="gatewayPort" class="form-input" min="1024" max="65535">
-        </div>
-        <div class="form-group">
-          <label for="gatewayHost">Gateway 主机</label>
-          <input type="text" id="gatewayHost" class="form-input" placeholder="127.0.0.1">
-        </div>
-        <div class="form-group">
-          <label for="allowedUsers">允许的用户 (逗号分隔)</label>
-          <input type="text" id="allowedUsers" class="form-input" placeholder="留空则允许所有用户">
-        </div>
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="sandboxMode" class="form-checkbox">
-            启用沙箱模式
-          </label>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelSettingsBtn">取消</button>
-        <button class="btn-primary" id="saveSettingsBtn">保存并重启</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Create Task Modal -->
   <div class="modal-overlay" id="createTaskModal">
-    <div class="modal modal-lg">
+    <div class="modal modal-xl">
       <div class="modal-header">
         <h2>创建定时任务</h2>
         <button class="btn-close" id="closeCreateTaskBtn">
@@ -260,83 +221,146 @@
           </svg>
         </button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="taskName">任务名称 *</label>
-          <input type="text" id="taskName" class="form-input" placeholder="例如: 每日数据备份" required>
-        </div>
-        <div class="form-group">
-          <label for="taskDescription">任务描述</label>
-          <textarea id="taskDescription" class="form-input" rows="2" placeholder="任务描述（可选）"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="taskType">任务类型 *</label>
-          <select id="taskType" class="form-input" required>
-            <option value="periodic">周期任务 - 按固定间隔重复执行</option>
-            <option value="scheduled">定时任务 - 在指定时间执行一次</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="taskCommand">Claude 命令 *</label>
-          <textarea id="taskCommand" class="form-input" rows="3" placeholder="要发送给 Claude 的命令或提示词" required></textarea>
-          <small class="form-hint">这将被作为命令发送给 Claude Code CLI 执行</small>
-        </div>
+      <div class="modal-body modal-body-grid">
+        <!-- Left Column: Basic Info -->
+        <div class="form-column">
+          <h3 class="form-section-title">基本信息</h3>
 
-        <!-- Periodic Task Config -->
-        <div id="periodicConfig" class="task-config">
           <div class="form-group">
-            <label for="periodicInterval">执行间隔 *</label>
-            <div class="input-group">
-              <input type="number" id="periodicInterval" class="form-input" min="1" value="60" required>
-              <select id="periodicIntervalUnit" class="form-input">
-                <option value="60000">分钟</option>
-                <option value="3600000">小时</option>
-                <option value="86400000">天</option>
-              </select>
+            <label for="taskName">任务名称 *</label>
+            <input type="text" id="taskName" class="form-input" placeholder="例如: 每日数据备份" required>
+          </div>
+
+          <div class="form-group">
+            <label for="taskDescription">任务描述</label>
+            <textarea id="taskDescription" class="form-input" rows="2" placeholder="任务描述（可选）"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>任务类型 *</label>
+            <div class="task-type-selector">
+              <label class="task-type-option">
+                <input type="radio" name="taskType" value="periodic" checked>
+                <span class="task-type-card">
+                  <svg class="task-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    <polyline points="21 3 21 9 15 9"/>
+                  </svg>
+                  <span class="task-type-name">周期任务</span>
+                  <span class="task-type-desc">按固定间隔重复执行</span>
+                </span>
+              </label>
+              <label class="task-type-option">
+                <input type="radio" name="taskType" value="scheduled">
+                <span class="task-type-card">
+                  <svg class="task-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span class="task-type-name">定时任务</span>
+                  <span class="task-type-desc">在指定时间执行一次</span>
+                </span>
+              </label>
             </div>
           </div>
+
           <div class="form-group">
-            <label>
-              <input type="checkbox" id="periodicRunImmediately" class="form-checkbox">
-              启动时立即执行一次
-            </label>
-          </div>
-          <div class="form-group">
-            <label for="periodicMaxRuns">最大执行次数</label>
-            <input type="number" id="periodicMaxRuns" class="form-input" min="1" placeholder="留空表示无限执行">
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="periodicContinueOnError" class="form-checkbox" checked>
-              失败后继续执行
-            </label>
+            <label for="taskCommand">Claude 命令 *</label>
+            <textarea id="taskCommand" class="form-input" rows="4" placeholder="要发送给 Claude 的命令或提示词" required></textarea>
+            <small class="form-hint">这将被作为命令发送给 Claude Code CLI 执行</small>
           </div>
         </div>
 
-        <!-- Scheduled Task Config -->
-        <div id="scheduledConfig" class="task-config" style="display: none;">
-          <div class="form-group">
-            <label for="scheduledTime">执行时间 *</label>
-            <input type="datetime-local" id="scheduledTime" class="form-input" required>
-          </div>
-        </div>
+        <!-- Right Column: Configuration -->
+        <div class="form-column">
+          <h3 class="form-section-title">执行配置</h3>
 
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="taskNotifyQQ" class="form-checkbox" checked>
-            执行后发送 QQ 通知
-          </label>
-        </div>
-        <div class="form-group" id="notifyTargetGroup">
-          <label for="taskNotifyTarget">QQ 通知目标 (OpenID)</label>
-          <input type="text" id="taskNotifyTarget" class="form-input" placeholder="留空则发送给创建者">
-          <small class="form-hint">可以指定用户或群组的 OpenID</small>
-        </div>
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="taskSaveResult" class="form-checkbox" checked>
-            保存执行结果到文件
-          </label>
+          <!-- Periodic Task Config -->
+          <div id="periodicConfig" class="config-card config-card-active">
+            <div class="config-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                <polyline points="21 3 21 9 15 9"/>
+              </svg>
+              <span>周期设置</span>
+            </div>
+            <div class="config-card-body">
+              <div class="form-group">
+                <label for="periodicInterval">执行间隔 *</label>
+                <div class="input-group">
+                  <input type="number" id="periodicInterval" class="form-input" min="1" value="60" required>
+                  <select id="periodicIntervalUnit" class="form-input">
+                    <option value="60000">分钟</option>
+                    <option value="3600000">小时</option>
+                    <option value="86400000">天</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="periodicMaxRuns">最大次数</label>
+                  <input type="number" id="periodicMaxRuns" class="form-input" min="1" placeholder="无限">
+                </div>
+                <div class="form-group">
+                  <label>选项</label>
+                  <div class="checkbox-group">
+                    <label class="checkbox-inline">
+                      <input type="checkbox" id="periodicRunImmediately" class="form-checkbox">
+                      <span>立即执行</span>
+                    </label>
+                    <label class="checkbox-inline">
+                      <input type="checkbox" id="periodicContinueOnError" class="form-checkbox" checked>
+                      <span>失败继续</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scheduled Task Config -->
+          <div id="scheduledConfig" class="config-card">
+            <div class="config-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>定时设置</span>
+            </div>
+            <div class="config-card-body">
+              <div class="form-group">
+                <label for="scheduledTime">执行时间 *</label>
+                <input type="datetime-local" id="scheduledTime" class="form-input" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notification Settings -->
+          <div class="config-card">
+            <div class="config-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span>通知与结果</span>
+            </div>
+            <div class="config-card-body">
+              <div class="form-group">
+                <label for="taskNotifyTarget">QQ 通知目标 (OpenID)</label>
+                <input type="text" id="taskNotifyTarget" class="form-input" placeholder="留空则发送给创建者">
+              </div>
+              <div class="checkbox-group">
+                <label class="checkbox-block">
+                  <input type="checkbox" id="taskNotifyQQ" class="form-checkbox" checked>
+                  <span>执行后发送 QQ 通知</span>
+                </label>
+                <label class="checkbox-block">
+                  <input type="checkbox" id="taskSaveResult" class="form-checkbox" checked>
+                  <span>保存执行结果到文件</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -409,6 +433,6 @@
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="app.js?v=3.0"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>
