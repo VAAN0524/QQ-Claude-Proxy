@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(tasklist:*)",
+      "Bash(# 杀掉所有 node 进程 cmd.exe //c \"\"taskkill /F /IM node.exe\"\" sleep 3 # 杀掉可能卡住的 claude 进程 cmd.exe //c \"\"taskkill /F /IM claude.exe\"\" sleep 2 # 启动服务 cd /c/Test/bot && npm start 2>&1 & sleep 6 echo \"\"==== 服务启动完成 ====\"\" netstat -ano)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
+    ]
+  }
+}

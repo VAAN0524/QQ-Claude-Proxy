@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QQ-Claude-Proxy Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <h1>QQ-Claude-Proxy</h1>
+        </div>
+        <span class="version">v1.0</span>
+      </div>
+      <div class="header-right">
+        <div class="status-indicator" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">连接中...</span>
+        </div>
+        <button class="btn-restart" id="restartBtn" title="重启服务">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          <span>重启服务</span>
+        </button>
+        <button class="btn-icon" id="refreshBtn" title="刷新">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            <polyline points="9 11 12 14 22 4"/>
+          </svg>
+        </button>
+        <button class="btn-icon" id="settingsBtn" title="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Stats Cards -->
+      <section class="stats-section">
+        <div class="stat-card">
+          <div class="stat-icon stat-icon-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">运行中任务</div>
+            <div class="stat-value" id="runningTasks">0</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon-success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">已完成任务</div>
+            <div class="stat-value" id="completedTasks">0</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon-info">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">运行时间</div>
+            <div class="stat-value" id="uptime">--:--:--</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M2 12h20"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">总任务数</div>
+            <div class="stat-value" id="totalTasks">0</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Task Progress Section (VS Code Style) -->
+      <section class="tasks-section">
+        <div class="section-header">
+          <h2>
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            任务进度
+          </h2>
+          <button class="btn-secondary" id="clearCompletedBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            清除已完成
+          </button>
+        </div>
+
+        <div class="tasks-container" id="tasksList">
+          <!-- Tasks will be rendered here -->
+          <div class="empty-state" id="emptyState">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p>暂无任务运行中</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Gateway Info -->
+      <section class="info-section">
+        <div class="section-header">
+          <h2>
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            网关信息
+          </h2>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Gateway 地址</span>
+            <span class="info-value" id="gatewayAddress">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">QQ Bot 状态</span>
+            <span class="info-value" id="qqbotStatus">--</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">沙箱模式</span>
+            <span class="info-value" id="sandboxMode">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scheduled Tasks Section -->
+      <section class="scheduled-tasks-section">
+        <div class="section-header">
+          <h2>
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            定时任务
+          </h2>
+          <div class="scheduled-tasks-stats" id="scheduledTasksStats">
+            <span class="stat-badge">总数: <strong id="stTotalTasks">0</strong></span>
+            <span class="stat-badge">周期: <strong id="stPeriodicTasks">0</strong></span>
+            <span class="stat-badge">定时: <strong id="stScheduledTasks">0</strong></span>
+          </div>
+          <button class="btn-primary" id="createTaskBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            创建任务
+          </button>
+        </div>
+
+        <!-- Task Type Tabs -->
+        <div class="task-tabs">
+          <button class="task-tab active" data-tab="all">全部</button>
+          <button class="task-tab" data-tab="periodic">周期任务</button>
+          <button class="task-tab" data-tab="scheduled">定时任务</button>
+        </div>
+
+        <div class="scheduled-tasks-container" id="scheduledTasksList">
+          <div class="empty-state" id="scheduledTasksEmptyState">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            <p>暂无定时任务</p>
+            <p class="empty-state-hint">点击"创建任务"添加新的定时任务</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>系统设置</h2>
+        <button class="btn-close" id="closeSettingsBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="gatewayPort">Gateway 端口</label>
+          <input type="number" id="gatewayPort" class="form-input" min="1024" max="65535">
+        </div>
+        <div class="form-group">
+          <label for="gatewayHost">Gateway 主机</label>
+          <input type="text" id="gatewayHost" class="form-input" placeholder="127.0.0.1">
+        </div>
+        <div class="form-group">
+          <label for="allowedUsers">允许的用户 (逗号分隔)</label>
+          <input type="text" id="allowedUsers" class="form-input" placeholder="留空则允许所有用户">
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="sandboxMode" class="form-checkbox">
+            启用沙箱模式
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelSettingsBtn">取消</button>
+        <button class="btn-primary" id="saveSettingsBtn">保存并重启</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Task Modal -->
+  <div class="modal-overlay" id="createTaskModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2>创建定时任务</h2>
+        <button class="btn-close" id="closeCreateTaskBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="taskName">任务名称 *</label>
+          <input type="text" id="taskName" class="form-input" placeholder="例如: 每日数据备份" required>
+        </div>
+        <div class="form-group">
+          <label for="taskDescription">任务描述</label>
+          <textarea id="taskDescription" class="form-input" rows="2" placeholder="任务描述（可选）"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="taskType">任务类型 *</label>
+          <select id="taskType" class="form-input" required>
+            <option value="periodic">周期任务 - 按固定间隔重复执行</option>
+            <option value="scheduled">定时任务 - 在指定时间执行一次</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="taskCommand">Claude 命令 *</label>
+          <textarea id="taskCommand" class="form-input" rows="3" placeholder="要发送给 Claude 的命令或提示词" required></textarea>
+          <small class="form-hint">这将被作为命令发送给 Claude Code CLI 执行</small>
+        </div>
+
+        <!-- Periodic Task Config -->
+        <div id="periodicConfig" class="task-config">
+          <div class="form-group">
+            <label for="periodicInterval">执行间隔 *</label>
+            <div class="input-group">
+              <input type="number" id="periodicInterval" class="form-input" min="1" value="60" required>
+              <select id="periodicIntervalUnit" class="form-input">
+                <option value="60000">分钟</option>
+                <option value="3600000">小时</option>
+                <option value="86400000">天</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="periodicRunImmediately" class="form-checkbox">
+              启动时立即执行一次
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="periodicMaxRuns">最大执行次数</label>
+            <input type="number" id="periodicMaxRuns" class="form-input" min="1" placeholder="留空表示无限执行">
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="periodicContinueOnError" class="form-checkbox" checked>
+              失败后继续执行
+            </label>
+          </div>
+        </div>
+
+        <!-- Scheduled Task Config -->
+        <div id="scheduledConfig" class="task-config" style="display: none;">
+          <div class="form-group">
+            <label for="scheduledTime">执行时间 *</label>
+            <input type="datetime-local" id="scheduledTime" class="form-input" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="taskNotifyQQ" class="form-checkbox" checked>
+            执行后发送 QQ 通知
+          </label>
+        </div>
+        <div class="form-group" id="notifyTargetGroup">
+          <label for="taskNotifyTarget">QQ 通知目标 (OpenID)</label>
+          <input type="text" id="taskNotifyTarget" class="form-input" placeholder="留空则发送给创建者">
+          <small class="form-hint">可以指定用户或群组的 OpenID</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="taskSaveResult" class="form-checkbox" checked>
+            保存执行结果到文件
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelCreateTaskBtn">取消</button>
+        <button class="btn-primary" id="saveCreateTaskBtn">创建任务</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Detail Modal -->
+  <div class="modal-overlay" id="taskDetailModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2>任务详情</h2>
+        <button class="btn-close" id="closeTaskDetailBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="taskDetailBody">
+        <!-- Task detail content will be rendered here -->
+      </div>
+      <div class="modal-footer" id="taskDetailFooter">
+        <!-- Action buttons will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>系统设置</h2>
+        <button class="btn-close" id="closeSettingsBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="gatewayPort">Gateway 端口</label>
+          <input type="number" id="gatewayPort" class="form-input" min="1024" max="65535">
+        </div>
+        <div class="form-group">
+          <label for="gatewayHost">Gateway 主机</label>
+          <input type="text" id="gatewayHost" class="form-input" placeholder="127.0.0.1">
+        </div>
+        <div class="form-group">
+          <label for="allowedUsers">允许的用户 (逗号分隔)</label>
+          <input type="text" id="allowedUsers" class="form-input" placeholder="留空则允许所有用户">
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="sandboxMode" class="form-checkbox">
+            启用沙箱模式
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelSettingsBtn">取消</button>
+        <button class="btn-primary" id="saveSettingsBtn">保存并重启</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js?v=3.0"></script>
+</body>
+</html>
