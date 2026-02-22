@@ -49,6 +49,26 @@ function escapeHtml(text) {
 }
 
 /**
+ * 将毫秒间隔转换为可读格式
+ */
+function formatInterval(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) {
+    return `${seconds} 秒`;
+  } else if (minutes < 60) {
+    return `${minutes} 分钟`;
+  } else if (hours < 24) {
+    return `${hours} 小时`;
+  } else {
+    return `${days} 天`;
+  }
+}
+
+/**
  * API Functions
  */
 async function apiRequest(endpoint, options = {}) {
@@ -341,6 +361,7 @@ function renderScheduledTaskItem(task) {
       ${nextExecution}
       ${lastResult}
       <div class="st-meta">
+        ${task.type === 'periodic' ? `<span class="st-meta-item">间隔: ${formatInterval(task.periodicConfig.interval)}</span>` : ''}
         <span class="st-meta-item">执行: ${task.executionCount} 次</span>
         ${task.failureCount > 0 ? `<span class="st-meta-item st-meta-error">失败: ${task.failureCount} 次</span>` : ''}
       </div>
@@ -469,7 +490,7 @@ async function saveCreateTask() {
     const continueOnError = document.getElementById('periodicContinueOnError').checked;
 
     params.periodicConfig = {
-      interval: interval * intervalUnit / 60000, // 转换为分钟
+      interval: interval * intervalUnit, // intervalUnit 已经是毫秒单位（分钟=60000，小时=3600000）
       runImmediately,
       maxRuns,
       continueOnError,
@@ -522,16 +543,10 @@ function renderTaskDetail(task) {
   let configHtml = '';
   if (task.type === 'periodic') {
     const interval = task.periodicConfig.interval;
-    let intervalText = interval + ' 分钟';
-    if (interval >= 60 && interval < 1440) {
-      intervalText = (interval / 60) + ' 小时';
-    } else if (interval >= 1440) {
-      intervalText = (interval / 1440) + ' 天';
-    }
     configHtml = `
       <div class="detail-row">
         <span class="detail-label">执行间隔</span>
-        <span class="detail-value">每 ${intervalText}</span>
+        <span class="detail-value">每 ${formatInterval(interval)}</span>
       </div>
       <div class="detail-row">
         <span class="detail-label">启动时执行</span>

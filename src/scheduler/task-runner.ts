@@ -103,22 +103,43 @@ export class TaskRunner {
       let outputSize = 0;
 
       // 如果命令已包含 --dangerously-skip-permissions，则不再添加
+      // 必须使用 -p/--print 参数以非交互模式运行，否则 CLI 会等待用户输入
       const cmd = command.startsWith('--dangerously-skip-permissions')
         ? command
         : `--dangerously-skip-permissions ${command}`;
 
       // 使用 npx 来执行 claude 命令，确保跨平台兼容
-      const fullCommand = `npx claude ${cmd}`;
+      // -p 参数使 CLI 以非交互模式运行，执行后自动退出
+      const fullCommand = `npx claude -p ${cmd}`;
+
+      // 创建环境变量，移除 CLAUDECODE 以避免嵌套会话检测
+      // CLI 检查 process.env.CLAUDECODE === "1"
+      const env: NodeJS.ProcessEnv = {};
+      // 只复制必需的环境变量，排除 CLAUDECODE
+      for (const [key, value] of Object.entries(process.env)) {
+        if (key !== 'CLAUDECODE' &&
+            key !== 'VSCODE_PID' &&
+            key !== 'VSCODE_NLS_CONFIG' &&
+            key !== 'VSCODE_CWD' &&
+            !key.startsWith('VSCODE_')) {
+          env[key] = value;
+        }
+      }
+
+      logger.debug(`[TaskRunner] 执行命令: ${fullCommand}`);
+      logger.debug(`[TaskRunner] 工作目录: ${this.workspacePath}`);
 
       const child = spawn(fullCommand, [], {
         cwd: this.workspacePath,
-        env: { ...process.env },
+        env,
         shell: true,  // 使用 shell 来解析命令
         windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       // 记录运行中的任务
       this.runningTasks.set(taskId, child);
+      logger.debug(`[TaskRunner] 子进程已启动, PID: ${child.pid}`);
 
       // 设置超时
       const timeout = setTimeout(() => {

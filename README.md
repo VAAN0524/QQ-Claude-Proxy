@@ -35,9 +35,9 @@
 <td width="33%"><img src="screenshots/IMG_2584.PNG" alt="工具实时状态"></td>
 </tr>
 <tr>
-<td align="center">手机 QQ 对话</td>
-<td align="center">工具执行状态</td>
-<td align="center">文件传输</td>
+<td align="center">视频传输</td>
+<td align="center">图片传输</td>
+<td align="center">工具实时状态</td>
 </tr>
 </table>
 

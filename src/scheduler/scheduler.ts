@@ -203,12 +203,13 @@ export class Scheduler {
   async executeTaskNow(taskId: string): Promise<boolean> {
     const task = this.taskStore.getTask(taskId);
     if (!task) {
+      logger.warn(`[Scheduler] 任务不存在: ${taskId}`);
       return false;
     }
 
     // 如果任务已在运行，不重复执行
     if (this.runningTasks.has(taskId)) {
-      logger.warn(`[Scheduler] 任务已在运行中: ${task.name}`);
+      logger.warn(`[Scheduler] 任务已在运行中: ${task.name} (${task.id})`);
       return false;
     }
 
@@ -217,6 +218,8 @@ export class Scheduler {
       logger.warn(`[Scheduler] 达到最大并发任务数: ${this.config.maxConcurrentTasks}`);
       return false;
     }
+
+    logger.info(`[Scheduler] 手动执行任务: ${task.name} (${task.id}), 原状态: ${task.status}`);
 
     // 异步执行任务
     this.runTask(task);
@@ -266,6 +269,23 @@ export class Scheduler {
     try {
       const now = Date.now();
       const enabledTasks = this.taskStore.getEnabledTasks();
+
+      // 清理僵尸任务：状态为 running 但不在 runningTasks 中的任务
+      for (const task of enabledTasks) {
+        if (task.status === TaskStatus.RUNNING && !this.runningTasks.has(task.id)) {
+          logger.warn(`[Scheduler] 发现僵尸任务，重置状态: ${task.name} (${task.id})`);
+          await this.taskStore.updateTaskStatus(task.id, TaskStatus.PENDING);
+
+          // 为周期任务重新计算下次执行时间
+          if (task.type === 'periodic' && task.periodicConfig) {
+            const nextTime = now + task.periodicConfig.interval;
+            await this.taskStore.updateTask(task.id, {
+              nextExecutionTime: nextTime as any,
+            } as any);
+          }
+        }
+      }
+
       const pendingTasks = enabledTasks.filter(t =>
         t.status === TaskStatus.PENDING &&
         t.nextExecutionTime &&
@@ -349,7 +369,15 @@ export class Scheduler {
    * 发送 QQ 通知
    */
   private async sendNotification(task: Task, result: TaskResult): Promise<void> {
-    if (!this.sendMessageCallback || !task.notifyTarget) {
+    if (!this.sendMessageCallback) {
+      return;
+    }
+
+    // 如果 notifyTarget 为空或者是 "dashboard"，跳过通知
+    // "dashboard" 是系统内部标识，不是真实的 QQ 用户 OpenID
+    const notifyTarget = task.notifyTarget;
+    if (!notifyTarget || notifyTarget === 'dashboard') {
+      logger.info(`[Scheduler] 跳过 QQ 通知：${task.name} (notifyTarget="${notifyTarget}")`);
       return;
     }
 
@@ -374,8 +402,8 @@ export class Scheduler {
 
       message += `━━━━━━━━━━━━━━━━━━━━━━`;
 
-      await this.sendMessageCallback(task.notifyTarget, message);
-      logger.info(`[Scheduler] 已发送 QQ 通知: ${task.name}`);
+      await this.sendMessageCallback(notifyTarget, message);
+      logger.info(`[Scheduler] 已发送 QQ 通知: ${task.name} -> ${notifyTarget}`);
     } catch (error) {
       logger.error(`[Scheduler] 发送 QQ 通知失败: ${error}`);
     }
