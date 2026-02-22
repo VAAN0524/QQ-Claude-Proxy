@@ -7,6 +7,7 @@ import { Gateway } from './gateway/server.js';
 import { QQBotChannel } from './channels/qqbot/index.js';
 import { ClaudeCodeAgent } from './agent/index.js';
 import { loadConfig } from './config/index.js';
+import { modeManager, AgentMode } from './agents/ModeManager.js';
 import { logger } from './utils/logger.js';
 import { HttpServer } from './gateway/http-server.js';
 import { createApiHandlers, createDashboardState, type DashboardState } from './gateway/dashboard-api.js';
@@ -17,6 +18,24 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { execSync, spawn } from 'child_process';
+import { promises as fsp } from 'fs';
+import { createHash } from 'crypto';
+
+// Agent 系统导入
+import {
+  AgentRegistry,
+  AgentDispatcher,
+  CodeAgent,
+  BrowserAgent,
+  ShellAgent,
+  CoordinatorAgent,
+  GLMCoordinatorAgent,
+  SharedContext,
+  type IAgent,
+  type AgentMessage,
+  type AgentContext,
+  type AgentResponse,
+} from './agents/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -166,6 +185,142 @@ async function killPort(port: number): Promise<void> {
   }
 }
 
+/**
+ * 预处理消息中的文件
+ * 1. 下载附件到工作区
+ * 2. 解析并保存嵌入在 content 中的图片 (file:// 协议)
+ * 3. 返回更新后的 content 和 attachments
+ */
+async function preprocessFiles(
+  content: string,
+  attachments: Array<{ type: string; url: string; filename: string }> | undefined,
+  workspacePath: string
+): Promise<{ content: string; attachments: Array<{ type: 'image' | 'video' | 'audio' | 'file'; path: string; name: string }> }> {
+  const processedAttachments: Array<{ type: 'image' | 'video' | 'audio' | 'file'; path: string; name: string }> = [];
+  let processedContent = content;
+
+  // 确保工作区存在
+  await fsp.mkdir(workspacePath, { recursive: true });
+
+  // 1. 处理附件数组中的文件
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      try {
+        logger.info(`[文件预处理] 处理附件: ${att.filename} (${att.type})`);
+
+        // 生成唯一的文件名（使用 hash 和时间戳）
+        const ext = path.extname(att.filename) || getFileExtension(att.type);
+        const hash = createHash('md5').update(att.url + Date.now()).digest('hex').substring(0, 8);
+        const storedFileName = `qq_${hash}_${Date.now()}${ext}`;
+        const storedPath = path.join(workspacePath, storedFileName);
+
+        // 下载文件
+        const response = await fetch(att.url);
+        if (!response.ok) {
+          throw new Error(`HTTP 错误: ${response.status}`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await fsp.writeFile(storedPath, buffer);
+
+        logger.info(`[文件预处理] 附件已保存: ${storedPath}`);
+
+        // 使用相对路径（从工作区开始的相对路径）
+        processedAttachments.push({
+          type: att.type as 'image' | 'video' | 'audio' | 'file',
+          path: storedFileName,  // 相对于 workspace 的路径
+          name: att.filename,
+        });
+      } catch (error) {
+        logger.error(`[文件预处理] 附件处理失败: ${att.filename} - ${error}`);
+        // 失败时保留原始 URL
+        processedAttachments.push({
+          type: att.type as 'image' | 'video' | 'audio' | 'file',
+          path: att.url,
+          name: att.filename,
+        });
+      }
+    }
+  }
+
+  // 2. 解析并处理嵌入在 content 中的图片 (<img src="file://..." />)
+  const embeddedImageRegex = /<img\s+src="file:\/\/([^"]+)"\s*\/?>/gi;
+  const embeddedImages: Array<{ originalPath: string; storedFileName: string }> = [];
+
+  let match;
+  while ((match = embeddedImageRegex.exec(content)) !== null) {
+    const originalPath = match[1];
+    // Windows 路径处理
+    const normalizedPath = originalPath.replace(/\\/g, '/');
+    const originalFileName = normalizedPath.split('/').pop() || 'image';
+
+    try {
+      logger.info(`[文件预处理] 处理嵌入图片: ${originalFileName}`);
+
+      // 生成唯一的文件名
+      const ext = path.extname(originalFileName) || '.png';
+      const hash = createHash('md5').update(originalPath + Date.now()).digest('hex').substring(0, 8);
+      const storedFileName = `embedded_${hash}_${Date.now()}${ext}`;
+      const storedPath = path.join(workspacePath, storedFileName);
+
+      // 复制本地文件到工作区
+      await fsp.copyFile(originalPath, storedPath);
+
+      logger.info(`[文件预处理] 嵌入图片已保存: ${storedPath}`);
+
+      embeddedImages.push({
+        originalPath: originalPath,
+        storedFileName: storedFileName,
+      });
+
+      // 添加到附件列表
+      processedAttachments.push({
+        type: 'image',
+        path: storedFileName,
+        name: originalFileName,
+      });
+    } catch (error) {
+      logger.error(`[文件预处理] 嵌入图片处理失败: ${originalPath} - ${error}`);
+    }
+  }
+
+  // 清理 content 中的嵌入图片标签
+  if (embeddedImages.length > 0) {
+    processedContent = content.replace(embeddedImageRegex, '').trim();
+    // 如果清理后内容为空，添加默认提示
+    if (!processedContent || processedContent.trim() === '') {
+      processedContent = '请帮我查看这张图片';
+    }
+    logger.info(`[文件预处理] 清理后的 content: ${processedContent.substring(0, 50)}...`);
+  }
+
+  logger.info(`[文件预处理] 完成: ${processedAttachments.length} 个文件, ${embeddedImages.length} 个嵌入图片`);
+
+  return {
+    content: processedContent,
+    attachments: processedAttachments,
+  };
+}
+
+/**
+ * 根据 MIME 类型获取文件扩展名
+ */
+function getFileExtension(mimeType: string): string {
+  const mimeMap: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/bmp': '.bmp',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
+    'audio/mpeg': '.mp3',
+    'audio/wav': '.wav',
+    'audio/ogg': '.ogg',
+    'application/pdf': '.pdf',
+  };
+  return mimeMap[mimeType] || '.bin';
+}
+
 async function main(): Promise<void> {
   // 自动清理可能被占用的端口
   logger.info('[启动] 检查并清理端口占用...');
@@ -309,6 +464,188 @@ async function main(): Promise<void> {
     stateStore,
   });
 
+  // ========== Agent 系统 ==========
+  // 初始化共享上下文
+  logger.info('初始化共享上下文...');
+  const sharedContext = new SharedContext({
+    maxMessages: 100,
+    maxAge: 60 * 60 * 1000, // 1 小时
+  });
+
+  // 初始化 Agent Registry
+  logger.info('初始化 Agent 系统...');
+  const agentRegistry = new AgentRegistry();
+
+  // 注册 Claude Code Agent (作为备用 Agent)
+  agentRegistry.register(agent);
+
+  // 初始化并注册内置 Agent
+  const apiKeys = {
+    anthropic: process.env.ANTHROPIC_API_KEY || '',
+    glm: process.env.GLM_API_KEY || '',
+    glmBaseUrl: process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
+  };
+
+  // Code Agent（如果有 GLM API Key，可以不依赖 Anthropic）
+  if (config.agents.code.enabled && (apiKeys.anthropic || apiKeys.glm)) {
+    try {
+      const codeAgent = new CodeAgent({
+        apiKey: apiKeys.anthropic,
+        model: (config.agents.code.options as any)?.model || 'claude-3-5-sonnet-20241022',
+        maxTokens: (config.agents.code.options as any)?.maxTokens || 4096,
+      });
+      await codeAgent.initialize?.();
+      agentRegistry.register(codeAgent);
+      logger.info('[Agent 系统] Code Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Code Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Browser Agent
+  if (config.agents.browser.enabled) {
+    try {
+      const browserAgent = new BrowserAgent({
+        headless: (config.agents.browser.options as any)?.headless ?? true,
+        timeout: (config.agents.browser.options as any)?.timeout ?? 30000,
+      });
+      await browserAgent.initialize?.();
+      agentRegistry.register(browserAgent);
+      logger.info('[Agent 系统] Browser Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Browser Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Shell Agent
+  if (config.agents.shell.enabled) {
+    try {
+      const shellAgent = new ShellAgent({
+        allowedCommands: (config.agents.shell.options as any)?.allowedCommands || [],
+        blockedCommands: (config.agents.shell.options as any)?.blockedCommands || [],
+        cwd: workspacePath,
+        timeout: config.agents.shell.timeout,
+      });
+      await shellAgent.initialize?.();
+      agentRegistry.register(shellAgent);
+      logger.info('[Agent 系统] Shell Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Shell Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Web Search Agent
+  if (config.agents.websearch?.enabled) {
+    try {
+      const { WebSearchAgent } = await import('./agents/WebSearchAgent.js');
+      const webSearchAgent = new WebSearchAgent({
+        maxResults: (config.agents.websearch.options as any)?.maxResults || 10,
+        timeout: config.agents.websearch.timeout,
+      });
+      await webSearchAgent.initialize?.();
+      agentRegistry.register(webSearchAgent);
+      logger.info('[Agent 系统] Web Search Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Web Search Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Data Analysis Agent
+  if (config.agents.data?.enabled) {
+    try {
+      const { DataAnalysisAgent } = await import('./agents/DataAnalysisAgent.js');
+      const dataAnalysisAgent = new DataAnalysisAgent({
+        supportedFileTypes: (config.agents.data.options as any)?.supportedFileTypes || ['.csv', '.json', '.txt'],
+        maxFileSize: (config.agents.data.options as any)?.maxFileSize || 10,
+      });
+      await dataAnalysisAgent.initialize?.();
+      agentRegistry.register(dataAnalysisAgent);
+      logger.info('[Agent 系统] Data Analysis Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Data Analysis Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // 初始化 Coordinator Agent 或 Agent Dispatcher
+  let coordinatorAgent: CoordinatorAgent | GLMCoordinatorAgent | null = null;
+  let agentDispatcher: AgentDispatcher | null = null;
+
+  if (config.agents.useCoordinator && config.agents.coordinator.enabled) {
+    // 使用协作式 Coordinator Agent
+    logger.info('[Agent 系统] 尝试初始化 Coordinator Agent...');
+    logger.info(`[Agent 系统] useCoordinator = ${config.agents.useCoordinator}`);
+    logger.info(`[Agent 系统] coordinator.enabled = ${config.agents.coordinator.enabled}`);
+    logger.info(`[Agent 系统] GLM_API_KEY 存在 = ${!!apiKeys.glm}`);
+    logger.info(`[Agent 系统] ANTHROPIC_API_KEY 存在 = ${!!apiKeys.anthropic}`);
+
+    try {
+      const subAgentMap = new Map<string, IAgent>();
+
+      // 添加已启用的子 Agent
+      if (config.agents.coordinator.subAgents.code && agentRegistry.get('code')) {
+        subAgentMap.set('code', agentRegistry.get('code')!);
+      }
+      if (config.agents.coordinator.subAgents.browser && agentRegistry.get('browser')) {
+        subAgentMap.set('browser', agentRegistry.get('browser')!);
+      }
+      if (config.agents.coordinator.subAgents.shell && agentRegistry.get('shell')) {
+        subAgentMap.set('shell', agentRegistry.get('shell')!);
+      }
+
+      // 优先使用 GLM API Key，否则使用 Anthropic
+      if (apiKeys.glm) {
+        logger.info('[Agent 系统] 使用 GLM API Key 初始化 GLMCoordinatorAgent...');
+        coordinatorAgent = new GLMCoordinatorAgent({
+          apiKey: apiKeys.glm,
+          baseUrl: apiKeys.glmBaseUrl,
+          model: 'glm-4.7', // Z.AI Coding Plan 模型名
+          maxTokens: config.agents.coordinator.maxTokens,
+          sharedContext,
+          subAgents: subAgentMap,
+        });
+
+        await coordinatorAgent.initialize?.();
+        logger.info('[Agent 系统] GLM Coordinator Agent 已启用 (协作模式)');
+      } else if (apiKeys.anthropic) {
+        logger.info('[Agent 系统] 使用 Anthropic API Key 初始化 CoordinatorAgent...');
+        coordinatorAgent = new CoordinatorAgent({
+          apiKey: apiKeys.anthropic,
+          model: config.agents.coordinator.model,
+          maxTokens: config.agents.coordinator.maxTokens,
+          sharedContext,
+          subAgents: subAgentMap,
+        });
+
+        await coordinatorAgent.initialize?.();
+        logger.info('[Agent 系统] Anthropic Coordinator Agent 已启用 (协作模式)');
+      } else {
+        logger.warn('[Agent 系统] 未配置 API Key (GLM_API_KEY 或 ANTHROPIC_API_KEY)，无法启用 Coordinator Agent');
+      }
+
+      if (coordinatorAgent) {
+        logger.info(`[Agent 系统] 子 Agent 数量: ${subAgentMap.size}`);
+      }
+    } catch (error) {
+      logger.error(`[Agent 系统] Coordinator Agent 初始化失败: ${error}`);
+      logger.error(`[Agent 系统] 错误详情: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.stack) {
+        logger.error(`[Agent 系统] 错误堆栈: ${error.stack}`);
+      }
+      logger.warn('[Agent 系统] 回退到 Dispatcher 模式');
+      coordinatorAgent = null;
+    }
+  } else {
+    logger.info('[Agent 系统] Coordinator 模式未启用，使用 Dispatcher 模式');
+  }
+
+  // 始终创建 Agent Dispatcher（CLI 模式需要使用）
+  agentDispatcher = new AgentDispatcher(agentRegistry, agent);
+  logger.info('[Agent 系统] Agent Dispatcher 已创建 (CLI 模式使用)');
+
+  logger.info(`[Agent 系统] 已注册 ${agentRegistry.size} 个 Agent`);
+  logger.info(`[Agent 系统] 默认 Agent: ${config.agents.default}`);
+  // ===============================
+
   // 设置文件发送回调
   agent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
     const fileName = path.basename(filePath);
@@ -374,34 +711,121 @@ async function main(): Promise<void> {
     if (eventType === 'message' || eventType === 'group_message') {
       try {
         logger.info(`[DIAG] 开始处理消息...`);
-        const response = await agent.process({
-          type: 'event',
+
+        // 转换消息格式
+        const qqData = data as any;
+        const content = qqData.content;
+
+        // 检查模式切换命令
+        const modeResponse = await modeManager.handleModeCommand(content, qqData.userId, qqData.groupId);
+        if (modeResponse) {
+          await qqChannel.send({
+            userId: qqData.userId,
+            groupId: qqData.groupId,
+            content: modeResponse.message,
+          });
+          return;
+        }
+
+        // 检查帮助命令
+        if (content === '/mode' || content === '/模式' || content === '/help' || content === '/帮助') {
+          await qqChannel.send({
+            userId: qqData.userId,
+            groupId: qqData.groupId,
+            content: modeManager.getModeHelp(),
+          });
+          return;
+        }
+
+        // 预处理文件：下载附件到工作区，解析嵌入图片
+        logger.info(`[DEBUG] 准备调用 preprocessFiles: content="${content.substring(0, 30)}...", attachments=${qqData.attachments?.length || 0}`);
+        const { content: processedContent, attachments: processedAttachments } = await preprocessFiles(
+          content,
+          qqData.attachments,
+          workspacePath
+        );
+        logger.info(`[DEBUG] preprocessFiles 完成: processedAttachments.length=${processedAttachments.length}`);
+
+        const agentMessage: AgentMessage = {
           channel: 'qqbot',
-          event: eventType,
-          data,
-        });
+          userId: qqData.userId,
+          groupId: qqData.groupId,
+          content: processedContent,
+          attachments: processedAttachments,
+          timestamp: new Date(),
+          rawData: data,
+        };
 
-        logger.info(`[DIAG] Agent 处理完成, response: ${response ? '存在' : 'null'}`);
-        if (response) {
-          logger.info(`[DIAG] 准备发送响应: userId=${response.userId}, content=${response.content.substring(0, 50)}...`);
-          await qqChannel.send(response);
-          logger.info(`[DIAG] 响应已发送`);
+        const agentContext: AgentContext = {
+          workspacePath,
+          storagePath,
+          allowedUsers: config.agent.allowedUsers || [],
+        };
 
-          // 处理文件发送（私聊和群聊都支持）
-          if (response.filesToSend && response.filesToSend.length > 0) {
-            const targetId = response.groupId || response.userId;
+        // 根据用户模式选择处理方式
+        const userMode = modeManager.getUserMode(qqData.userId, qqData.groupId);
+        let response: AgentResponse | null = null;
 
-            // 确保 targetId 存在
-            if (targetId) {
-              const isGroup = !!response.groupId;
+        logger.info(`[模式检查] 用户模式: ${userMode}, coordinatorAgent 存在: ${!!coordinatorAgent}`);
 
-              for (const filePath of response.filesToSend) {
-                try {
-                  await qqChannel.sendFile(targetId, filePath, isGroup);
-                  logger.info(`自动发送文件: ${filePath} -> ${targetId}`);
-                } catch (error) {
-                  logger.error(`自动发送文件失败: ${error}`);
-                }
+        if (userMode === AgentMode.TEAM && coordinatorAgent) {
+          // 团队模式：使用 GLM Coordinator
+          logger.info(`[模式] 使用团队模式 (GLM Coordinator)`);
+          response = await coordinatorAgent.process(agentMessage, agentContext);
+        } else {
+          // CLI 模式：使用 Agent Dispatcher (默认路由到 Claude Code CLI)
+          if (userMode !== AgentMode.TEAM) {
+            logger.info(`[模式] 使用 CLI 模式 (用户未切换到团队模式，发送 /mode team 切换)`);
+          } else if (!coordinatorAgent) {
+            logger.warn(`[模式] 用户请求团队模式，但 coordinatorAgent 未初始化，回退到 CLI 模式`);
+          }
+          response = await agentDispatcher!.dispatch(agentMessage, agentContext);
+        }
+
+        // 检查响应是否有效
+        if (!response) {
+          logger.error('[DIAG] Agent 返回了 null 响应');
+          await qqChannel.send({
+            userId: qqData.userId,
+            groupId: qqData.groupId,
+            content: '处理消息时发生错误：Agent 返回空响应',
+          });
+          return;
+        }
+
+        logger.info(`[DIAG] Agent 处理完成, agentId=${response.agentId || 'claude'}`);
+
+        // 添加模式前缀到响应内容
+        const modePrefix = modeManager.getModePrefix(qqData.userId, qqData.groupId);
+        const prefixedContent = `${modePrefix} ${response.content}`;
+
+        // 转换回原有响应格式
+        const legacyResponse = {
+          userId: response.userId || qqData.userId,
+          groupId: response.groupId || qqData.groupId,
+          msgId: response.msgId,
+          content: prefixedContent,
+          filesToSend: response.filesToSend,
+        };
+
+        logger.info(`[DIAG] 准备发送响应: userId=${legacyResponse.userId}, mode=${modePrefix}, content=${legacyResponse.content.substring(0, 50)}...`);
+        await qqChannel.send(legacyResponse);
+        logger.info(`[DIAG] 响应已发送`);
+
+        // 处理文件发送（私聊和群聊都支持）
+        if (legacyResponse.filesToSend && legacyResponse.filesToSend.length > 0) {
+          const targetId = legacyResponse.groupId || legacyResponse.userId;
+
+          // 确保 targetId 存在
+          if (targetId) {
+            const isGroup = !!legacyResponse.groupId;
+
+            for (const filePath of legacyResponse.filesToSend) {
+              try {
+                await qqChannel.sendFile(targetId, filePath, isGroup);
+                logger.info(`自动发送文件: ${filePath} -> ${targetId}`);
+              } catch (error) {
+                logger.error(`自动发送文件失败: ${error}`);
               }
             }
           }

@@ -18,6 +18,9 @@ export function loadConfig(): Config {
   // 调试：打印环境变量状态
   logger.info(`[Config] QQ_BOT_APP_ID = "${process.env.QQ_BOT_APP_ID || 'NOT SET'}"`);
   logger.info(`[Config] QQ_BOT_SECRET = ${process.env.QQ_BOT_SECRET ? 'SET (***)' : 'NOT SET'}`);
+  logger.info(`[Config] ANTHROPIC_API_KEY = ${process.env.ANTHROPIC_API_KEY ? 'SET (***)' : 'NOT SET'}`);
+  logger.info(`[Config] GLM_API_KEY = ${process.env.GLM_API_KEY ? 'SET (***)' : 'NOT SET'}`);
+  logger.info(`[Config] GLM_BASE_URL = "${process.env.GLM_BASE_URL || 'NOT SET'}"`);
 
   const configPath = process.env.QQ_CLAUDE_CONFIG || resolve(process.cwd(), 'config.json');
 

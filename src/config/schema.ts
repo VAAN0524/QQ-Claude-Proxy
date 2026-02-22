@@ -1,3 +1,68 @@
+/**
+ * Agent 实例配置
+ */
+export interface AgentInstanceConfig {
+  /** 是否启用 */
+  enabled: boolean;
+  /** 优先级 (数字越大优先级越高) */
+  priority: number;
+  /** 超时时间 (毫秒) */
+  timeout: number;
+  /** 自定义选项 */
+  options?: Record<string, unknown>;
+}
+
+/**
+ * Coordinator Agent 配置
+ */
+export interface CoordinatorConfig {
+  /** 是否启用 Coordinator Agent */
+  enabled: boolean;
+  /** 使用的模型 */
+  model: string;
+  /** 最大 tokens */
+  maxTokens: number;
+  /** 子 Agent 配置 */
+  subAgents: {
+    /** 是否启用 Code Agent */
+    code: boolean;
+    /** 是否启用 Browser Agent */
+    browser: boolean;
+    /** 是否启用 Shell Agent */
+    shell: boolean;
+    /** 是否启用 Web Search Agent */
+    websearch?: boolean;
+    /** 是否启用 Data Analysis Agent */
+    data?: boolean;
+  };
+}
+
+/**
+ * Agent 系统配置
+ */
+export interface AgentSystemConfig {
+  /** 默认 Agent ID */
+  default: string;
+  /** 是否启用智能路由 */
+  smartRouting: boolean;
+  /** 是否使用 Coordinator Agent（协作模式） */
+  useCoordinator: boolean;
+  /** Code Agent 配置 */
+  code: AgentInstanceConfig;
+  /** Browser Agent 配置 */
+  browser: AgentInstanceConfig;
+  /** Shell Agent 配置 */
+  shell: AgentInstanceConfig;
+  /** Web Search Agent 配置 */
+  websearch?: AgentInstanceConfig;
+  /** Data Analysis Agent 配置 */
+  data?: AgentInstanceConfig;
+  /** Claude Agent 配置 (即现有的 ClaudeCodeAgent) */
+  claude: AgentInstanceConfig;
+  /** Coordinator Agent 配置 */
+  coordinator: CoordinatorConfig;
+}
+
 export interface Config {
   gateway: {
     port: number;
@@ -16,6 +81,8 @@ export interface Config {
     /** 允许的用户 QQ 号列表 */
     allowedUsers?: string[];
   };
+  /** Agent 系统 */
+  agents: AgentSystemConfig;
   storage: {
     /** 工作目录（Claude Code 执行目录） */
     downloadPath: string;
@@ -54,6 +121,72 @@ export const defaultConfig: Config = {
   },
   agent: {
     allowedUsers: []
+  },
+  agents: {
+    default: 'coordinator',
+    smartRouting: true,
+    useCoordinator: true,  // 默认启用 Coordinator Agent
+    code: {
+      enabled: true,
+      priority: 10,
+      timeout: 60000,
+      options: {
+        model: 'claude-3-5-sonnet-20241022',
+        maxTokens: 4096,
+      },
+    },
+    browser: {
+      enabled: true,
+      priority: 8,
+      timeout: 120000,
+      options: {
+        headless: true,
+        timeout: 30000,
+      },
+    },
+    shell: {
+      enabled: false,  // 默认禁用，安全考虑
+      priority: 7,
+      timeout: 30000,
+      options: {
+        allowedCommands: [],
+        blockedCommands: ['rm -rf', 'format', 'shutdown'],
+      },
+    },
+    websearch: {
+      enabled: true,
+      priority: 9,
+      timeout: 60000,
+      options: {
+        maxResults: 10,
+      },
+    },
+    data: {
+      enabled: true,
+      priority: 6,
+      timeout: 30000,
+      options: {
+        supportedFileTypes: ['.csv', '.json', '.txt'],
+        maxFileSize: 10,
+      },
+    },
+    claude: {
+      enabled: true,
+      priority: 5,
+      timeout: 300000,
+    },
+    coordinator: {
+      enabled: true,
+      model: 'claude-3-5-sonnet-20241022',
+      maxTokens: 8192,
+      subAgents: {
+        code: true,
+        browser: true,
+        shell: false,  // 默认禁用 Shell Agent
+        websearch: true,
+        data: true,
+      },
+    },
   },
   storage: {
     downloadPath: './workspace',

@@ -372,7 +372,7 @@ export class ProgressTracker {
     let message: string;
 
     if (eventType === ProgressEventType.ERROR) {
-      message = `❌ **Error**: ${milestone.substring(0, 80)}`;
+      message = `❌ [ Error ]: ${milestone.substring(0, 80)}`;
     } else {
       // 智能解析活动类型
       const activityType = this.detectActivityType(milestone);
@@ -383,8 +383,8 @@ export class ProgressTracker {
           const toolMatch = milestone.match(/(?:Using|Calling|Called) (\w+) tool/i);
           const toolName = toolMatch ? toolMatch[1] : null;
           message = toolName
-            ? `🔧 **Tool**: **${toolName}**`
-            : `🔧 **Tool**: ${milestone.substring(0, 40)}`;
+            ? `🔧 [ Tool ]:[ ${toolName} ]`
+            : `🔧 [ Tool ]: ${milestone.substring(0, 40)}`;
           break;
 
         case 'skill':
@@ -392,8 +392,8 @@ export class ProgressTracker {
           const skillMatch = milestone.match(/(?:Using|Invoked|Invoking) (\w+) skill/i);
           const skillName = skillMatch ? skillMatch[1] : null;
           message = skillName
-            ? `⚡ **skill**: **${skillName}** running...`
-            : `⚡ **skill**: ${milestone.substring(0, 40)}`;
+            ? `⚡ [ skill ]:[ ${skillName} ] running...`
+            : `⚡ [ skill ]: ${milestone.substring(0, 40)}`;
           break;
 
         case 'agent':
@@ -401,8 +401,8 @@ export class ProgressTracker {
           const agentMatch = milestone.match(/(?:Launching|Agent:|agent|Launch(?:ing)?) (\w+)/i);
           const agentName = agentMatch ? agentMatch[1] : null;
           message = agentName
-            ? `🤖 **agent**: **${agentName}** working...`
-            : `🤖 **agent**: ${milestone.substring(0, 40)}`;
+            ? `🤖 [ agent ]:[ ${agentName} ] working...`
+            : `🤖 [ agent ]: ${milestone.substring(0, 40)}`;
           break;
 
         case 'search':
@@ -412,18 +412,18 @@ export class ProgressTracker {
             const pattern = grepMatch[1]?.substring(0, 30);
             const searchPath = grepMatch[2];
             message = searchPath
-              ? `🔍 **Grep**: "${pattern}"\n   └ in ${searchPath}`
-              : `🔍 **Grep**: "${pattern}"`;
+              ? `🔍 [ Grep ]: "${pattern}"\n   └ in ${searchPath}`
+              : `🔍 [ Grep ]: "${pattern}"`;
           } else {
             const globMatch = milestone.match(/Glob(?:bing)??\s+["']?(.+?)["']?(?:\s+in\s+(\S+))?/i);
             if (globMatch) {
               const pattern = globMatch[1]?.substring(0, 30);
               const globPath = globMatch[2];
               message = globPath
-                ? `🔍 **Glob**: "${pattern}"\n   └ in ${globPath}`
-                : `🔍 **Glob**: "${pattern}"`;
+                ? `🔍 [ Glob ]: "${pattern}"\n   └ in ${globPath}`
+                : `🔍 [ Glob ]: "${pattern}"`;
             } else {
-              message = `🔍 **Searching**...`;
+              message = `🔍 [ Searching ]...`;
             }
           }
           break;
@@ -433,8 +433,8 @@ export class ProgressTracker {
           const readFileMatch = milestone.match(/(?:reading|Read(?:ing)?)\s+(\S+)/i);
           const readPath = readFileMatch ? readFileMatch[1] : null;
           message = readPath
-            ? `📖 **Read**: ${readPath}`
-            : `📖 **Reading**...`;
+            ? `📖 [ Read ]: ${readPath}`
+            : `📖 [ Reading ]...`;
           break;
 
         case 'write':
@@ -444,8 +444,8 @@ export class ProgressTracker {
           const editPath = editFileMatch ? editFileMatch[1] : null;
           const action = activityType === 'write' ? 'Write' : 'Edit';
           message = editPath
-            ? `✏️ **${action}**: ${editPath}`
-            : `✏️ **${action}ing**...`;
+            ? `✏️ [ ${action} ]: ${editPath}`
+            : `✏️ [ ${action}ing ]...`;
           break;
 
         case 'execute':
@@ -454,13 +454,13 @@ export class ProgressTracker {
           const cmdMatch = milestone.match(/(?:Executing|Running)(?:\s+command)?:?\s*(.+?)(?:\.\.\.|$)/i);
           const cmd = cmdMatch ? cmdMatch[1].trim().substring(0, 60) : null;
           message = cmd
-            ? `⚙️ **Bash**: ${cmd}`
-            : `⚙️ **Bash**: running command...`;
+            ? `⚙️ [ Bash ]: ${cmd}`
+            : `⚙️ [ Bash ]: running command...`;
           break;
 
         case 'test':
           // 测试 - 加粗
-          message = `🧪 **Test**: running...`;
+          message = `🧪 [ Test ]: running...`;
           break;
 
         case 'build':
@@ -471,8 +471,8 @@ export class ProgressTracker {
           const pkg = pkgMatch ? pkgMatch[1] : null;
           const actionVerb = activityType === 'install' ? 'Install' : activityType === 'compile' ? 'Compile' : 'Build';
           message = pkg
-            ? `📦 **${actionVerb}**: ${pkg}`
-            : `📦 **${actionVerb}ing**...`;
+            ? `📦 [ ${actionVerb} ]: ${pkg}`
+            : `📦 [ ${actionVerb}ing ]...`;
           break;
 
         case 'web':
@@ -480,25 +480,25 @@ export class ProgressTracker {
           const urlMatch = milestone.match(/(?:https?:\/\/[^\s]+|www\.[^\s]+)/i);
           const url = urlMatch ? urlMatch[1]?.substring(0, 40) : null;
           message = url
-            ? `🌐 **Web**: ${url}`
-            : `🌐 **Web**: fetching...`;
+            ? `🌐 [ Web ]: ${url}`
+            : `🌐 [ Web ]: fetching...`;
           break;
 
         case 'think':
           // 思考中 - 加粗
           const thinkContent = milestone.substring(0, 40);
-          message = `💭 **Thinking**: ${thinkContent}...`;
+          message = `💭 [ Thinking ]: ${thinkContent}...`;
           break;
 
         case 'plan':
           // 规划中 - 加粗
           const planContent = milestone.substring(0, 40);
-          message = `📋 **Planning**: ${planContent}...`;
+          message = `📋 [ Planning ]: ${planContent}...`;
           break;
 
         case 'complete':
           // 完成 - 加粗
-          message = `✅ **Complete**`;
+          message = `✅ [ Complete ]`;
           break;
 
         default:
@@ -507,7 +507,7 @@ export class ProgressTracker {
           if (parts.length >= 2) {
             const action = parts[0].trim().substring(0, 20);
             const target = parts.slice(1).join(':').trim().substring(0, 60);
-            message = `⚙️ **${action}**: ${target}`;
+            message = `⚙️ [ ${action} ]: ${target}`;
           } else {
             // 简单显示
             const truncated = milestone.length > 60 ? milestone.substring(0, 57) + '...' : milestone;

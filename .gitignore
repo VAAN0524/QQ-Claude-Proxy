@@ -131,3 +131,12 @@ coverage/
 
 # Local development
 .local/
+
+# Runtime and test data
+data/
+test*.txt
+test_folder/
+
+# Test scripts (may contain hardcoded secrets)
+scripts/*.mjs
+*.mjs

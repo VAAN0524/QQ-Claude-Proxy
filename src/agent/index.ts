@@ -13,6 +13,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { DashboardState } from '../gateway/dashboard-api.js';
 import type { DashboardStateStore } from '../gateway/dashboard-state-store.js';
+import type {
+  IAgent,
+  AgentCapability,
+  AgentConfig as IAgentConfig,
+  AgentMessage as IAgentMessage,
+  AgentContext,
+  AgentResponse as IAgentResponse,
+} from '../agents/base/Agent.js';
 
 export interface AgentConfig {
   /** 工作目录 */
@@ -48,18 +56,35 @@ export interface AgentResponse {
   filesToSend?: string[];
 }
 
-export class ClaudeCodeAgent {
+export class ClaudeCodeAgent implements IAgent {
+  // IAgent 接口要求的属性
+  readonly id = 'claude';
+  readonly name = 'Claude Code Agent';
+  readonly description = 'Claude Code CLI - 完整的代码分析和执行能力';
+  readonly capabilities: AgentCapability[] = [
+    'complex' as AgentCapability,
+    'code' as AgentCapability,
+    'file' as AgentCapability,
+    'analyze' as AgentCapability,
+    'general' as AgentCapability,
+  ];
+  readonly config: IAgentConfig = {
+    enabled: true,
+    priority: 5,
+    timeout: 300000,
+  };
+
   private cliSessionManager: CliSessionManager;
   private storage: FileStorage;
   private conversationManager: ConversationManager;
-  private config: AgentConfig;
+  private config_internal: AgentConfig;
   private mainGateway: any = null;
   private sendFileCallback: ((userId: string, filePath: string, groupId?: string) => Promise<void>) | null = null;
   private sendMessageCallback: ((userId: string, content: string, groupId?: string) => Promise<void>) | null = null;
   private progressTracker: ProgressTracker | null = null;
 
   constructor(config: AgentConfig) {
-    this.config = config;
+    this.config_internal = config;
     // 使用 CLI 会话管理器（长期运行的进程）
     this.cliSessionManager = new CliSessionManager({
       workspacePath: config.workspacePath,
@@ -97,6 +122,105 @@ export class ClaudeCodeAgent {
     logger.info(`CLI 会话模式: 长期运行进程`);
   }
 
+  /**
+   * IAgent 接口实现 - 检查是否能处理该任务
+   * Claude Code Agent 是默认的兜底 Agent，可以处理所有类型的任务
+   */
+  canHandle(message: IAgentMessage): number {
+    const content = message.content.toLowerCase();
+
+    // 复杂任务特征
+    const complexIndicators = [
+      // 长任务描述
+      message.content.length > 200,
+      // 多步骤任务
+      /\d+\.\s+|\d+、/.test(message.content),
+      // 包含"帮我实现"
+      /帮我实现|帮我写|帮我创建/.test(content),
+      // 包含代码文件引用
+      /\.[a-z]{1,4}\s*[:：]/i.test(message.content),
+    ];
+
+    const score = complexIndicators.filter(Boolean).length * 0.15;
+    return Math.min(score + 0.2, 1.0); // 基础分数 0.2，最高 1.0
+  }
+
+  /**
+   * IAgent 接口实现 - 处理消息
+   * 将 agents/base/Agent.ts 的 AgentMessage 转换为内部格式后调用 processEvent 方法
+   */
+  async process(message: IAgentMessage, context: AgentContext): Promise<IAgentResponse> {
+    // 将 IAgentMessage 转换为内部使用的 AgentMessage 格式
+    const internalMessage: AgentMessage = {
+      channel: message.channel,
+      userId: message.userId,
+      groupId: message.groupId,
+      content: message.content,
+      attachments: message.attachments?.map(a => ({
+        type: a.type,
+        url: a.path,
+        filename: a.name,
+      })),
+      timestamp: message.timestamp,
+    };
+
+    // 调用内部处理逻辑
+    const response = await this.processEvent({ event: 'message', data: internalMessage });
+
+    if (!response) {
+      return {
+        content: '处理失败',
+        userId: message.userId,
+        groupId: message.groupId,
+      };
+    }
+
+    // 转换响应格式
+    return {
+      content: response.content,
+      userId: response.userId,
+      groupId: response.groupId,
+      msgId: response.msgId,
+      filesToSend: response.filesToSend,
+    };
+  }
+
+  /**
+   * 兼容方法：将 IAgentMessage 转换后处理
+   */
+  async processAgent(message: IAgentMessage, context: AgentContext): Promise<IAgentResponse> {
+    // 将 IAgentMessage 转换为内部使用的 AgentMessage
+    const internalMessage: AgentMessage = {
+      channel: message.channel,
+      userId: message.userId,
+      groupId: message.groupId,
+      content: message.content,
+      attachments: message.attachments?.map(a => ({
+        type: a.type as string,
+        url: a.path,
+        filename: a.name,
+      })),
+      timestamp: message.timestamp,
+    };
+
+    // 调用内部处理逻辑
+    const response = await this.processEvent({ event: 'message', data: internalMessage });
+
+    if (!response) {
+      return {
+        content: '处理失败',
+        agentId: this.id,
+      };
+    }
+
+    // 转换响应格式
+    return {
+      content: response.content || '',
+      filesToSend: response.filesToSend,
+      agentId: this.id,
+    };
+  }
+
   setGateway(gateway: any): void {
     this.mainGateway = gateway;
   }
@@ -110,9 +234,9 @@ export class ClaudeCodeAgent {
   }
 
   /**
-   * 处理用户消息
+   * 处理用户消息（内部 event 格式）
    */
-  async process(event: any): Promise<AgentResponse | null> {
+  async processEvent(event: any): Promise<AgentResponse | null> {
     const { event: eventType, data } = event;
 
     if (eventType !== 'message' && eventType !== 'group_message') {
@@ -122,8 +246,8 @@ export class ClaudeCodeAgent {
     const message = data as AgentMessage;
 
     // 检查用户权限
-    if (this.config.allowedUsers && this.config.allowedUsers.length > 0) {
-      if (!this.config.allowedUsers.includes(message.userId)) {
+    if (this.config_internal.allowedUsers && this.config_internal.allowedUsers.length > 0) {
+      if (!this.config_internal.allowedUsers.includes(message.userId)) {
         logger.warn(`用户 ${message.userId} 不在允许列表中`);
         return {
           userId: message.userId,
@@ -373,7 +497,7 @@ ${filePaths}
    */
   private async handleFileSendRequest(message: AgentMessage): Promise<AgentResponse> {
     const content = message.content;
-    const workspacePath = this.config.workspacePath;
+    const workspacePath = this.config_internal.workspacePath;
 
     // 尝试从消息中提取文件名（优先匹配引号内的文件名）
     const quotedMatch = content.match(/["']([^"']+\.[a-zA-Z0-9]+)["']/);
@@ -396,8 +520,8 @@ ${filePaths}
             const fullPaths = [
               path.join(workspacePath, normalizedPath),
               path.join(workspacePath, matchedPath),
-              path.join(this.config.storagePath, normalizedPath),
-              path.join(this.config.storagePath, matchedPath),
+              path.join(this.config_internal.storagePath, normalizedPath),
+              path.join(this.config_internal.storagePath, matchedPath),
             ];
 
             for (const fullPath of fullPaths) {
@@ -429,7 +553,7 @@ ${filePaths}
     // 尝试多个可能的路径
     const possiblePaths = [
       path.join(workspacePath, fileName),
-      path.join(this.config.storagePath, fileName),
+      path.join(this.config_internal.storagePath, fileName),
       // 如果原始文件名包含路径，也尝试完整路径
       rawFileName && rawFileName.includes(path.sep) ? path.join(workspacePath, rawFileName) : null,
       rawFileName && rawFileName.includes('/') ? path.join(workspacePath, rawFileName.replace(/\//g, path.sep)) : null,
@@ -486,14 +610,14 @@ ${filePaths}
     const storageFiles = this.storage.listWorkspaceFiles();
     const maxLength = 1900; // QQ 消息长度限制
 
-    let content = `📁 工作区文件 (${this.config.workspacePath}):\n`;
+    let content = `📁 工作区文件 (${this.config_internal.workspacePath}):\n`;
     content += files.slice(0, 30).map(f => `  - ${f}`).join('\n');
 
     if (files.length > 30) {
       content += `\n  ... 还有 ${files.length - 30} 个文件`;
     }
 
-    content += `\n\n📁 存储区文件 (${this.config.storagePath}):\n`;
+    content += `\n\n📁 存储区文件 (${this.config_internal.storagePath}):\n`;
     content += storageFiles.slice(0, 20).map(f => `  - ${f}`).join('\n');
 
     // 截断过长消息
@@ -514,7 +638,7 @@ ${filePaths}
   private findNewFiles(): string[] {
     // 简单实现：返回工作区中最近修改的文件
     const files: { path: string; mtime: number }[] = [];
-    const workspacePath = this.config.workspacePath;
+    const workspacePath = this.config_internal.workspacePath;
 
     const scanDir = (dir: string) => {
       try {
@@ -555,7 +679,7 @@ ${filePaths}
    */
   getAllFiles(): string[] {
     const files: string[] = [];
-    const workspacePath = this.config.workspacePath;
+    const workspacePath = this.config_internal.workspacePath;
 
     const scanDir = (dir: string) => {
       try {
