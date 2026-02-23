@@ -74,6 +74,15 @@
 - `public/dashboard/app.js` - 间隔计算和显示修复
 - `src/scheduler/scheduler.ts` - QQ 通知逻辑优化
 
+**QQ 对话管理定时任务** (`src/agents/GLMCoordinatorAgent.ts`):
+- `list_scheduled_tasks` - 列出所有定时任务
+- `create_scheduled_task` - 创建新的定时任务
+- `update_scheduled_task` - 更新任务配置
+- `delete_scheduled_task` - 删除任务
+- `pause_scheduled_task` / `resume_scheduled_task` - 暂停/恢复任务
+- `execute_scheduled_task_now` - 立即执行任务
+- `get_task_statistics` - 获取任务统计信息
+
 ### 项目清理
 删除以下无关文件和目录：
 - 测试脚本 (`scripts/`)
