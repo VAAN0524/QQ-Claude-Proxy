@@ -31,6 +31,8 @@ import {
   CoordinatorAgent,
   GLMCoordinatorAgent,
   SharedContext,
+  MemoryService,
+  RAGService,
   type IAgent,
   type AgentMessage,
   type AgentContext,
@@ -206,13 +208,7 @@ async function preprocessFiles(
   if (attachments && attachments.length > 0) {
     for (const att of attachments) {
       try {
-        logger.info(`[文件预处理] 处理附件: ${att.filename} (${att.type})`);
-
-        // 生成唯一的文件名（使用 hash 和时间戳）
-        const ext = path.extname(att.filename) || getFileExtension(att.type);
-        const hash = createHash('md5').update(att.url + Date.now()).digest('hex').substring(0, 8);
-        const storedFileName = `qq_${hash}_${Date.now()}${ext}`;
-        const storedPath = path.join(workspacePath, storedFileName);
+        logger.info(`[文件预处理] 处理附件: ${att.filename || '(unnamed)'} (${att.type || 'unknown'})`);
 
         // 下载文件
         const response = await fetch(att.url);
@@ -220,23 +216,53 @@ async function preprocessFiles(
           throw new Error(`HTTP 错误: ${response.status}`);
         }
         const buffer = Buffer.from(await response.arrayBuffer());
+
+        // 根据文件内容检测真实类型（magic bytes）
+        const detectedType = detectFileTypeFromBuffer(buffer);
+
+        // 尝试从文件名获取扩展名，如果失败则使用检测结果
+        let ext = path.extname(att.filename || '');
+        if (!ext) {
+          ext = getFileExtension(att.type || '');
+        }
+        // 如果仍然没有有效的扩展名，使用检测到的类型
+        if (!ext || ext === '.bin') {
+          ext = detectedType.ext;
+        }
+
+        // 生成唯一的文件名（使用 hash 和日期时间）
+        const hash = createHash('md5').update(att.url + Date.now()).digest('hex').substring(0, 8);
+        // 添加日期时间字段：yyyyMMdd_HHmmss
+        const now = new Date();
+        const dateStr = now.getFullYear().toString() +
+          (now.getMonth() + 1).toString().padStart(2, '0') +
+          now.getDate().toString().padStart(2, '0') + '_' +
+          now.getHours().toString().padStart(2, '0') +
+          now.getMinutes().toString().padStart(2, '0') +
+          now.getSeconds().toString().padStart(2, '0');
+        const storedFileName = `qq_${hash}_${dateStr}${ext}`;
+        const storedPath = path.join(workspacePath, storedFileName);
+
         await fsp.writeFile(storedPath, buffer);
 
-        logger.info(`[文件预处理] 附件已保存: ${storedPath}`);
+        logger.info(`[文件预处理] 附件已保存: ${storedPath} (检测类型: ${detectedType.mime})`);
+
+        // 使用检测到的类型或原始类型
+        const fileType = (att.type || detectedType.type) as 'image' | 'video' | 'audio' | 'file';
 
         // 使用相对路径（从工作区开始的相对路径）
         processedAttachments.push({
-          type: att.type as 'image' | 'video' | 'audio' | 'file',
+          type: fileType,
           path: storedFileName,  // 相对于 workspace 的路径
-          name: att.filename,
+          name: att.filename || storedFileName,
         });
       } catch (error) {
         logger.error(`[文件预处理] 附件处理失败: ${att.filename} - ${error}`);
         // 失败时保留原始 URL
         processedAttachments.push({
-          type: att.type as 'image' | 'video' | 'audio' | 'file',
+          type: 'file',
           path: att.url,
-          name: att.filename,
+          name: att.filename || 'unknown',
         });
       }
     }
@@ -256,10 +282,18 @@ async function preprocessFiles(
     try {
       logger.info(`[文件预处理] 处理嵌入图片: ${originalFileName}`);
 
-      // 生成唯一的文件名
+      // 生成唯一的文件名（添加日期时间）
       const ext = path.extname(originalFileName) || '.png';
       const hash = createHash('md5').update(originalPath + Date.now()).digest('hex').substring(0, 8);
-      const storedFileName = `embedded_${hash}_${Date.now()}${ext}`;
+      // 添加日期时间字段：yyyyMMdd_HHmmss
+      const now = new Date();
+      const dateStr = now.getFullYear().toString() +
+        (now.getMonth() + 1).toString().padStart(2, '0') +
+        now.getDate().toString().padStart(2, '0') + '_' +
+        now.getHours().toString().padStart(2, '0') +
+        now.getMinutes().toString().padStart(2, '0') +
+        now.getSeconds().toString().padStart(2, '0');
+      const storedFileName = `embedded_${hash}_${dateStr}${ext}`;
       const storedPath = path.join(workspacePath, storedFileName);
 
       // 复制本地文件到工作区
@@ -319,6 +353,50 @@ function getFileExtension(mimeType: string): string {
     'application/pdf': '.pdf',
   };
   return mimeMap[mimeType] || '.bin';
+}
+
+/**
+ * 根据文件内容（magic bytes）检测文件类型
+ */
+function detectFileTypeFromBuffer(buffer: Buffer): { ext: string; mime: string; type: 'image' | 'video' | 'audio' | 'file' } {
+  // 检查常见的图片格式
+  const magicBytes = buffer.subarray(0, Math.min(12, buffer.length));
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (magicBytes[0] === 0x89 && magicBytes[1] === 0x50 && magicBytes[2] === 0x4E && magicBytes[3] === 0x47) {
+    return { ext: '.png', mime: 'image/png', type: 'image' };
+  }
+
+  // JPEG: FF D8 FF
+  if (magicBytes[0] === 0xFF && magicBytes[1] === 0xD8 && magicBytes[2] === 0xFF) {
+    return { ext: '.jpg', mime: 'image/jpeg', type: 'image' };
+  }
+
+  // GIF: 47 49 46 38 (GIF8)
+  if (magicBytes[0] === 0x47 && magicBytes[1] === 0x49 && magicBytes[2] === 0x46 && magicBytes[3] === 0x38) {
+    return { ext: '.gif', mime: 'image/gif', type: 'image' };
+  }
+
+  // WebP: 52 49 46 46 ... 57 57 41
+  if (magicBytes[0] === 0x52 && magicBytes[1] === 0x49 && magicBytes[2] === 0x46 && magicBytes[3] === 0x46) {
+    return { ext: '.webp', mime: 'image/webp', type: 'image' };
+  }
+
+  // BMP: 42 4D
+  if (magicBytes[0] === 0x42 && magicBytes[1] === 0x4D) {
+    return { ext: '.bmp', mime: 'image/bmp', type: 'image' };
+  }
+
+  // MP4: 检查 ftyp box (通常在文件开头附近)
+  if (buffer.length > 12) {
+    const str = buffer.toString('ascii', 4, 8);
+    if (str === 'ftyp') {
+      return { ext: '.mp4', mime: 'video/mp4', type: 'video' };
+    }
+  }
+
+  // 默认返回未知文件类型
+  return { ext: '.bin', mime: 'application/octet-stream', type: 'file' };
 }
 
 async function main(): Promise<void> {
@@ -491,6 +569,8 @@ async function main(): Promise<void> {
     try {
       const codeAgent = new CodeAgent({
         apiKey: apiKeys.anthropic,
+        glmApiKey: !apiKeys.anthropic ? apiKeys.glm : undefined,
+        glmBaseUrl: !apiKeys.anthropic ? apiKeys.glmBaseUrl : undefined,
         model: (config.agents.code.options as any)?.model || 'claude-3-5-sonnet-20241022',
         maxTokens: (config.agents.code.options as any)?.maxTokens || 4096,
       });
@@ -566,6 +646,23 @@ async function main(): Promise<void> {
     }
   }
 
+  // Vision Agent (图像理解) - 使用官方 MCP Server
+  if (config.agents.vision?.enabled ?? true) {
+    try {
+      const { VisionAgent } = await import('./agents/VisionAgent.js');
+      const visionAgent = new VisionAgent({
+        apiKey: apiKeys.glm,
+        mode: 'ZHIPU', // 或 'ZAI'
+        autoConnect: true,
+      });
+      await visionAgent.initialize();
+      agentRegistry.register(visionAgent);
+      logger.info('[Agent 系统] Vision Agent 已启用 (官方 MCP Server)');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Vision Agent 初始化失败: ${error}`);
+    }
+  }
+
   // 初始化 Coordinator Agent 或 Agent Dispatcher
   let coordinatorAgent: CoordinatorAgent | GLMCoordinatorAgent | null = null;
   let agentDispatcher: AgentDispatcher | null = null;
@@ -591,10 +688,50 @@ async function main(): Promise<void> {
       if (config.agents.coordinator.subAgents.shell && agentRegistry.get('shell')) {
         subAgentMap.set('shell', agentRegistry.get('shell')!);
       }
+      // 添加 Vision Agent
+      if (agentRegistry.get('vision')) {
+        subAgentMap.set('vision', agentRegistry.get('vision')!);
+      }
+      // 添加 Web Search Agent
+      if (agentRegistry.get('websearch')) {
+        subAgentMap.set('websearch', agentRegistry.get('websearch')!);
+      }
+      // 添加 Data Analysis Agent
+      if (agentRegistry.get('data')) {
+        subAgentMap.set('data', agentRegistry.get('data')!);
+      }
 
       // 优先使用 GLM API Key，否则使用 Anthropic
       if (apiKeys.glm) {
         logger.info('[Agent 系统] 使用 GLM API Key 初始化 GLMCoordinatorAgent...');
+
+        // 初始化记忆服务
+        const memoryService = new MemoryService({
+          storagePath: path.join(process.cwd(), 'data', 'memory'),
+          autoCleanup: true,
+          retentionTime: 30 * 24 * 60 * 60 * 1000, // 30 天
+        });
+        await memoryService.initialize();
+
+        // 初始化 RAG 服务
+        const ragService = new RAGService({
+          memoryService,
+          defaultMaxResults: 10,
+          defaultMinScore: 0.3,
+        });
+
+        // 获取 WebSearchAgent（如果有的话）
+        const webSearchAgent = agentRegistry.get('websearch');
+
+        // 初始化学习模块
+        const { LearningModule } = await import('./agents/learning/index.js');
+        const learningModule = new LearningModule({
+          memoryService,
+          webSearchAgent,
+          maxResults: 5,
+          knowledgeRetentionTime: 90 * 24 * 60 * 60 * 1000, // 90 天
+        });
+
         coordinatorAgent = new GLMCoordinatorAgent({
           apiKey: apiKeys.glm,
           baseUrl: apiKeys.glmBaseUrl,
@@ -602,10 +739,15 @@ async function main(): Promise<void> {
           maxTokens: config.agents.coordinator.maxTokens,
           sharedContext,
           subAgents: subAgentMap,
+          memoryService,
+          ragService,
+          learningModule,
+          enableMemory: true,
+          enableLearning: true,
         });
 
         await coordinatorAgent.initialize?.();
-        logger.info('[Agent 系统] GLM Coordinator Agent 已启用 (协作模式)');
+        logger.info('[Agent 系统] GLM Coordinator Agent 已启用 (协作模式 + 记忆服务 + 自主学习)');
       } else if (apiKeys.anthropic) {
         logger.info('[Agent 系统] 使用 Anthropic API Key 初始化 CoordinatorAgent...');
         coordinatorAgent = new CoordinatorAgent({

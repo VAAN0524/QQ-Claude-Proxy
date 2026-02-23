@@ -1,8 +1,8 @@
 /**
  * Code Agent - 简单代码任务处理
  *
- * 直接使用 Anthropic API 处理简单代码编写和分析任务
- * 避免调用重量级的 Claude Code CLI
+ * 支持使用 Anthropic API 或 GLM API (Coding Plan)
+ * 处理简单代码编写和分析任务，避免调用重量级的 Claude Code CLI
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -20,8 +20,12 @@ import { AgentCapability } from './base/Agent.js';
  * Code Agent 配置选项
  */
 export interface CodeAgentOptions {
-  /** Anthropic API Key */
-  apiKey: string;
+  /** Anthropic API Key (可选) */
+  apiKey?: string;
+  /** GLM API Key (可选，Coding Plan API) */
+  glmApiKey?: string;
+  /** GLM API Base URL (可选) */
+  glmBaseUrl?: string;
   /** 使用的模型 */
   model?: string;
   /** 最大 tokens */
@@ -45,9 +49,12 @@ export class CodeAgent implements IAgent {
     timeout: 60000,
   };
 
-  private client: Anthropic;
+  private client?: Anthropic;
+  private glmApiKey?: string;
+  private glmBaseUrl?: string;
   private model: string;
   private maxTokens: number;
+  private useGLM: boolean;
 
   // 代码相关关键词
   private readonly codeKeywords = [
@@ -63,12 +70,25 @@ export class CodeAgent implements IAgent {
   ];
 
   constructor(options: CodeAgentOptions) {
-    this.client = new Anthropic({
-      apiKey: options.apiKey,
-    });
-    this.model = options.model || 'claude-3-5-sonnet-20241022';
+    // 优先使用 Anthropic API，如果没有则使用 GLM API
+    if (options.apiKey) {
+      this.client = new Anthropic({
+        apiKey: options.apiKey,
+      });
+      this.model = options.model || 'claude-3-5-sonnet-20241022';
+      this.useGLM = false;
+      logger.info(`[CodeAgent] 初始化完成 (模型: ${this.model}, API: Anthropic)`);
+    } else if (options.glmApiKey) {
+      this.glmApiKey = options.glmApiKey;
+      this.glmBaseUrl = options.glmBaseUrl || 'https://api.z.ai/api/coding/paas/v4/';
+      this.model = options.model || 'glm-4.7';
+      this.maxTokens = options.maxTokens || 8192;
+      this.useGLM = true;
+      logger.info(`[CodeAgent] 初始化完成 (模型: ${this.model}, API: GLM Coding Plan)`);
+    } else {
+      throw new Error('Code Agent 初始化失败: 需要提供 apiKey 或 glmApiKey');
+    }
     this.maxTokens = options.maxTokens || 4096;
-    logger.info(`[CodeAgent] 初始化完成 (模型: ${this.model})`);
   }
 
   /**
@@ -105,18 +125,26 @@ export class CodeAgent implements IAgent {
       const systemPrompt = this.buildSystemPrompt(context);
       const userPrompt = this.buildUserPrompt(message);
 
-      const response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: this.maxTokens,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: userPrompt,
-        }],
-      });
+      let text: string;
 
-      const contentBlock = response.content[0];
-      const text = contentBlock.type === 'text' ? contentBlock.text : '';
+      if (this.useGLM) {
+        // 使用 GLM API (Coding Plan)
+        text = await this.callGLMAPI(systemPrompt, userPrompt);
+      } else {
+        // 使用 Anthropic API
+        const response = await this.client!.messages.create({
+          model: this.model,
+          max_tokens: this.maxTokens,
+          system: systemPrompt,
+          messages: [{
+            role: 'user',
+            content: userPrompt,
+          }],
+        });
+
+        const contentBlock = response.content[0];
+        text = contentBlock.type === 'text' ? contentBlock.text : '';
+      }
 
       const elapsed = Date.now() - startTime;
       logger.info(`[CodeAgent] 处理完成，耗时: ${elapsed}ms`);
@@ -133,6 +161,36 @@ export class CodeAgent implements IAgent {
         agentId: this.id,
       };
     }
+  }
+
+  /**
+   * 调用 GLM API (Coding Plan 格式)
+   */
+  private async callGLMAPI(systemPrompt: string, userPrompt: string): Promise<string> {
+    const response = await fetch(`${this.glmBaseUrl}chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.glmApiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: this.maxTokens,
+        temperature: 0.7,  // OpenClaw 兼容
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`GLM API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
   }
 
   /**
@@ -177,14 +235,36 @@ export class CodeAgent implements IAgent {
    * 初始化
    */
   async initialize(): Promise<void> {
-    // 验证 API Key
+    // 根据使用的 API 类型进行验证
     try {
-      await this.client.messages.create({
-        model: this.model,
-        max_tokens: 10,
-        messages: [{ role: 'user', content: 'Hi' }],
-      });
-      logger.info('[CodeAgent] API 连接验证成功');
+      if (this.useGLM) {
+        // 使用 GLM API 验证
+        const response = await fetch(`${this.glmBaseUrl}chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.glmApiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [{ role: 'user', content: 'Hi' }],
+            max_tokens: 10,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`GLM API error ${response.status}`);
+        }
+        logger.info('[CodeAgent] API 连接验证成功 (GLM)');
+      } else {
+        // 使用 Anthropic API 验证
+        await this.client!.messages.create({
+          model: this.model,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+        logger.info('[CodeAgent] API 连接验证成功 (Anthropic)');
+      }
     } catch (error) {
       logger.warn(`[CodeAgent] API 连接验证失败: ${error}`);
       throw new Error(`Code Agent 初始化失败: ${error}`);

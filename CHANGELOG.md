@@ -2,6 +2,74 @@
 
 所有重要的项目变更都会记录在此文件中。
 
+## [1.2.0] - 2026-02-23
+
+### 新增功能
+
+#### 分层记忆系统 (Hierarchical Memory)
+基于 OpenViking 设计理念的 L0/L1/L2 三层记忆架构：
+
+**核心特性**
+- **L0 (Abstract)**: ~100 tokens，快速检索索引，始终加载
+- **L1 (Overview)**: ~2000 tokens，内容导航，触发时加载
+- **L2 (Detail)**: 无限，完整数据，按需加载
+
+**新增文件**
+- `src/agents/memory/HierarchicalMemoryService.ts` - 分层记忆服务
+- `src/agents/memory/MemoryStorage.ts` - 记忆存储
+- `docs/AGENTS.md` - 多 Agent 系统文档（含记忆系统说明）
+
+#### 技能管理系统
+完整的技能安装、卸载、开发和管理功能：
+
+**核心组件**
+- `SkillInstaller` - 从 URL/GitHub/GitLab 安装技能
+- `SkillLoader` - 技能元数据扫描和按需加载
+- 统一的 `skills/` 目录管理
+
+**新增文件**
+- `src/agents/SkillInstaller.ts` - 技能安装器
+- `src/agents/SkillLoader.ts` - 技能加载器
+- `docs/SKILLS.md` - 技能管理指南
+- `skills/` - 技能目录
+
+#### 会话持久化系统
+支持跨会话的上下文保存和恢复：
+
+**核心组件**
+- `SessionManager` - 管理多个用户/群组会话
+- `SharedContextPersistence` - 自动保存/加载会话
+
+**新增文件**
+- `src/agents/SharedContextPersistence.ts` - 持久化包装层
+- `docs/session-persistence.md` - 会话持久化文档
+
+#### 新增 Agents
+- `VisionAgent` - 图像理解和分析 Agent
+- `CodeRefactorAgent` - 代码重构 Agent
+
+#### MCP 客户端
+- `ZaiMcpClient.ts` - MCP 协议客户端支持
+
+#### 学习模块
+- `src/agents/learning/` - Agent 学习和优化模块
+
+### 项目清理
+删除以下无关文件和目录：
+- 测试脚本 (`scripts/`)
+- 测试文档 (`docs/plans/`)
+- 临时配置 (`config/`)
+- 测试文件 (`test-*.ts`, `test-*.txt`)
+- 运行时日志 (`logs/`, `*.log`)
+- 测试视频/语音文件
+
+### 文档更新
+- 新增 [AGENTS.md](docs/AGENTS.md) - 多 Agent 系统完整文档
+- 新增 [SKILLS.md](docs/SKILLS.md) - 技能管理指南
+- 新增 [session-persistence.md](docs/session-persistence.md) - 会话持久化说明
+
+---
+
 ## [1.1.0] - 2026-02-22
 
 ### 新增功能

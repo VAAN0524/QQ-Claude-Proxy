@@ -57,6 +57,8 @@ export interface AgentSystemConfig {
   websearch?: AgentInstanceConfig;
   /** Data Analysis Agent 配置 */
   data?: AgentInstanceConfig;
+  /** Vision Agent 配置 */
+  vision?: AgentInstanceConfig;
   /** Claude Agent 配置 (即现有的 ClaudeCodeAgent) */
   claude: AgentInstanceConfig;
   /** Coordinator Agent 配置 */

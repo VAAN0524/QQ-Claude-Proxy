@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
 
@@ -57,6 +57,14 @@
 *   **实时进度跟踪** - VS Code 风格的任务进度展示，支持工具使用实时显示
 *   **定时任务调度** - 支持周期任务和定时任务，QQ 通知执行结果
 *   **Agent 协作系统** - 多 Agent 协作执行复杂任务（代码、浏览器、Shell、搜索等）
+*   **分层记忆系统** - L0/L1/L2 三层记忆架构，支持跨会话上下文恢复
+
+### 高级功能
+
+*   **技能管理** - 通过 QQ 安装、卸载、搜索技能，支持从 GitHub/GitLab 安装
+*   **会话持久化** - 服务重启后自动恢复对话状态
+*   **视觉理解** - 图像分析和理解能力
+*   **MCP 协议** - 支持 Model Context Protocol 扩展
 
 ### 运维
 
@@ -440,6 +448,41 @@ npm run test:coverage # 覆盖率报告
 ---
 
 ## 更新日志
+
+### v1.2.0 (2026-02-23)
+
+#### 新增功能
+
+- **分层记忆系统** (`src/agents/memory/`)
+  - L0/L1/L2 三层记忆架构
+  - 跨 Agent 记忆共享
+  - 自动记忆清理
+
+- **技能管理系统**
+  - 通过 QQ 安装/卸载技能
+  - 支持 GitHub/GitLab URL 安装
+  - 技能元数据按需加载
+
+- **会话持久化** (`docs/session-persistence.md`)
+  - SessionManager 多会话管理
+  - 服务重启后自动恢复
+
+- **新增 Agents**
+  - `VisionAgent`: 图像理解
+  - `CodeRefactorAgent`: 代码重构
+
+- **MCP 客户端** (`ZaiMcpClient.ts`)
+
+#### 文档更新
+
+- 新增 [AGENTS.md](docs/AGENTS.md) - 多 Agent 系统完整文档
+- 新增 [SKILLS.md](docs/SKILLS.md) - 技能管理指南
+- 新增 [session-persistence.md](docs/session-persistence.md) - 会话持久化说明
+
+#### 项目清理
+
+- 删除测试脚本和临时文件
+- 清理运行时日志和测试数据
 
 ### v1.1.0 (2026-02-22)
 

@@ -88,10 +88,13 @@ export class BrowserAgent implements IAgent {
     const startTime = Date.now();
 
     try {
-      logger.info(`[BrowserAgent] 处理消息: ${message.content.substring(0, 50)}...`);
+      // 参数验证
+      const content = typeof message.content === 'string' ? message.content : String(message.content || '');
+
+      logger.info(`[BrowserAgent] 处理消息: ${content.substring(0, 50)}...`);
 
       // 提取 URL
-      const urlMatch = message.content.match(/https?:\/\/[^\s\u4e00-\u9fa5]+/i);
+      const urlMatch = content.match(/https?:\/\/[^\s\u4e00-\u9fa5]+/i);
       const url = urlMatch ? urlMatch[0] : null;
 
       if (url) {
@@ -100,7 +103,7 @@ export class BrowserAgent implements IAgent {
 
       // 通用网页操作说明
       return {
-        content: this.buildHelpMessage(message.content),
+        content: this.buildHelpMessage(content),
         agentId: this.id,
       };
 
