@@ -44,3 +44,6 @@ export type { CoordinatorAgentOptions } from './CoordinatorAgent.js';
 // GLM 协调 Agent
 export { GLMCoordinatorAgent } from './GLMCoordinatorAgent.js';
 export type { GLMCoordinatorAgentOptions } from './GLMCoordinatorAgent.js';
+
+// 工具定义（简化 API）
+export * from './tools/index.js';

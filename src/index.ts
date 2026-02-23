@@ -10,7 +10,7 @@ import { loadConfig } from './config/index.js';
 import { modeManager, AgentMode } from './agents/ModeManager.js';
 import { logger } from './utils/logger.js';
 import { HttpServer } from './gateway/http-server.js';
-import { createApiHandlers, createDashboardState, type DashboardState } from './gateway/dashboard-api.js';
+import { createApiHandlers, createExtendedApiHandlers, createDashboardState, type DashboardState } from './gateway/dashboard-api.js';
 import { createDashboardStateStore, type DashboardStateStore } from './gateway/dashboard-state-store.js';
 import { createScheduler, type Scheduler } from './scheduler/index.js';
 import * as fs from 'fs';
@@ -30,6 +30,7 @@ import {
   ShellAgent,
   CoordinatorAgent,
   GLMCoordinatorAgent,
+  CodeRefactorAgent,
   SharedContext,
   MemoryService,
   RAGService,
@@ -514,14 +515,6 @@ async function main(): Promise<void> {
   // Dashboard 静态文件路径
   const publicPath = path.resolve(__dirname, '../public/dashboard');
 
-  logger.info('初始化 HTTP Dashboard 服务器...');
-  const httpServer = new HttpServer({
-    port: 8080,
-    host: '0.0.0.0',
-    staticPath: publicPath,
-    apiHandlers,
-  });
-
   logger.info('初始化 QQ Bot Channel...');
   const qqChannel = new QQBotChannel({
     appId: config.channels.qqbot.appId,
@@ -663,6 +656,22 @@ async function main(): Promise<void> {
     }
   }
 
+  // Code Refactor Agent (代码重构专家)
+  if (config.agents.refactor?.enabled) {
+    try {
+      const refactorAgent = new CodeRefactorAgent({
+        autoApply: (config.agents.refactor.options as any)?.autoApply ?? false,
+        backup: (config.agents.refactor.options as any)?.backup ?? true,
+        maxFileSize: (config.agents.refactor.options as any)?.maxFileSize ?? 300,
+      });
+      await refactorAgent.initialize?.();
+      agentRegistry.register(refactorAgent);
+      logger.info('[Agent 系统] Code Refactor Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Code Refactor Agent 初始化失败: ${error}`);
+    }
+  }
+
   // 初始化 Coordinator Agent 或 Agent Dispatcher
   let coordinatorAgent: CoordinatorAgent | GLMCoordinatorAgent | null = null;
   let agentDispatcher: AgentDispatcher | null = null;
@@ -744,6 +753,7 @@ async function main(): Promise<void> {
           learningModule,
           enableMemory: true,
           enableLearning: true,
+          scheduler: scheduler || undefined,
         });
 
         await coordinatorAgent.initialize?.();
@@ -786,6 +796,62 @@ async function main(): Promise<void> {
 
   logger.info(`[Agent 系统] 已注册 ${agentRegistry.size} 个 Agent`);
   logger.info(`[Agent 系统] 默认 Agent: ${config.agents.default}`);
+  // ===============================
+
+  // ========== 扩展 Dashboard API ==========
+  // 获取或创建 SkillLoader
+  let skillLoader: any = undefined;
+
+  // 首先尝试从 Coordinator Agent 获取
+  if (coordinatorAgent && 'getSkillLoader' in coordinatorAgent) {
+    skillLoader = (coordinatorAgent as any).getSkillLoader();
+    logger.info('[Dashboard] SkillLoader 已连接（来自 Coordinator Agent）');
+  }
+
+  // 如果没有，创建独立的 SkillLoader 实例
+  if (!skillLoader) {
+    try {
+      const { SkillLoader } = await import('./agents/SkillLoader.js');
+      const skillsDir = path.join(process.cwd(), 'skills');
+      skillLoader = new SkillLoader(skillsDir);
+      await skillLoader.scanSkillsMetadata();
+      logger.info('[Dashboard] 独立 SkillLoader 已创建');
+    } catch (error) {
+      logger.warn(`[Dashboard] SkillLoader 创建失败: ${error}`);
+    }
+  }
+
+  // 日志文件路径
+  const logFilePath = path.join(process.cwd(), 'logs', 'app.log');
+
+  // 创建扩展的 API 处理器（包含 Agent、Skills、Logs 等管理接口）
+  const extendedApiHandlers = createExtendedApiHandlers({
+    config,
+    dashboardState,
+    restartCallback: async () => {
+      logger.info('Dashboard 请求重启服务...');
+      await shutdown('RESTART');
+    },
+    scheduler: scheduler || undefined,
+    agentRegistry,
+    skillLoader,
+    logFilePath,
+  });
+
+  // 合并基础和扩展的 API 处理器
+  for (const [key, handler] of extendedApiHandlers.entries()) {
+    apiHandlers.set(key, handler);
+  }
+
+  logger.info(`[Dashboard] API 处理器已扩展，总计 ${apiHandlers.size} 个端点`);
+
+  // 创建 HTTP Server 以使用完整的 API 处理器
+  const httpServer = new HttpServer({
+    port: 8080,
+    host: '0.0.0.0',
+    staticPath: publicPath,
+    apiHandlers,
+  });
   // ===============================
 
   // 设置文件发送回调

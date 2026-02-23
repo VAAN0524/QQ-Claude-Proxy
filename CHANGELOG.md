@@ -2,6 +2,79 @@
 
 所有重要的项目变更都会记录在此文件中。
 
+## [1.2.1] - 2026-02-23
+
+### 新增功能
+
+#### LLM Provider 系统
+统一的多提供商 LLM 接口，支持：
+- **OpenAI** (GPT-4, GPT-3.5) - 标准 OpenAI API
+- **Anthropic** (Claude) - Claude 3 系列 API
+- **GLM** (智谱 AI) - GLM-4 系列，支持 JWT 认证和 Coding Plan 端点
+
+**核心特性**:
+- 统一的 `ChatCompletionParams` 和 `ChatCompletionResponse` 接口
+- 自动生成 GLM JWT Token
+- Provider Pool 支持故障转移
+- 自动转换 Anthropic 响应为 OpenAI 格式
+
+**新增文件**:
+- `src/llm/providers.ts` - Provider 实现
+- `src/llm/index.ts` - LLM 模块导出
+- `src/llm/tool.ts` - 工具类型定义
+
+#### 终端监控系统
+实时监控 CLI 进程和智能输出渲染：
+
+**核心组件**:
+- `AgentMonitor` - 进程监控器，跟踪 CLI 执行状态
+- `DiffRenderer` - 智能渲染器，高亮显示代码变更
+
+**新增文件**:
+- `src/terminal/AgentMonitor.ts` - Agent 监控器
+- `src/terminal/DiffRenderer.ts` - Diff 渲染器
+- `src/terminal/index.ts` - 终端模块
+- `src/cli/monitor.ts` - CLI 进程监控
+
+#### Agent 工具分类系统
+将 Agent 工具按功能分类组织：
+
+**新增文件**:
+- `src/agents/tools/index.ts` - 工具导出
+- `src/agents/tools/agent-tools.ts` - Agent 相关工具
+- `src/agents/tools/file-tools.ts` - 文件操作工具
+- `src/agents/tools/learning-tools.ts` - 学习相关工具
+
+#### Dashboard 扩展
+从 3 个页面扩展到 5 个独立页面：
+
+**新增页面**:
+- `public/dashboard/agents.html` - Agent 管理页面
+- `public/dashboard/logs.html` - 日志查看页面
+- `public/dashboard/skills.html` - 技能管理页面
+
+**更新页面**:
+- `public/dashboard/config.html` - 独立配置页面
+
+#### 新增技能
+- `run_data_analysis_agent` - 数据分析 Agent
+- `run_refactor_agent` - 代码重构 Agent
+- `run_shell_agent` - Shell 命令执行 Agent
+- `run_websearch_agent` - 网页搜索 Agent
+
+### 项目统计更新
+
+| 分类 | 文件数 | 代码行数 |
+|------|-------|---------|
+| **后端** (TypeScript) | 67 | 25,054 |
+| **前端** (HTML/CSS/JS) | 15 | 8,917 |
+| **配置** (JSON) | 16 | 7,768 |
+| **总计** | 98 | 41,739 |
+
+**估算有效代码**: 约 29,000+ 行（排除空行和注释）
+
+---
+
 ## [1.2.0] - 2026-02-23
 
 ### 新增功能

@@ -74,12 +74,19 @@
 
 | 分类 | 文件数 | 代码行数 |
 |------|-------|---------|
-| **后端** (TypeScript) | 56 | 20,630 |
-| **前端** (HTML/CSS/JS) | 3 | 3,178 |
-| **配置** (JSON) | 8 | 6,791 |
-| **总计** | 67 | 30,599 |
+| **后端** (TypeScript) | 67 | 25,054 |
+| **前端** (HTML/CSS/JS) | 15 | 8,917 |
+| **配置** (JSON) | 16 | 7,768 |
+| **总计** | 98 | 41,739 |
 
-💡 **估算有效代码**: 约 20,000+ 行（排除空行和注释）
+💡 **估算有效代码**: 约 29,000+ 行（排除空行和注释）
+
+**主要组件**:
+- LLM Provider 系统 (OpenAI/Anthropic/GLM 统一接口)
+- Terminal 监控与 Diff 渲染
+- Agent 工具分类系统
+- 分层记忆系统 (L0/L1/L2)
+- 技能管理与会话持久化
 
 ---
 
@@ -102,10 +109,13 @@
 
 ### 高级功能
 
+*   **LLM Provider 系统** - 统一接口支持 OpenAI (GPT-4)、Anthropic (Claude)、GLM (智谱 AI)
+*   **终端监控** - 实时监控 CLI 进程，智能 Diff 渲染输出
 *   **技能管理** - 通过 QQ 安装、卸载、搜索技能，支持从 GitHub/GitLab 安装
 *   **会话持久化** - 服务重启后自动恢复对话状态
 *   **视觉理解** - 图像分析和理解能力
 *   **MCP 协议** - 支持 Model Context Protocol 扩展
+*   **Agent 工具** - 代码分析、重构、Shell 执行、Web 搜索等专用工具
 
 ### 运维
 
@@ -203,6 +213,9 @@ quick-start.bat
 | `QQ_BOT_APP_ID` | QQ 机器人 AppID | 是 |
 | `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
 | `ALLOWED_USERS` | 用户白名单 (逗号分隔的 OpenID) | 否 |
+| `GLM_API_KEY` | GLM API Key (智谱 AI，用于团队模式) | 否 |
+| `GLM_BASE_URL` | GLM API 地址 | 否 |
+| `ANTHROPIC_API_KEY` | Anthropic API Key (Claude) | 否 |
 
 ### 配置文件 (config.json)
 
@@ -288,10 +301,13 @@ quick-start.bat
 
 访问 **http://localhost:8080** 可以:
 
-*   **实时监控**: 查看运行中的任务和进度
-*   **定时任务**: 创建和管理周期/定时任务
-*   **系统设置**: 修改配置并重启服务
-*   **任务历史**: 查看已完成任务的历史记录
+*   **实时监控** - 查看运行中的任务和进度
+*   **Agent 管理** - 查看和管理各个 Agent 状态
+*   **定时任务** - 创建和管理周期/定时任务
+*   **系统设置** - 修改配置并重启服务
+*   **日志查看** - 实时查看系统日志
+*   **技能管理** - 管理已安装的技能
+*   **任务历史** - 查看已完成任务的历史记录
 
 ### 定时任务
 
@@ -344,13 +360,39 @@ flowchart TD
     Gateway -->|消息分发| Agent[Agent 处理器]
     Gateway -->|API 请求| Dashboard[Web Dashboard<br/>Port: 8080]
 
-    Agent -->|执行命令| CLI[本地 Claude Code CLI]
-    CLI -->|返回结果| Agent
+    subgraph Agent 系统
+        Agent -->|模式选择| ModeManager{Mode Manager}
+        ModeManager -->|CLI 模式| CLI[本地 Claude Code CLI]
+        ModeManager -->|团队模式| Coordinator[GLM Coordinator]
 
-    Agent -->|发送回调| FileStore[文件存储管理]
-    Agent -->|进度更新| Progress[实时进度跟踪]
+        Coordinator -->|任务分发| SubAgents[专业 Agents]
+        SubAgents --> CodeAgent[Code Agent]
+        SubAgents --> BrowserAgent[Browser Agent]
+        SubAgents --> ShellAgent[Shell Agent]
+        SubAgents --> WebSearchAgent[WebSearch Agent]
+        SubAgents --> DataAgent[Data Agent]
+    end
+
+    subgraph LLM Provider 层
+        Coordinator -->|调用| LLM[LLM Provider Pool]
+        LLM --> OpenAI[OpenAI API]
+        LLM --> Anthropic[Anthropic API]
+        LLM --> GLM[GLM API]
+    end
+
+    CLI -->|返回结果| Agent
+    Coordinator -->|返回结果| Agent
+
+    subgraph 监控层
+        TerminalMonitor[终端监控]
+        DiffRenderer[Diff 渲染器]
+        Progress[实时进度跟踪]
+    end
+
+    TerminalMonitor --> CLI
     Progress -->|推送消息| Channel
 
+    Agent -->|文件操作| FileStore[文件存储管理]
     Agent -->|定时任务| Scheduler[任务调度器]
     Scheduler -->|触发执行| CLI
     Scheduler -->|QQ 通知| Channel
@@ -359,11 +401,15 @@ flowchart TD
         Workspace[./workspace<br/>工作目录]
         Uploads[./uploads<br/>上传文件]
         State[./scheduler-data<br/>状态持久化]
+        Memory[分层记忆系统<br/>L0/L1/L2]
+        Sessions[会话持久化]
     end
 
     FileStore --> Workspace
     FileStore --> Uploads
     Scheduler --> State
+    Coordinator --> Memory
+    Coordinator --> Sessions
 ```
 
 ### 数据流
@@ -429,6 +475,42 @@ QQ-Claude-Proxy/
 │   │   ├── conversation-history.ts #    对话历史备份
 │   │   └── tools.ts                 #    工具定义
 │   │
+│   ├── 📂 agents/                   # 🟣 多 Agent 系统
+│   │   ├── index.ts                 #    Agent 注册中心
+│   │   ├── AgentRegistry.ts         #    Agent 注册表
+│   │   ├── AgentDispatcher.ts       #    任务分发器
+│   │   ├── ModeManager.ts           #    模式管理器
+│   │   ├── SharedContext.ts         #    共享上下文
+│   │   ├── SharedContextPersistence.ts  # 会话持久化
+│   │   ├── GLMCoordinatorAgent.ts   #    GLM-4.7 主协调器
+│   │   ├── CoordinatorAgent.ts      #    Claude 协调器
+│   │   ├── CodeAgent.ts             #    代码 Agent
+│   │   ├── BrowserAgent.ts          #    浏览器 Agent
+│   │   ├── ShellAgent.ts            #    Shell Agent
+│   │   ├── WebSearchAgent.ts        #    搜索 Agent
+│   │   ├── DataAnalysisAgent.ts     #    数据分析 Agent
+│   │   ├── VisionAgent.ts           #    视觉 Agent
+│   │   ├── CodeRefactorAgent.ts     #    重构 Agent
+│   │   ├── tools/                   #    Agent 工具分类
+│   │   ├── memory/                  #    分层记忆系统
+│   │   ├── learning/                #    学习模块
+│   │   ├── SkillInstaller.ts        #    技能安装器
+│   │   ├── SkillLoader.ts           #    技能加载器
+│   │   └── ZaiMcpClient.ts          #    MCP 客户端
+│   │
+│   ├── 📂 llm/                      # 🔷 LLM Provider 系统
+│   │   ├── index.ts                 #    LLM 接口
+│   │   ├── providers.ts             #    Provider 实现 (OpenAI/Anthropic/GLM)
+│   │   └── tool.ts                  #    工具定义
+│   │
+│   ├── 📂 terminal/                 # 🟠 终端监控
+│   │   ├── index.ts                 #    终端模块入口
+│   │   ├── AgentMonitor.ts          #    Agent 监控器
+│   │   └── DiffRenderer.ts          #    Diff 渲染器
+│   │
+│   ├── 📂 cli/                      # 🟡 CLI 监控
+│   │   └── monitor.ts               #    CLI 进程监控
+│   │
 │   ├── 📂 scheduler/                # 🟡 定时任务调度器
 │   │   ├── scheduler.ts             #    调度器核心
 │   │   ├── task-store.ts            #    任务存储
@@ -437,16 +519,21 @@ QQ-Claude-Proxy/
 │   │
 │   ├── 📂 config/                   # ⚙️ 配置管理
 │   │   ├── index.ts                 #    配置加载器
-│   │   └── schema.ts                #    配置 Schema
+│   │   ├── schema.ts                #    配置 Schema
+│   │   ├── validator.ts             #    配置验证器
+│   │   └── writer.ts                #    配置写入器
 │   │
 │   └── 📂 utils/                    # 🔧 工具函数
 │       └── logger.ts                #    结构化日志
 │
 ├── 📂 public/dashboard/              # 🌐 Dashboard 前端
-│   ├── index.html                   #    主页面
-│   ├── styles.css                   #    样式文件
-│   └── app.js                       #    前端逻辑
+│   ├── index.html                   #    主页面 (监控)
+│   ├── agents.html                  #    Agent 管理
+│   ├── config.html                  #    系统配置
+│   ├── logs.html                    #    日志查看
+│   └── skills.html                  #    技能管理
 │
+├── 📂 skills/                       # 📚 技能目录
 ├── 📂 workspace/                     # 📁 Claude 工作目录
 ├── 📂 uploads/                       # 📎 用户上传文件存储
 │

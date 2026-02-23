@@ -1,0 +1,291 @@
+/* 日志页面样式 */
+
+.log-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.log-stats {
+  display: flex;
+  gap: 2rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.stat-error {
+  color: var(--color-error);
+}
+
+.stat-warn {
+  color: var(--color-warning);
+}
+
+/* 日志查看器 */
+.log-viewer {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  height: 500px;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  position: relative;
+}
+
+.log-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.placeholder-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+/* 日志行 */
+.log-line {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.log-line:hover {
+  background-color: var(--bg-hover);
+}
+
+.log-line--selected {
+  background-color: var(--bg-selection);
+}
+
+.log-line--highlight {
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+.log-line--error {
+  background-color: rgba(244, 67, 54, 0.1);
+  border-left: 3px solid var(--color-error);
+}
+
+.log-line--warn {
+  background-color: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid var(--color-warning);
+}
+
+.log-time {
+  color: var(--text-secondary);
+  min-width: 140px;
+}
+
+.log-level {
+  min-width: 60px;
+  font-weight: 600;
+}
+
+.log-level--debug {
+  color: var(--color-dim);
+}
+
+.log-level--info {
+  color: var(--color-info);
+}
+
+.log-level--warn {
+  color: var(--color-warning);
+}
+
+.log-level--error {
+  color: var(--color-error);
+}
+
+.log-context {
+  color: var(--text-dim);
+  min-width: 80px;
+}
+
+.log-message {
+  flex: 1;
+  word-break: break-all;
+}
+
+/* 搜索高亮 */
+.search-highlight {
+  background-color: rgba(255, 193, 7, 0.3);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* 滚动条样式 */
+.log-viewer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.log-viewer::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.log-viewer::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.log-viewer::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* 自动滚动指示器 */
+.autoscroll-indicator {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.autoscroll-indicator.visible {
+  display: block;
+}
+
+.autoscroll-indicator:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-primary);
+}
+
+/* 加载状态 */
+.log-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.log-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 连接状态样式 */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: 20px;
+  font-size: 0.875rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+  background: var(--color-success);
+  animation: none;
+}
+
+.status-dot.disconnected {
+  background: var(--color-error);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .log-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .log-stats {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .control-group {
+    flex-wrap: wrap;
+  }
+
+  .control-group input,
+  .control-group select {
+    flex: 1;
+  }
+}

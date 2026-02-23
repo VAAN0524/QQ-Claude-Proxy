@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日志查看 - Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="logs.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <a href="index.html" class="back-link" title="返回 Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </a>
+        <h1 class="title">📝 日志查看</h1>
+        <div class="status-badge" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">连接中...</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-secondary" id="refreshBtn">🔄 刷新</button>
+        <button class="btn btn-secondary" id="clearBtn">🗑 清屏</button>
+      </div>
+    </header>
+
+    <!-- 日志控制面板 -->
+    <div class="log-controls">
+      <div class="control-group">
+        <label>日志级别：</label>
+        <select id="logLevel" class="select">
+          <option value="all">全部</option>
+          <option value="debug">DEBUG</option>
+          <option value="info" selected>INFO</option>
+          <option value="warn">WARN</option>
+          <option value="error">ERROR</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>显示模式：</label>
+        <select id="displayMode" class="select">
+          <option value="stream" selected>实时流</option>
+          <option value="history">历史日志</option>
+        </select>
+      </div>
+
+      <div class="control-group" id="historyControls" style="display: none;">
+        <label>时间范围：</label>
+        <select id="timeRange" class="select">
+          <option value="1h">最近 1 小时</option>
+          <option value="6h">最近 6 小时</option>
+          <option value="24h" selected>最近 24 小时</option>
+          <option value="7d">最近 7 天</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <input type="text" id="searchInput" class="input" placeholder="搜索日志...">
+        <button class="btn btn-secondary" id="searchBtn">🔍</button>
+      </div>
+
+      <div class="control-group">
+        <button class="btn btn-secondary" id="pauseBtn">⏸ 暂停</button>
+        <button class="btn btn-primary" id="exportBtn">📥 导出</button>
+      </div>
+    </div>
+
+    <!-- 日志统计 -->
+    <div class="log-stats">
+      <div class="stat-item">
+        <span class="stat-label">总行数：</span>
+        <span class="stat-value" id="totalLines">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">错误：</span>
+        <span class="stat-value stat-error" id="errorCount">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">警告：</span>
+        <span class="stat-value stat-warn" id="warnCount">0</span>
+      </div>
+    </div>
+
+    <!-- 日志查看器 -->
+    <div class="log-viewer" id="logViewer">
+      <div class="log-placeholder">
+        <div class="placeholder-icon">📋</div>
+        <p>选择显示模式后加载日志</p>
+      </div>
+    </div>
+
+    <!-- 导出对话框 -->
+    <div class="modal" id="exportModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>导出日志</h2>
+          <button class="btn-close" id="closeExportModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>导出格式：</label>
+            <select id="exportFormat" class="select">
+              <option value="txt">文本文件 (.txt)</option>
+              <option value="json">JSON 文件 (.json)</option>
+              <option value="csv">CSV 文件 (.csv)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>导出范围：</label>
+            <select id="exportRange" class="select">
+              <option value="visible">当前显示的日志</option>
+              <option value="all">全部日志（当前时间范围）</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelExport">取消</button>
+          <button class="btn btn-primary" id="confirmExport">导出</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="logs.js"></script>
+</body>
+</html>

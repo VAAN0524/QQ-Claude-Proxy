@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 配置 - QQ-Claude-Proxy</title>
+  <link rel="stylesheet" href="styles.css?v=3.4">
+  <link rel="stylesheet" href="agents.css?v=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <a href="index.html" class="back-link" title="返回 Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </a>
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <h1>Agent 配置</h1>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-primary" id="saveAllBtn" title="保存所有配置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          <span>保存全部</span>
+        </button>
+        <button class="btn-icon" id="refreshBtn" title="刷新">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            <polyline points="9 11 12 14 22 4"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- System Settings -->
+      <section class="system-settings">
+        <div class="settings-card">
+          <div class="settings-header">
+            <h2>
+              <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              系统设置
+            </h2>
+          </div>
+          <div class="settings-body">
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="defaultAgent" class="setting-label">默认 Agent</label>
+                <span class="setting-description">系统默认使用的 Agent</span>
+              </div>
+              <select id="defaultAgent" class="form-input form-select">
+                <option value="coordinator">Coordinator (协作模式)</option>
+                <option value="code">Code Agent</option>
+                <option value="browser">Browser Agent</option>
+                <option value="shell">Shell Agent</option>
+                <option value="websearch">Web Search Agent</option>
+                <option value="data">Data Analysis Agent</option>
+                <option value="vision">Vision Agent</option>
+                <option value="claude">Claude Agent</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="smartRouting" class="setting-label">智能路由</label>
+                <span class="setting-description">自动选择最合适的 Agent 处理任务</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="smartRouting" checked>
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="useCoordinator" class="setting-label">协作模式</label>
+                <span class="setting-description">使用 Coordinator Agent 协调多个子 Agent</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="useCoordinator" checked>
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent Cards Grid -->
+      <section class="agents-grid" id="agentsGrid">
+        <!-- Agent cards will be rendered here -->
+      </section>
+    </main>
+  </div>
+
+  <!-- Agent Detail Modal -->
+  <div class="modal-overlay" id="agentDetailModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2 id="agentDetailTitle">Agent 详情</h2>
+        <button class="btn-close" id="closeAgentDetailBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="agentDetailBody">
+        <!-- Agent detail content will be rendered here -->
+      </div>
+      <div class="modal-footer" id="agentDetailFooter">
+        <button class="btn-secondary" id="cancelAgentDetailBtn">关闭</button>
+        <button class="btn-primary" id="saveAgentDetailBtn">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="agents.js?v=1.1"></script>
+</body>
+</html>

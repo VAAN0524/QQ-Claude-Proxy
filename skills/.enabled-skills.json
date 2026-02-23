@@ -1,0 +1,15 @@
+{
+  "agent-coordination": true,
+  "agent-debugging": true,
+  "agent-memory": true,
+  "auto-error-resolver": true,
+  "glm-vision": true,
+  "network-solutions": true,
+  "parallel-agents": true,
+  "run_browser_agent": true,
+  "run_code_agent": true,
+  "run_vision_agent": true,
+  "skill-creator": true,
+  "skill-manager": true,
+  "web-search": true
+}

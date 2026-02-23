@@ -32,6 +32,39 @@ export function loadConfig(): Config {
     sandbox: process.env.QQ_BOT_SANDBOX !== 'false'  // 默认开启沙箱模式
   };
 
+  // 从环境变量获取 LLM 配置
+  const llmEnvConfig: any = {};
+  if (process.env.GLM_API_KEY) {
+    llmEnvConfig.provider = 'glm';
+    llmEnvConfig.apiKey = process.env.GLM_API_KEY;
+    llmEnvConfig.baseURL = process.env.GLM_BASE_URL;
+    llmEnvConfig.model = process.env.GLM_MODEL || 'glm-4.7';
+    // GLM 特定配置
+    llmEnvConfig.glm = {
+      apiKey: process.env.GLM_API_KEY,
+      useJwt: process.env.GLM_USE_JWT !== 'false',  // 默认启用 JWT
+      isCodingPlan: process.env.GLM_BASE_URL?.includes('/coding/') || false,
+    };
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    llmEnvConfig.provider = 'anthropic';
+    llmEnvConfig.apiKey = process.env.ANTHROPIC_API_KEY;
+    llmEnvConfig.model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+    llmEnvConfig.anthropic = {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+    };
+  } else if (process.env.OPENAI_API_KEY) {
+    llmEnvConfig.provider = 'openai';
+    llmEnvConfig.apiKey = process.env.OPENAI_API_KEY;
+    llmEnvConfig.baseURL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+    llmEnvConfig.model = process.env.OPENAI_MODEL || 'gpt-4';
+    llmEnvConfig.openai = {
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      model: process.env.OPENAI_MODEL || 'gpt-4',
+    };
+  }
+
   if (existsSync(configPath)) {
     try {
       const fileContent = readFileSync(configPath, 'utf-8');
@@ -48,6 +81,11 @@ export function loadConfig(): Config {
       // 环境变量中的 sandbox 设置优先
       merged.channels.qqbot.sandbox = envConfig.sandbox;
 
+      // 应用 LLM 环境变量配置（优先级最高）
+      if (Object.keys(llmEnvConfig).length > 0) {
+        merged.llm = { ...defaultConfig.llm, ...merged.llm, ...llmEnvConfig };
+      }
+
       return merged;
     } catch (error) {
       logger.warn(`Failed to load config file, using defaults: ${error}`);
@@ -55,7 +93,7 @@ export function loadConfig(): Config {
   }
 
   // 没有配置文件时，使用默认配置 + 环境变量
-  return {
+  const result: any = {
     ...defaultConfig,
     channels: {
       qqbot: {
@@ -69,6 +107,13 @@ export function loadConfig(): Config {
       allowedUsers: process.env.ALLOWED_USERS?.split(',').map(s => s.trim()) || []
     }
   };
+
+  // 添加 LLM 配置
+  if (Object.keys(llmEnvConfig).length > 0) {
+    result.llm = { ...defaultConfig.llm, ...llmEnvConfig };
+  }
+
+  return result;
 }
 
 export function mergeConfig(defaults: any, user: any): Config {
@@ -83,6 +128,18 @@ export function mergeConfig(defaults: any, user: any): Config {
       ...defaults.agent,
       ...user.agent
     },
-    storage: { ...defaults.storage, ...user.storage }
+    agents: {
+      ...defaults.agents,
+      ...user.agents
+    },
+    storage: { ...defaults.storage, ...user.storage },
+    scheduler: { ...defaults.scheduler, ...user.scheduler },
+    llm: {
+      ...defaults.llm,
+      ...user.llm,
+      glm: { ...defaults.llm?.glm, ...user.llm?.glm },
+      anthropic: { ...defaults.llm?.anthropic, ...user.llm?.anthropic },
+      openai: { ...defaults.llm?.openai, ...user.llm?.openai },
+    }
   };
 }

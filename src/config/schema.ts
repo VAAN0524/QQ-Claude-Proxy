@@ -105,6 +105,41 @@ export interface Config {
     /** 心跳间隔 (毫秒) */
     heartbeatInterval: number;
   };
+  /** LLM 提供商配置（可选，支持多提供商切换） */
+  llm?: {
+    /** 默认提供商: 'openai' | 'anthropic' | 'glm' */
+    provider?: 'openai' | 'anthropic' | 'glm';
+    /** API Key（优先级高于环境变量） */
+    apiKey?: string;
+    /** API Base URL（可选，用于兼容端点） */
+    baseURL?: string;
+    /** 默认模型 */
+    model?: string;
+    /** 最大 tokens */
+    maxTokens?: number;
+    /** GLM 特定配置 */
+    glm?: {
+      /** API Key（优先使用） */
+      apiKey?: string;
+      /** 是否使用 JWT 认证（API Key 包含 . 时自动启用） */
+      useJwt?: boolean;
+      /** 是否使用 Coding Plan 端点 */
+      isCodingPlan?: boolean;
+    };
+    /** Anthropic 特定配置 */
+    anthropic?: {
+      apiKey?: string;
+      model?: string;
+      maxTokens?: number;
+    };
+    /** OpenAI 特定配置 */
+    openai?: {
+      apiKey?: string;
+      baseURL?: string;
+      model?: string;
+      maxTokens?: number;
+    };
+  };
 }
 
 export const defaultConfig: Config = {
@@ -188,6 +223,39 @@ export const defaultConfig: Config = {
         websearch: true,
         data: true,
       },
+    },
+  },
+  // LLM 提供商配置（支持多提供商切换）
+  llm: {
+    /** 默认提供商: 'openai' | 'anthropic' | 'glm' */
+    provider: 'glm',
+    /** API Key（优先级高于环境变量） */
+    apiKey: '',
+    /** API Base URL（可选，用于兼容端点） */
+    baseURL: '',
+    /** 默认模型 */
+    model: 'glm-4.7',
+    /** 最大 tokens */
+    maxTokens: 8192,
+    /** GLM 特定配置 */
+    glm: {
+      /** 是否使用 JWT 认证（API Key 包含 . 时自动启用） */
+      useJwt: true,
+      /** 是否使用 Coding Plan 端点 */
+      isCodingPlan: false,
+    },
+    /** Anthropic 特定配置 */
+    anthropic: {
+      apiKey: '',
+      model: 'claude-3-5-sonnet-20241022',
+      maxTokens: 8192,
+    },
+    /** OpenAI 特定配置 */
+    openai: {
+      apiKey: '',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4',
+      maxTokens: 4096,
     },
   },
   storage: {

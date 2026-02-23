@@ -10,6 +10,7 @@ import { SharedContext } from './SharedContext.js';
 import { MemoryService, MemoryType, RAGService, HierarchicalMemoryService, MemoryLayer } from './memory/index.js';
 import { LearningModule } from './learning/index.js';
 import { SkillLoader } from './SkillLoader.js';
+import type { Scheduler } from '../scheduler/index.js';
 import type {
   IAgent,
   AgentConfig,
@@ -22,6 +23,13 @@ import { createHmac, randomBytes, createSign } from 'crypto';
 import { promises as fs, existsSync, mkdirSync } from 'fs';
 import * as crypto from 'crypto';
 import path from 'path';
+
+// 新的简化 API
+import { glm, type LLMProvider as LLMProviderType, type ChatCompletionParams, type ChatCompletionResponse as LLMChatCompletionResponse } from '../llm/providers.js';
+import { getAllAgentTools, getAllFileTools, getAllLearningTools, type ToolContext, type FileToolContext, type LearningToolContext } from './tools/index.js';
+
+// 类型别名避免冲突
+type LLMProvider = LLMProviderType;
 
 // File Storage 处理图片下载和存储
 interface StoredFile {
@@ -152,6 +160,8 @@ export interface GLMCoordinatorAgentOptions {
   enableMemory?: boolean;
   /** 是否启用自主学习 */
   enableLearning?: boolean;
+  /** 调度器（可选，用于定时任务管理） */
+  scheduler?: Scheduler;
 }
 
 /**
@@ -411,9 +421,14 @@ export class GLMCoordinatorAgent implements IAgent {
   private enableMemory: boolean;
   private enableLearning: boolean;
   private enableHierarchicalMemory: boolean;
+  private scheduler?: Scheduler;
 
   // 待发送的文件列表
   private pendingFiles: string[] = [];
+
+  // LLM 提供商（使用新的提供商抽象）
+  private llmProvider: LLMProvider;
+  private useJwtAuth: boolean;
 
   // 工具名称到 Agent ID 的映射
   private readonly toolToAgentMap: Record<string, string> = {
@@ -423,6 +438,7 @@ export class GLMCoordinatorAgent implements IAgent {
     'run_websearch_agent': 'websearch',
     'run_data_analysis_agent': 'data',
     'run_vision_agent': 'vision',
+    'run_refactor_agent': 'refactor',
   };
 
   constructor(options: GLMCoordinatorAgentOptions) {
@@ -439,6 +455,7 @@ export class GLMCoordinatorAgent implements IAgent {
     this.enableMemory = options.enableMemory ?? true;
     this.enableLearning = options.enableLearning ?? true;
     this.enableHierarchicalMemory = !!options.hierarchicalMemoryService;
+    this.scheduler = options.scheduler;
 
     // 初始化技能加载器（渐进式加载：先只扫描元数据）
     // 使用统一的 skills 目录（所有技能的默认存放位置）
@@ -459,6 +476,14 @@ export class GLMCoordinatorAgent implements IAgent {
     const isCodingPlan = this.baseUrl.includes('/coding/');
     this.useJwtAuth = !isCodingPlan && this.apiKey.includes('.');
 
+    // 初始化 LLM 提供商（使用新的提供商抽象）
+    this.llmProvider = glm({
+      apiKey: this.apiKey,
+      baseURL: this.baseUrl,
+      useJwt: this.useJwtAuth,
+      isCodingPlan: isCodingPlan,
+    });
+
     logger.info(`[GLMCoordinatorAgent] 初始化完成 (模型: ${this.model})`);
     logger.info(`[GLMCoordinatorAgent] API 地址: ${this.baseUrl}`);
     logger.info(`[GLMCoordinatorAgent] 认证方式: ${isCodingPlan ? 'Coding Plan (直接 API Key)' : (this.useJwtAuth ? 'JWT' : 'API Key')}`);
@@ -467,63 +492,14 @@ export class GLMCoordinatorAgent implements IAgent {
     logger.info(`[GLMCoordinatorAgent] 记忆服务: ${this.enableMemory && this.memoryService ? '已启用' : '未启用'}`);
     logger.info(`[GLMCoordinatorAgent] 分层记忆: ${this.enableHierarchicalMemory && this.hierarchicalMemoryService ? '已启用 (OpenViking 风格)' : '未启用'}`);
     logger.info(`[GLMCoordinatorAgent] 自主学习: ${this.enableLearning && this.learningModule ? '已启用' : '未启用'}`);
+    logger.info(`[GLMCoordinatorAgent] 定时任务调度器: ${this.scheduler ? '已启用' : '未启用'}`);
   }
-
-  private useJwtAuth: boolean;
 
   /**
    * 检查是否能处理该任务
    */
   canHandle(message: AgentMessage): number {
     return 1.0;
-  }
-
-  /**
-   * 生成智谱AI的 JWT Token
-   * API Key 格式: id.secret
-   */
-  private generateToken(): string {
-    const [id, secret] = this.apiKey.split('.');
-    if (!id || !secret) {
-      throw new Error('Invalid GLM API Key format. Expected: id.secret');
-    }
-
-    const now = Math.floor(Date.now() / 1000); // 秒级时间戳
-    const exp = now + 3600; // 1小时后过期
-
-    const header = {
-      alg: 'HS256',
-      sign_type: 'SIGN',
-    };
-
-    const payload = {
-      api_key: id,
-      exp: exp,
-      timestamp: now,
-    };
-
-    // Base64Url 编码
-    const base64UrlEncode = (str: string) => {
-      return Buffer.from(str)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-    };
-
-    const encodedHeader = base64UrlEncode(JSON.stringify(header));
-    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-
-    // 生成签名
-    const dataToSign = `${encodedHeader}.${encodedPayload}`;
-    const signature = createHmac('sha256', secret)
-      .update(dataToSign)
-      .digest('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
-
-    return `${dataToSign}.${signature}`;
   }
 
   /**
@@ -978,6 +954,8 @@ export class GLMCoordinatorAgent implements IAgent {
 
   /**
    * 调用 GLM API
+   *
+   * 使用新的提供商抽象 API
    */
   private async callGLMAPI(
     messages: ChatMessage[],
@@ -990,63 +968,57 @@ export class GLMCoordinatorAgent implements IAgent {
       ...messages,
     ];
 
-    const requestBody = {
-      model: this.model,
-      messages: fullMessages,
-      temperature: 0.7,  // OpenClaw 兼容：平衡创造性和可靠性
-      top_p: 0.9,
-      max_tokens: this.maxTokens,
-      tools: tools.length > 0 ? tools : undefined,
-    };
-
-    logger.debug(`[GLMCoordinatorAgent] API 请求: ${JSON.stringify(requestBody).substring(0, 500)}...`);
-
-    // 移除 baseUrl 末尾的斜杠，确保路径拼接正确
-    const baseUrl = this.baseUrl.endsWith('/') ? this.baseUrl.slice(0, -1) : this.baseUrl;
-    const apiUrl = `${baseUrl}/chat/completions`;
-
-    logger.debug(`[GLMCoordinatorAgent] API URL: ${apiUrl}`);
-    logger.debug(`[GLMCoordinatorAgent] Model: ${this.model}`);
-
-    // 根据认证方式生成 token
-    let token: string;
-    if (this.useJwtAuth) {
-      token = this.generateToken();
-      logger.debug(`[GLMCoordinatorAgent] Generated JWT token (length: ${token.length})`);
-    } else {
-      token = this.apiKey;
-      logger.debug(`[GLMCoordinatorAgent] Using API Key directly (length: ${token.length})`);
-    }
-
     // 检查是否需要使用视觉模型（消息中包含图片）
     const hasVisionContent = messages.some(msg =>
-      Array.isArray(msg.content) && msg.content.some(block => block.type === 'image_url')
+      Array.isArray(msg.content) && msg.content.some((block: any) => block.type === 'image_url')
     );
 
     // 如果有视觉内容，使用 GLM-4V 模型
     const model = hasVisionContent ? 'glm-4v' : this.model;
-    requestBody.model = model;
 
     logger.debug(`[GLMCoordinatorAgent] 使用模型: ${model}${hasVisionContent ? ' (视觉)' : ''}`);
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(requestBody),
+    // 转换消息格式以匹配提供商 API
+    // GLMCoordinatorAgent 使用 ContentBlock[]，提供商使用 string
+    const providerMessages = fullMessages.map(msg => ({
+      role: msg.role,
+      content: Array.isArray(msg.content)
+        ? JSON.stringify(msg.content)  // 简化处理：将数组转为字符串
+        : msg.content,
+      tool_calls: msg.tool_calls as any,
+      tool_call_id: msg.tool_call_id,
+    }));
+
+    // 使用提供商抽象调用 API
+    const llmResponse = await this.llmProvider.chat.completions.create({
+      model,
+      messages: providerMessages,
+      tools: tools.length > 0 ? tools : undefined,
+      max_tokens: this.maxTokens,
+      temperature: 0.7,
+      top_p: 0.9,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(`[GLMCoordinatorAgent] API 错误响应 (${response.status}): ${errorText}`);
-      throw new Error(`GLM API 请求失败 (${response.status}): ${errorText}`);
-    }
+    // 转换为本地 ChatCompletionResponse 类型
+    const response: ChatCompletionResponse = {
+      id: llmResponse.id,
+      object: llmResponse.object,
+      created: llmResponse.created,
+      model: llmResponse.model,
+      choices: llmResponse.choices.map(choice => ({
+        index: choice.index,
+        message: {
+          role: choice.message.role,
+          content: choice.message.content,
+          tool_calls: choice.message.tool_calls,
+        },
+        finish_reason: choice.finish_reason,
+      })),
+      usage: llmResponse.usage,
+    };
 
-    const data = await response.json() as ChatCompletionResponse;
-    logger.debug(`[GLMCoordinatorAgent] API 响应: ${JSON.stringify(data).substring(0, 500)}...`);
-    return data;
+    logger.debug(`[GLMCoordinatorAgent] API 响应: ${JSON.stringify(response).substring(0, 500)}...`);
+    return response;
   }
 
   /**
@@ -1117,12 +1089,49 @@ ${enabledAgents.map(name => `- ${name}`).join('\n')}
     // 添加文件操作说明
     systemPrompt += `
 
-## 文件操作
+## 文件操作工具（重要）
 
-- **发送文件**: 使用 send_file 工具，支持工作区、上传区文件
-- **读取文件**: 使用 read_file 工具，支持文本和图片
-- **写入文件**: 使用 write_file 工具，创建或修改文件
-- **列出目录**: 使用 list_directory 工具，查看文件结构
+你有以下专用文件操作工具，请根据用户需求使用：
+
+1. **list_directory** - 列出目录中的文件和子目录
+   - 用户说"列出文件"、"有哪些文件"、"查看文件"时使用
+   - 参数：directoryPath（目录路径），recursive（是否递归）
+
+2. **read_file** - 读取文件内容
+   - 用户说"读取文件"、"查看文件"、"打开文件"时使用
+   - 参数：filePath（文件路径）
+
+3. **write_file** - 创建或修改文件
+   - 用户说"创建文件"、"写入文件"、"修改配置"时使用
+   - 参数：filePath（文件路径），content（内容），append（是否追加）
+
+4. **send_file** - 发送文件给用户
+   - 用户说"发给我"、"发送文件"时使用
+   - 参数：filePath（文件路径）
+
+## 定时任务工具（重要）
+
+你有以下定时任务管理工具，与 Dashboard 共享数据：
+
+1. **list_scheduled_tasks** - 列出所有定时任务
+   - 用户说"列出任务"、"查看任务"、"有哪些任务"时使用
+   - 参数：status（可选，筛选状态）
+
+2. **create_scheduled_task** - 创建新的定时任务
+   - 用户说"创建任务"、"设置定时任务"、"每隔X执行"时使用
+   - 参数：name（任务名称）、type（periodic/scheduled）、command（命令）
+   - 周期任务需指定 interval（毫秒），定时任务需指定 scheduledTime（时间戳）
+
+3. **update_scheduled_task** - 更新任务配置
+4. **delete_scheduled_task** - 删除任务
+5. **pause_scheduled_task** / **resume_scheduled_task** - 暂停/恢复任务
+6. **execute_scheduled_task_now** - 立即执行任务
+7. **get_task_statistics** - 获取任务统计信息
+
+## 使用示例
+- "列出workspace的文件" → 使用 list_directory 工具
+- "读取config.json的内容" → 使用 read_file 工具
+- "创建新的配置文件" → 使用 write_file 工具
 
 ## 平台特定说明
 
@@ -1271,13 +1280,13 @@ ${memoryContext}` : ''}`;
         type: 'function',
         function: {
           name: 'run_shell_agent',
-          description: '执行系统命令：谨慎使用，仅用于安全的命令操作',
+          description: '执行系统命令。用于：列出文件(ls/dir)、查看目录、运行脚本等安全操作',
           parameters: {
             type: 'object',
             properties: {
               command: {
                 type: 'string',
-                description: '要执行的命令，例如：npm install',
+                description: '要执行的命令。常用示例：ls -la（列出文件）、dir（Windows列出文件）、cat file.txt（查看文件）',
               },
             },
             required: ['command'],
@@ -1585,6 +1594,195 @@ ${memoryContext}` : ''}`;
               },
             },
             required: ['task', 'image'],
+          },
+        },
+      });
+    }
+
+    // ==================== 定时任务工具 ====================
+    if (this.scheduler) {
+      // 列出所有定时任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'list_scheduled_tasks',
+          description: '列出所有已设置的定时任务（包括通过 Dashboard 和 QQ 对话设置的任务）',
+          parameters: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'string',
+                description: '可选的状态筛选：pending(等待中)、running(运行中)、paused(已暂停)、completed(已完成)、all(全部)',
+              },
+            },
+            required: [],
+          },
+        },
+      });
+
+      // 创建定时任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'create_scheduled_task',
+          description: '创建新的定时任务。支持周期任务（每隔一段时间执行）和定时任务（在指定时间执行一次）',
+          parameters: {
+            type: 'object',
+            properties: {
+              name: {
+                type: 'string',
+                description: '任务名称',
+              },
+              description: {
+                type: 'string',
+                description: '任务描述',
+              },
+              type: {
+                type: 'string',
+                description: '任务类型：periodic(周期任务) 或 scheduled(定时任务)',
+              },
+              command: {
+                type: 'string',
+                description: '要执行的命令或提示词',
+              },
+              interval: {
+                type: 'number',
+                description: '执行间隔（毫秒）。仅周期任务需要，例如：3600000 = 1小时',
+              },
+              scheduledTime: {
+                type: 'number',
+                description: '执行时间（Unix 时间戳，毫秒）。仅定时任务需要',
+              },
+              notifyQQ: {
+                type: 'boolean',
+                description: '是否发送 QQ 通知，默认 false',
+              },
+            },
+            required: ['name', 'type', 'command'],
+          },
+        },
+      });
+
+      // 更新定时任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'update_scheduled_task',
+          description: '更新已存在的定时任务配置',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '任务 ID',
+              },
+              name: {
+                type: 'string',
+                description: '新的任务名称',
+              },
+              description: {
+                type: 'string',
+                description: '新的任务描述',
+              },
+              command: {
+                type: 'string',
+                description: '新的命令',
+              },
+              enabled: {
+                type: 'boolean',
+                description: '是否启用任务',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+      });
+
+      // 删除定时任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'delete_scheduled_task',
+          description: '删除指定的定时任务',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '要删除的任务 ID',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+      });
+
+      // 暂停/恢复任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'pause_scheduled_task',
+          description: '暂停周期任务（停止自动执行，但保留任务）',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '要暂停的任务 ID',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+      });
+
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'resume_scheduled_task',
+          description: '恢复已暂停的周期任务',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '要恢复的任务 ID',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+      });
+
+      // 立即执行任务
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'execute_scheduled_task_now',
+          description: '立即执行指定的定时任务（不影响原有的调度计划）',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '要执行的任务 ID',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+      });
+
+      // 获取任务统计
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'get_task_statistics',
+          description: '获取定时任务的统计信息：总任务数、运行中、已完成、执行次数等',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
           },
         },
       });
@@ -2140,6 +2338,255 @@ ${memoryContext}` : ''}`;
         continue;
       }
 
+      // ==================== 定时任务工具处理 ====================
+      if (this.scheduler && toolCall.function.name.startsWith('list_scheduled_tasks') ||
+          toolCall.function.name === 'create_scheduled_task' ||
+          toolCall.function.name === 'update_scheduled_task' ||
+          toolCall.function.name === 'delete_scheduled_task' ||
+          toolCall.function.name === 'pause_scheduled_task' ||
+          toolCall.function.name === 'resume_scheduled_task' ||
+          toolCall.function.name === 'execute_scheduled_task_now' ||
+          toolCall.function.name === 'get_task_statistics') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const userId = message?.userId || 'unknown';
+
+          switch (toolCall.function.name) {
+            case 'list_scheduled_tasks': {
+              const status = args.status as string | undefined;
+              let tasks;
+
+              if (!status || status === 'all') {
+                tasks = this.scheduler.getAllTasks();
+              } else {
+                tasks = this.scheduler.getAllTasks().filter(t => t.status === status);
+              }
+
+              if (tasks.length === 0) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: '[定时任务列表] 暂无任务。使用 create_scheduled_task 工具创建新任务。',
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                const taskList = tasks.map(t => {
+                  const nextExec = t.nextExecutionTime ? new Date(t.nextExecutionTime).toLocaleString('zh-CN') : '无';
+                  const typeStr = t.type === 'periodic'
+                    ? `周期 (${Math.round((t as any).periodicConfig.interval / 60000)}分钟)`
+                    : '定时';
+                  return `- [${t.id.substring(0, 8)}] ${t.name}
+  类型: ${typeStr} | 状态: ${t.enabled ? '启用' : '禁用'} (${t.status})
+  命令: ${t.command.substring(0, 50)}...
+  下次执行: ${nextExec}
+  执行次数: ${t.executionCount}`;
+                }).join('\n\n');
+
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[定时任务列表] 共 ${tasks.length} 个任务：\n\n${taskList}`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'create_scheduled_task': {
+              const name = args.name as string;
+              const type = args.type as 'periodic' | 'scheduled';
+              const command = args.command as string;
+              const description = args.description as string | undefined;
+              const interval = args.interval as number | undefined;
+              const scheduledTime = args.scheduledTime as number | undefined;
+              const notifyQQ = args.notifyQQ as boolean | undefined;
+
+              // 验证参数
+              if (type === 'periodic' && !interval) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: '错误：周期任务必须指定 interval 参数（执行间隔，毫秒）',
+                  agentId: 'glm-coordinator',
+                });
+                break;
+              }
+
+              if (type === 'scheduled' && !scheduledTime) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: '错误：定时任务必须指定 scheduledTime 参数（Unix 时间戳）',
+                  agentId: 'glm-coordinator',
+                });
+                break;
+              }
+
+              const task = await this.scheduler.createTask({
+                name,
+                description,
+                type,
+                command,
+                createdBy: userId,
+                notifyQQ: notifyQQ ?? false,
+                notifyTarget: userId,
+                periodicConfig: type === 'periodic' ? { interval } : undefined,
+                scheduledConfig: type === 'scheduled' ? { scheduledTime } : undefined,
+              });
+
+              results.push({
+                toolCallId: toolCall.id,
+                result: `[任务创建成功] ${task.name} (ID: ${task.id.substring(0, 8)})
+类型: ${type === 'periodic' ? '周期任务' : '定时任务'}
+${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` : `执行时间: ${new Date(scheduledTime!).toLocaleString('zh-CN')}`}
+命令: ${command}`,
+                agentId: 'glm-coordinator',
+              });
+              break;
+            }
+
+            case 'update_scheduled_task': {
+              const taskId = args.taskId as string;
+              const updates: any = {};
+
+              if (args.name !== undefined) updates.name = args.name;
+              if (args.description !== undefined) updates.description = args.description;
+              if (args.command !== undefined) updates.command = args.command;
+              if (args.enabled !== undefined) updates.enabled = args.enabled;
+
+              const task = await this.scheduler.updateTask(taskId, updates);
+              if (!task) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `错误：未找到任务 ${taskId}`,
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[任务更新成功] ${task.name}`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'delete_scheduled_task': {
+              const taskId = args.taskId as string;
+              const deleted = await this.scheduler.deleteTask(taskId);
+
+              if (deleted) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[任务删除成功] 任务 ${taskId.substring(0, 8)} 已删除`,
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `错误：未找到任务 ${taskId}`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'pause_scheduled_task': {
+              const taskId = args.taskId as string;
+              const success = await this.scheduler.pauseTask(taskId);
+
+              if (success) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[任务已暂停] 任务 ${taskId.substring(0, 8)} 已暂停。使用 resume_scheduled_task 恢复。`,
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `错误：暂停失败，任务不存在或不是周期任务`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'resume_scheduled_task': {
+              const taskId = args.taskId as string;
+              const success = await this.scheduler.resumeTask(taskId);
+
+              if (success) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[任务已恢复] 任务 ${taskId.substring(0, 8)} 已恢复运行。`,
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `错误：恢复失败，任务不存在或不是周期任务`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'execute_scheduled_task_now': {
+              const taskId = args.taskId as string;
+              const success = await this.scheduler.executeTaskNow(taskId);
+
+              if (success) {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `[任务已开始执行] 任务 ${taskId.substring(0, 8)} 正在执行中...`,
+                  agentId: 'glm-coordinator',
+                });
+              } else {
+                results.push({
+                  toolCallId: toolCall.id,
+                  result: `错误：执行失败，任务可能已在运行中`,
+                  agentId: 'glm-coordinator',
+                });
+              }
+              break;
+            }
+
+            case 'get_task_statistics': {
+              const stats = this.scheduler.getStatistics();
+              results.push({
+                toolCallId: toolCall.id,
+                result: `[定时任务统计]
+总任务数: ${stats.totalTasks}
+- 周期任务: ${stats.periodicTasks}
+- 定时任务: ${stats.scheduledTasks}
+- 启用任务: ${stats.enabledTasks}
+- 运行中: ${stats.runningTasks}
+- 等待中: ${stats.pendingTasks}
+
+执行统计:
+- 今日执行: ${stats.todayExecutions} 次
+- 总执行次数: ${stats.totalExecutions} 次
+- 成功: ${stats.successExecutions} 次
+- 失败: ${stats.failedExecutions} 次`,
+                agentId: 'glm-coordinator',
+              });
+              break;
+            }
+
+            default:
+              results.push({
+                toolCallId: toolCall.id,
+                result: `错误：未知的工具 ${toolCall.function.name}`,
+                agentId: 'glm-coordinator',
+              });
+          }
+        } catch (error) {
+          logger.error(`[GLMCoordinatorAgent] 定时任务工具执行失败 (${toolCall.function.name}): ${error}`);
+          results.push({
+            toolCallId: toolCall.id,
+            result: `执行失败: ${error instanceof Error ? error.message : String(error)}`,
+            agentId: 'glm-coordinator',
+          });
+        }
+        continue;
+      }
+
       // 处理子Agent工具
       const agentId = this.toolToAgentMap[toolCall.function.name];
 
@@ -2248,6 +2695,12 @@ ${memoryContext}` : ''}`;
         // Vision Agent 需要特殊处理，传递完整的参数对象
         // 因为需要同时传递 task 和 image
         return `分析图片: ${args.task}`;
+
+      case 'run_refactor_agent':
+        if (args.autoApply) {
+          return `执行重构: ${args.task} (自动应用)`;
+        }
+        return args.task as string;
 
       default:
         return JSON.stringify(args);
@@ -2405,6 +2858,9 @@ ${memoryContext}` : ''}`;
     if (this.subAgents.has('vision')) {
       names.push('Vision Agent (视觉)');
     }
+    if (this.subAgents.has('refactor')) {
+      names.push('Code Refactor Agent (重构)');
+    }
 
     return names;
   }
@@ -2521,6 +2977,13 @@ ${memoryContext}` : ''}`;
     }
 
     return result;
+  }
+
+  /**
+   * 获取技能加载器（供 Dashboard API 使用）
+   */
+  getSkillLoader(): SkillLoader | undefined {
+    return this.skillLoader;
   }
 
   /**

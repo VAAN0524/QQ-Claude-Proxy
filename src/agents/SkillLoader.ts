@@ -18,6 +18,13 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 
 /**
+ * 技能启用状态存储
+ */
+interface SkillEnabledState {
+  [skillName: string]: boolean;
+}
+
+/**
  * 技能元数据（第1层 - 始终加载）
  */
 export interface SkillMetadata {
@@ -31,6 +38,8 @@ export interface SkillMetadata {
   description: string;
   /** 是否已加载完整内容 */
   fullyLoaded: boolean;
+  /** 是否已启用 */
+  enabled: boolean;
 }
 
 /**
@@ -60,9 +69,14 @@ export class SkillLoader {
   private metadataCache: Map<string, SkillMetadata> = new Map();
   /** 完整内容缓存（第2层，按需加载） */
   private fullContentCache: Map<string, SkillDefinition> = new Map();
+  /** 启用状态存储文件路径 */
+  private stateFilePath: string;
+  /** 技能启用状态 */
+  private enabledState: SkillEnabledState = {};
 
   constructor(skillsDir: string) {
     this.skillsDir = skillsDir;
+    this.stateFilePath = path.join(skillsDir, '.enabled-skills.json');
   }
 
   /**
@@ -70,6 +84,9 @@ export class SkillLoader {
    * 这是初始化时的轻量级扫描
    */
   async scanSkillsMetadata(): Promise<Map<string, SkillMetadata>> {
+    // 首先加载启用状态
+    await this.loadEnabledState();
+
     try {
       const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
 
@@ -82,7 +99,7 @@ export class SkillLoader {
             await fs.access(skillMdPath);
             const metadata = await this.loadSkillMetadata(entry.name, skillPath, skillMdPath);
             this.metadataCache.set(entry.name, metadata);
-            logger.debug(`[SkillLoader] 扫描技能元数据: ${entry.name} - ${metadata.trigger}`);
+            logger.debug(`[SkillLoader] 扫描技能元数据: ${entry.name} - ${metadata.trigger} [${metadata.enabled ? '已启用' : '已禁用'}]`);
           } catch {
             // 跳过没有 SKILL.md 的目录
           }
@@ -129,7 +146,8 @@ export class SkillLoader {
       path: skillPath,
       trigger: trigger || name,
       description: description || '暂无描述',
-      fullyLoaded: false
+      fullyLoaded: false,
+      enabled: this.enabledState[name] ?? false  // 默认为禁用，除非状态中存在
     };
   }
 
@@ -430,5 +448,75 @@ ${skillsList}
         ? `${this.fullContentCache.size}/${this.metadataCache.size}`
         : '0/0'
     };
+  }
+
+  /**
+   * 加载技能启用状态
+   */
+  private async loadEnabledState(): Promise<void> {
+    try {
+      const content = await fs.readFile(this.stateFilePath, 'utf-8');
+      this.enabledState = JSON.parse(content);
+      logger.info(`[SkillLoader] 已加载技能启用状态: ${Object.keys(this.enabledState).length} 个技能`);
+    } catch (error) {
+      // 文件不存在或读取失败，使用空状态
+      this.enabledState = {};
+      logger.debug('[SkillLoader] 启用状态文件不存在，使用空状态');
+    }
+  }
+
+  /**
+   * 保存技能启用状态
+   */
+  private async saveEnabledState(): Promise<void> {
+    try {
+      await fs.writeFile(this.stateFilePath, JSON.stringify(this.enabledState, null, 2), 'utf-8');
+      logger.debug('[SkillLoader] 技能启用状态已保存');
+    } catch (error) {
+      logger.error(`[SkillLoader] 保存启用状态失败: ${error}`);
+    }
+  }
+
+  /**
+   * 设置技能启用状态
+   */
+  async setSkillEnabled(name: string, enabled: boolean): Promise<boolean> {
+    const metadata = this.metadataCache.get(name);
+    if (!metadata) {
+      logger.warn(`[SkillLoader] 技能不存在: ${name}`);
+      return false;
+    }
+
+    // 更新状态
+    this.enabledState[name] = enabled;
+    metadata.enabled = enabled;
+
+    // 保存到文件
+    await this.saveEnabledState();
+
+    logger.info(`[SkillLoader] 技能 ${name} 已${enabled ? '启用' : '禁用'}`);
+    return true;
+  }
+
+  /**
+   * 获取技能启用状态
+   */
+  isSkillEnabled(name: string): boolean {
+    const metadata = this.metadataCache.get(name);
+    return metadata?.enabled ?? false;
+  }
+
+  /**
+   * 获取所有启用的技能
+   */
+  getEnabledSkills(): SkillMetadata[] {
+    return Array.from(this.metadataCache.values()).filter(m => m.enabled);
+  }
+
+  /**
+   * 获取所有禁用的技能
+   */
+  getDisabledSkills(): SkillMetadata[] {
+    return Array.from(this.metadataCache.values()).filter(m => !m.enabled);
   }
 }

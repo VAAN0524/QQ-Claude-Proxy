@@ -946,55 +946,6 @@ function getToastIcon(type) {
 }
 
 /**
- * Settings Modal
- */
-function openSettingsModal() {
-  const modal = document.getElementById('settingsModal');
-
-  // Load current config
-  if (state.config) {
-    document.getElementById('gatewayPort').value = state.config.gateway?.port || 18789;
-    document.getElementById('gatewayHost').value = state.config.gateway?.host || '127.0.0.1';
-    document.getElementById('allowedUsers').value = state.config.agent?.allowedUsers?.join(', ') || '';
-    document.getElementById('sandboxMode').checked = state.config.channels?.qqbot?.sandbox ?? true;
-  }
-
-  modal.classList.add('active');
-}
-
-function closeSettingsModal() {
-  document.getElementById('settingsModal').classList.remove('active');
-}
-
-async function saveSettings() {
-  const updates = {
-    gateway: {
-      port: parseInt(document.getElementById('gatewayPort').value) || 18789,
-      host: document.getElementById('gatewayHost').value || '127.0.0.1',
-    },
-    agent: {
-      allowedUsers: document.getElementById('allowedUsers').value
-        .split(',')
-        .map(u => u.trim())
-        .filter(u => u),
-    },
-    channels: {
-      qqbot: {
-        sandbox: document.getElementById('sandboxMode').checked,
-      },
-    },
-  };
-
-  try {
-    await updateConfig(updates);
-    closeSettingsModal();
-    await restartService();
-  } catch (error) {
-    showToast('保存配置失败: ' + error.message, 'error');
-  }
-}
-
-/**
  * Refresh Function with debouncing and error recovery
  */
 async function refreshData() {
@@ -1044,10 +995,9 @@ async function refreshData() {
 function init() {
   // Event Listeners
   document.getElementById('refreshBtn').addEventListener('click', refreshData);
-  document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
-  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
-  document.getElementById('cancelSettingsBtn').addEventListener('click', closeSettingsModal);
-  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    window.location.href = 'config.html';
+  });
   document.getElementById('clearCompletedBtn').addEventListener('click', async () => {
     try {
       await clearCompletedTasks();
@@ -1067,13 +1017,6 @@ function init() {
       } catch (error) {
         showToast('重启失败: ' + error.message, 'error');
       }
-    }
-  });
-
-  // Close modal on overlay click
-  document.getElementById('settingsModal').addEventListener('click', (e) => {
-    if (e.target.id === 'settingsModal') {
-      closeSettingsModal();
     }
   });
 

@@ -17,7 +17,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "daily-cleanup": "tsx scripts/daily-memory-cleanup.ts"
+    "daily-cleanup": "tsx scripts/daily-memory-cleanup.ts",
+    "monitor": "tsx src/cli/monitor.ts",
+    "watchdog": "tsx scripts/watchdog.ts",
+    "watchdog:start": "tsx scripts/watchdog.ts start",
+    "watchdog:stop": "tsx scripts/watchdog.ts stop",
+    "watchdog:status": "tsx scripts/watchdog.ts status",
+    "install-startup": "node scripts/install-startup",
+    "uninstall-startup": "node scripts/install-startup"
   },
   "keywords": [
     "qq",

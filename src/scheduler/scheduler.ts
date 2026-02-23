@@ -13,6 +13,8 @@ import type { Task, TaskType, TaskStatistics, SchedulerConfig, TaskResult } from
 import { TaskStatus } from './types.js';
 import { TaskStore } from './task-store.js';
 import { TaskRunner } from './task-runner.js';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 
 /**
  * QQ 消息发送回调类型
@@ -392,12 +394,39 @@ export class Scheduler {
       message += `执行状态: ${status}\n`;
       message += `执行耗时: ${duration} 秒\n`;
 
-      if (result.error) {
-        message += `错误信息: ${result.error}\n`;
+      // 如果任务结果需要保存，读取并包含结果文件内容
+      if (task.saveResult && result.resultFilePath && existsSync(result.resultFilePath)) {
+        try {
+          const fileContent = await readFile(result.resultFilePath, 'utf-8');
+          // 提取输出结果部分（跳过文件头部的任务信息）
+          const outputMatch = fileContent.match(/输出结果:\n-+\n([\s\S]+)-+\n/);
+          if (outputMatch && outputMatch[1]) {
+            let outputContent = outputMatch[1].trim();
+            // 限制内容长度，QQ 消息约 2000 字符限制
+            const maxLength = 1500;
+            if (outputContent.length > maxLength) {
+              outputContent = outputContent.substring(0, maxLength) + '\n... (内容过长已截断)';
+            }
+            message += `\n📄 执行结果:\n${outputContent}\n`;
+          } else {
+            // 如果没有找到输出结果部分，使用整个文件内容（限制长度）
+            let fileContentLimited = fileContent.trim();
+            const maxLength = 1500;
+            if (fileContentLimited.length > maxLength) {
+              fileContentLimited = fileContentLimited.substring(0, maxLength) + '\n... (内容过长已截断)';
+            }
+            message += `\n📄 执行结果:\n${fileContentLimited}\n`;
+          }
+        } catch (readError) {
+          logger.warn(`[Scheduler] 读取结果文件失败: ${readError}`);
+          message += `\n📄 结果文件: ${result.resultFilePath}\n`;
+        }
+      } else if (result.resultFilePath) {
+        message += `结果文件: ${result.resultFilePath}\n`;
       }
 
-      if (result.resultFilePath) {
-        message += `结果文件: ${result.resultFilePath}\n`;
+      if (result.error) {
+        message += `错误信息: ${result.error}\n`;
       }
 
       message += `━━━━━━━━━━━━━━━━━━━━━━`;
