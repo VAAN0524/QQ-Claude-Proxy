@@ -9,6 +9,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import axios from 'axios';
 import {
   getNetworkHelper,
   shouldUseMirror,
@@ -115,6 +116,30 @@ export class SmartNetworkTool {
       return text;
     } catch (error) {
       logger.debug(`[SmartNetworkTool] directFetch 失败: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Axios 获取（使用 axios 而非原生 fetch）
+   * 在 Windows 环境下 axios 通常比原生 fetch 更可靠
+   */
+  private async axiosFetch(url: string, timeout: number = 10000): Promise<string | null> {
+    try {
+      logger.debug(`[SmartNetworkTool] 使用 axios 获取: ${url}`);
+
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        maxRedirects: 5,
+        timeout,
+        responseType: 'text'
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.debug(`[SmartNetworkTool] axiosFetch 失败: ${error}`);
       throw error;
     }
   }
@@ -231,6 +256,13 @@ export class SmartNetworkTool {
       name: 'direct',
       description: '直接访问',
       execute: (u) => this.directFetch(u, options.timeout)
+    });
+
+    // 尝试 axios（在 Windows 下可能比原生 fetch 更可靠）
+    strategies.push({
+      name: 'axios',
+      description: 'Axios HTTP 客户端',
+      execute: (u) => this.axiosFetch(u, options.timeout)
     });
 
     // 最后尝试 web_reader MCP（如果其他都失败）
