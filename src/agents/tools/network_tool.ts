@@ -273,13 +273,6 @@ export class SmartNetworkTool {
       execute: (u) => this.duckSearchFetch(u)
     });
 
-    // 最后尝试 web_reader MCP（如果其他都失败）
-    strategies.push({
-      name: 'web_reader',
-      description: 'Web Reader MCP',
-      execute: (u) => this.webReaderFetch(u)
-    });
-
     return strategies;
   }
 
@@ -288,7 +281,8 @@ export class SmartNetworkTool {
    */
   async smartFetch(url: string, options: SmartFetchOptions = {}): Promise<SmartFetchResult> {
     const startTime = Date.now();
-    const maxRetries = options.maxRetries ?? 3;
+    // 减少默认重试次数，避免内存溢出
+    const maxRetries = options.maxRetries ?? 1;
     const timeout = options.timeout ?? 10000;
 
     // 确保已初始化
