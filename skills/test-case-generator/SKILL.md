@@ -1,3 +1,8 @@
+---
+name: test-case-generator
+description: 根据代码自动生成单元测试用例，支持 Jest、Mocha、Pytest 等框架。
+---
+
 # Test Case Generator
 
 根据代码自动生成单元测试用例。

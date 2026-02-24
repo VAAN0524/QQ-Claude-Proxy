@@ -1,3 +1,8 @@
+---
+name: node-transfer
+description: 高速、内存高效的 OpenClaw 节点间文件传输，使用原生 Node.js 流。
+---
+
 # node-transfer
 
 High-speed, memory-efficient file transfer between OpenClaw nodes using native Node.js streams.
@@ -139,7 +144,7 @@ mkdir C:/openclaw/skills/node-transfer/scripts -Force
 // 1. Check if already installed (< 100ms)
 const check = await nodes.invoke({
     node: 'E3V3',
-    command: ['node', 'C:/openclaw/skills/node-transfer/scripts/ensure-installed.js', 
+    command: ['node', 'C:/openclaw/skills/node-transfer/scripts/ensure-installed.js',
               'C:/openclaw/skills/node-transfer/scripts']
 });
 
