@@ -1,7 +1,7 @@
 /**
  * Web Search Agent - 网络搜索和研究
  *
- * 使用 WebSearch 工具进行网络搜索、问题研究、信息收集
+ * 使用 DuckDuckGo 进行真实搜索（通过 DuckSearchAgent）
  */
 
 import { logger } from '../utils/logger.js';
@@ -13,6 +13,7 @@ import type {
   AgentResponse,
 } from './base/Agent.js';
 import { AgentCapability } from './base/Agent.js';
+import type { DuckSearchAgent } from './DuckSearchAgent.js';
 
 /**
  * Web Search Agent 配置选项
@@ -40,6 +41,9 @@ export class WebSearchAgent implements IAgent {
 
   private maxResults: number;
   private searchTimeout: number;
+
+  // 延迟加载 ducksearch
+  private static duckDuckGoSearch: ((query: string, maxResults?: number) => Promise<any[]>) | null = null;
 
   // 搜索相关关键词
   private readonly searchKeywords = [
@@ -140,34 +144,39 @@ export class WebSearchAgent implements IAgent {
   }
 
   /**
-   * 执行搜索
-   * 注意：这里使用模拟搜索，实际使用时需要集成真实的搜索 API
+   * 执行搜索 - 使用真实的 DuckDuckGo 搜索
    */
   private async performSearch(query: string): Promise<Array<{
     title: string;
     url: string;
     snippet: string;
   }>> {
-    // 这里是模拟搜索结果
-    // 实际使用时，可以集成以下服务：
-    // - Bing Search API
-    // - Google Custom Search API
-    // - DuckDuckGo Instant Answer API
-    // - 或使用本地搜索引擎如 Meilisearch
+    // 确保 ducksearch 已加载
+    if (!WebSearchAgent.duckDuckGoSearch) {
+      try {
+        const ducksearch = await import('ducksearch');
+        WebSearchAgent.duckDuckGoSearch = ducksearch.duckDuckGoSearch;
+        logger.info('[WebSearchAgent] ducksearch 搜索功能已加载');
+      } catch (error) {
+        logger.error(`[WebSearchAgent] 加载 ducksearch 失败: ${error}`);
+        throw new Error('搜索功能不可用');
+      }
+    }
 
-    logger.debug(`[WebSearchAgent] 执行搜索: ${query}`);
+    logger.info(`[WebSearchAgent] 使用 DuckDuckGo 搜索: ${query}`);
 
-    // 模拟网络延迟
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const results = await WebSearchAgent.duckDuckGoSearch(query, this.maxResults);
 
-    // 返回模拟结果
-    return [
-      {
-        title: `关于 "${query}" 的搜索结果`,
-        url: `https://www.example.com/search?q=${encodeURIComponent(query)}`,
-        snippet: `这是关于 "${query}" 的搜索结果摘要。实际使用时需要集成真实的搜索 API。`,
-      },
-    ];
+      return results.map(r => ({
+        title: r.title,
+        url: r.link,
+        snippet: r.snippet,
+      }));
+    } catch (error) {
+      logger.error(`[WebSearchAgent] DuckDuckGo 搜索失败: ${error}`);
+      throw error;
+    }
   }
 
   /**
@@ -190,8 +199,6 @@ export class WebSearchAgent implements IAgent {
       output += `   ${result.snippet}\n`;
       output += `   🔗 ${result.url}\n\n`;
     }
-
-    output += `\n💡 提示：这是模拟搜索结果。要使用真实搜索功能，请配置搜索 API 密钥。`;
 
     return output;
   }
