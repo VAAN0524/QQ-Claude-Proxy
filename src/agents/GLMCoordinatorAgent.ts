@@ -765,6 +765,70 @@ export class GLMCoordinatorAgent implements IAgent {
     let hasFileSendToolCall = false;
     const maxSteps = 5;
 
+    // ========== 快捷检测：GitHub URL ==========
+    // 如果用户消息包含 GitHub URL，直接调用 smart_fetch，绕过 LLM 推理
+    const githubUrlMatch = userQuery.match(/(https?:\/\/github\.com\/[^\s]+)/);
+    if (githubUrlMatch && steps === 0) {
+      const githubUrl = githubUrlMatch[1];
+      logger.info(`[ReAct] 检测到 GitHub URL，直接使用 smart_fetch: ${githubUrl}`);
+
+      try {
+        const fetchResult = await smartFetch(githubUrl, {
+          maxRetries: 3,
+          timeout: 15000,
+          verbose: false
+        });
+
+        if (fetchResult.success && fetchResult.content) {
+          // 提取标题
+          const titleMatch = fetchResult.content.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const title = titleMatch ? titleMatch[1].trim() : '';
+
+          // 清理内容
+          let content = fetchResult.content
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          // 限制内容长度
+          const maxLength = 2500;
+          if (content.length > maxLength) {
+            content = content.substring(0, maxLength) + '...';
+          }
+
+          const directAnswer = `✅ **已成功访问 GitHub 仓库**
+
+📍 **URL**: ${githubUrl}
+🔄 **访问方式**: ${fetchResult.strategy || 'direct'}
+🔁 **尝试次数**: ${fetchResult.attempts}
+
+${title ? `**标题**: ${title}\n\n` : ''}**内容**:
+
+${content}
+
+---
+
+💡 这是项目的原始内容。如果您想了解更多信息，可以：
+- 查看项目的 README 文件
+- 了解项目的代码结构
+- 分析项目的技术栈
+- 讨论具体的功能或问题`;
+
+          return { answer: directAnswer, steps: 1, hasFileSendToolCall: false };
+        } else {
+          const errorDetail = fetchResult.error || '未知错误';
+          logger.warn(`[ReAct] smart_fetch 失败: ${errorDetail}`);
+          // 继续正常的 ReAct 流程
+        }
+      } catch (error) {
+        logger.warn(`[ReAct] smart_fetch 异常: ${error}`);
+        // 继续正常的 ReAct 流程
+      }
+    }
+    // ========== 快捷检测结束 ==========
+
     // 当前消息历史
     let currentMessages = [...messages];
     let finalAnswer = '';
@@ -1249,6 +1313,16 @@ export class GLMCoordinatorAgent implements IAgent {
 ### 示例4：网络搜索
 用户: "搜索最新的AI新闻"
 助手: [调用 web_search(query="最新AI新闻")]
+
+### 示例5：访问 GitHub 仓库（重要！）
+用户: "访问 https://github.com/VAAN0524/myskills 看看这个项目"
+助手: [调用 smart_fetch(url="https://github.com/VAAN0524/myskills")]
+助手: [根据返回内容分析项目]
+
+⚠️ **GitHub 访问规则**：
+- 当用户提供 GitHub URL 时，**必须优先使用 smart_fetch 工具**
+- 不要使用 run_browser_agent，它可能无法正常访问 GitHub
+- smart_fetch 会自动使用镜像和重试机制
 
 ### 错误示例（禁止）：
 用户: "把 test.txt 发给我"
