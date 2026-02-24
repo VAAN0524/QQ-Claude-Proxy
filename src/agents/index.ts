@@ -64,6 +64,7 @@ export { VisionAgent } from './VisionAgent.js';
 export { CodeRefactorAgent } from './CodeRefactorAgent.js';
 export { SkillManagerAgent } from './SkillManagerAgent.js';
 export { TavilySearchAgent } from './TavilySearchAgent.js';
+export { DuckSearchAgent } from './DuckSearchAgent.js';
 
 // 主协调 Agent
 export { CoordinatorAgent } from './CoordinatorAgent.js';

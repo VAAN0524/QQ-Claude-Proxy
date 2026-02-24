@@ -164,6 +164,29 @@ export const visionAgentTool = (context: ToolContext): Tool => tool({
 });
 
 /**
+ * DuckSearch Agent 工具
+ */
+export const duckSearchAgentTool = (context: ToolContext): Tool => tool({
+  name: 'run_ducksearch_agent',
+  description: '网络搜索和网页内容获取：使用 DuckDuckGo 搜索、获取网页正文内容',
+  parameters: z.object({
+    query: z.string().describe('搜索关键词或网页 URL。如果是 URL（http/https开头），会直接获取网页内容'),
+  }),
+  execute: async ({ query }) => {
+    const agent = context.subAgents.get('ducksearch');
+    if (!agent) {
+      return '错误：DuckSearch Agent 未启用';
+    }
+    const subMessage: AgentMessage = {
+      ...context.message,
+      content: query,
+    };
+    const response = await agent.process(subMessage, context.agentContext);
+    return response.content;
+  },
+});
+
+/**
  * 获取所有 Agent 工具
  */
 export function getAllAgentTools(context: ToolContext): Tool[] {
@@ -186,6 +209,9 @@ export function getAllAgentTools(context: ToolContext): Tool[] {
   }
   if (context.subAgents.has('vision')) {
     tools.push(visionAgentTool(context));
+  }
+  if (context.subAgents.has('ducksearch')) {
+    tools.push(duckSearchAgentTool(context));
   }
 
   return tools;

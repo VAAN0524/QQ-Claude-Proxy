@@ -151,6 +151,19 @@ export const REGISTERED_AGENTS: AgentMetadata[] = [
     dependencies: []
   },
   {
+    id: 'ducksearch',
+    className: 'DuckSearchAgent',
+    displayName: 'DuckSearch 搜索',
+    description: '使用 DuckDuckGo 搜索网络，获取网页内容',
+    importPath: './agents/DuckSearchAgent.js',
+    enabled: true,
+    priority: 13,
+    timeout: 30000,
+    capabilities: ['web', 'search', 'content-extraction'],
+    persona: AGENT_PERSONAS['ducksearch'],
+    dependencies: []
+  },
+  {
     id: 'data-analysis-agent',
     className: 'DataAnalysisAgent',
     displayName: '数据分析专家',

@@ -3247,6 +3247,10 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
         }
         return args.task as string;
 
+      case 'run_ducksearch_agent':
+        // DuckSearch Agent 直接使用 query 参数
+        return args.query as string;
+
       default:
         return JSON.stringify(args);
     }
