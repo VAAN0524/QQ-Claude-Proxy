@@ -654,6 +654,33 @@ export class GLMCoordinatorAgent implements IAgent {
 
       let finalResponse = result.answer;
 
+      // 自动纠正：检测用户请求发送文件但 GLM API 没有调用工具的情况
+      const requestSendFile = /.*(发给我|发送|传给我|下载|我要.*文件).*/i.test(content);
+      const hasFileToolCall = result.hasFileSendToolCall;
+
+      if (requestSendFile && !hasFileToolCall && this.pendingFiles.length === 0) {
+        logger.warn(`[GLMCoordinatorAgent] 检测到文件发送请求但未调用工具，尝试自动纠正...`);
+
+        // 尝试从用户消息中提取文件名
+        const fileMatch = content.match(/(\w+\.(txt|md|json|xml|csv|log|yaml|yml|docx|pdf|png|jpg|jpeg))/i);
+        if (fileMatch) {
+          const fileName = fileMatch[1];
+          const filePath = path.join(context.workspacePath, fileName);
+
+          try {
+            await fs.access(filePath);
+            this.pendingFiles.push(filePath);
+            logger.info(`[GLMCoordinatorAgent] 自动纠正：添加文件到发送队列: ${filePath}`);
+            finalResponse = `📁 ${finalResponse}\n\n💡 已自动为您添加文件: ${fileName}`;
+          } catch {
+            logger.warn(`[GLMCoordinatorAgent] 自动纠正失败：文件不存在: ${filePath}`);
+          }
+        } else {
+          // 如果无法提取具体文件名，提示用户
+          finalResponse = `⚠️ ${finalResponse}\n\n💡 请明确指定要发送的文件名，例如："把 test.txt 发给我"`;
+        }
+      }
+
       // 添加助手响应到共享上下文
       this.sharedContext.addConversation('assistant', finalResponse, this.id);
 
@@ -715,9 +742,10 @@ export class GLMCoordinatorAgent implements IAgent {
     originalMessage: AgentMessage,
     tools: Tool[],
     userQuery: string
-  ): Promise<{ answer: string; steps: number }> {
+  ): Promise<{ answer: string; steps: number; hasFileSendToolCall: boolean }> {
     const systemPrompt = await this.buildSystemPrompt(context, originalMessage);
     let steps = 0;
+    let hasFileSendToolCall = false;
     const maxSteps = 5;
 
     // 当前消息历史
@@ -735,6 +763,11 @@ export class GLMCoordinatorAgent implements IAgent {
       if (response.choices[0]?.finish_reason === 'tool_calls' && response.choices[0]?.message?.tool_calls) {
         const toolCalls = response.choices[0].message.tool_calls;
         logger.info(`[ReAct] 调用工具: ${toolCalls.map(t => t.function.name).join(', ')}`);
+
+        // 检查是否调用了文件发送工具
+        if (toolCalls.some(t => t.function.name === 'send_file' || t.function.name === 'send_multiple_files')) {
+          hasFileSendToolCall = true;
+        }
 
         // 添加 assistant 消息（包含 tool_calls）
         currentMessages.push({
@@ -771,6 +804,16 @@ export class GLMCoordinatorAgent implements IAgent {
 
         if (continueResponse.choices[0]?.finish_reason === 'stop' || !continueResponse.choices[0]?.message?.tool_calls) {
           finalAnswer = continueResponse.choices[0]?.message?.content || '处理完成';
+
+          // 任务验证：检查是否真的完成了用户的请求
+          const userWantsFileSend = /.*(发给我|发送|传给我|下载).*/i.test(userQuery);
+          const actuallySentFile = hasFileSendToolCall || this.pendingFiles.length > 0;
+
+          if (userWantsFileSend && !actuallySentFile) {
+            logger.warn(`[ReAct] 检测到未完成的文件发送请求，强制纠正...`);
+            finalAnswer += '\n\n⚠️ 需要调用文件发送工具来完成您的请求。';
+          }
+
           break;
         }
 
@@ -790,7 +833,7 @@ export class GLMCoordinatorAgent implements IAgent {
     }
 
     logger.info(`[ReAct] 完成，总步骤: ${steps}`);
-    return { answer: finalAnswer, steps };
+    return { answer: finalAnswer, steps, hasFileSendToolCall };
   }
 
   /**
@@ -1129,48 +1172,52 @@ export class GLMCoordinatorAgent implements IAgent {
       }
     }
 
-    // 基础提示词（整合人格设定）
-    let systemPrompt = `# 角色定义
+    // 基础提示词（精简版）
+    let systemPrompt = `# 任务协调助手
 
-你是一个高级任务协调助手，具备强大的分析、推理和问题解决能力。你可以调用专门的子 Agent 来协助完成任务。
-
-## 核心能力
-
-1. **深度分析**: 在行动前进行深入思考，理解问题的本质
-2. **逻辑推理**: 运用逻辑逐步推导，而非盲目尝试
-3. **工具规划**: 根据任务特点选择最合适的工具组合
-4. **结果验证**: 检查执行结果是否符合预期，必要时调整策略
+你是高级任务协调助手，可以调用子 Agent 和工具完成用户请求。
 
 ## 工作环境
+- 工作目录: ${context.workspacePath}
+- 存储目录: ${context.storagePath}
+- 可用 Agent: ${enabledAgents.join(', ')}
 
-- **工作目录**: ${context.workspacePath}
-- **存储目录**: ${context.storagePath}
-- **运行平台**: ${isWindows ? 'Windows' : platform}
+## 工作流程
 
-## 可用工具
+对于每个请求：
+1. **理解需求** - 分析用户想要什么
+2. **选择工具** - 根据需求选择合适的 Agent 或工具
+3. **执行验证** - 确保任务完成，不要半途而废
 
-${enabledAgents.map(name => `- ${name}`).join('\n')}
+## ⚠️ 重要规则
 
-## Think-Act-Observe 推理循环
+- 文件发送请求（"把xxx发给我"）必须调用 send_file 或 send_multiple_files 工具
+- 列出文件不算发送文件，必须调用发送工具！
+- 代码相关任务优先调用 Claude Code Agent
+- 搜索相关任务优先调用 Web Search Agent
 
-你使用经典的推理循环模式：
+## Few-Shot 示例（参考这些对话模式）
 
-### 1. Think（思考）
-- 深入理解用户需求
-- 分析问题的核心要素
-- 制定执行计划
+### 示例1：文件发送
+用户: "把 test.md 发给我"
+助手: [调用 send_file(filePath="test.md")]
 
-### 2. Act（行动）
-- 选择合适的工具
-- 执行工具调用
-- 获取执行结果
+### 示例2：批量文件发送
+用户: "把这些test文件都发给我"
+助手: [调用 list_directory 查看文件]
+助手: [调用 send_multiple_files(filePatterns=["test.txt", "test.md", "test.json"])]
 
-### 3. Observe（观察）
-- 分析执行结果
-- 验证是否满足需求
-- 决定下一步行动
+### 示例3：代码执行
+用户: "帮我写一个Python脚本"
+助手: [调用 run_claude_code_agent]
 
-**重要**: 如果结果不理想，返回 Think 阶段重新分析，尝试替代方案。
+### 示例4：网络搜索
+用户: "搜索最新的AI新闻"
+助手: [调用 web_search(query="最新AI新闻")]
+
+### 错误示例（禁止）：
+用户: "把 test.txt 发给我"
+助手: [调用 list_directory] "已列出文件，已发送"  ❌ 错误！必须调用 send_file
 `;
 
     // ========== 注入人格设定 ==========
@@ -1181,71 +1228,16 @@ ${personaPrompt}
 `;
     }
 
-    // 如果有技能系统，使用技能元数据增强提示词（渐进式加载第1层）
+    // 如果有技能系统，使用技能元数据增强提示词（按需加载，非全部注入）
     if (this.skillLoader) {
-      systemPrompt = this.skillLoader.buildMetadataSystemPrompt(systemPrompt);
+      // 只在有明确需求时注入技能信息，而非每次都注入全部30个技能
+      // systemPrompt = this.skillLoader.buildMetadataSystemPrompt(systemPrompt);
     }
 
-    // 添加文件操作说明
-    systemPrompt += `
-
-## 文件操作工具（重要）
-
-你有以下专用文件操作工具，请根据用户需求使用：
-
-1. **list_directory** - 列出目录中的文件和子目录
-   - 用户说"列出文件"、"有哪些文件"、"查看文件"时使用
-   - 参数：directoryPath（目录路径），recursive（是否递归）
-
-2. **read_file** - 读取文件内容
-   - 用户说"读取文件"、"查看文件"、"打开文件"时使用
-   - 参数：filePath（文件路径）
-
-3. **write_file** - 创建或修改文件
-   - 用户说"创建文件"、"写入文件"、"修改配置"时使用
-   - 参数：filePath（文件路径），content（内容），append（是否追加）
-
-4. **send_file** - 【文件传输】发送文件到用户的QQ
-   - 用户说"把xxx发给我"、"发送文件xxx"、"传文件给我"、"我要xxx文件"时使用
-   - 此工具用于文件传输，会将文件发送到用户的QQ，不是读取文件内容
-   - 参数：filePath（文件名，如：ai_news_summary.md）
-
-## 定时任务工具（重要）
-
-你有以下定时任务管理工具，与 Dashboard 共享数据：
-
-1. **list_scheduled_tasks** - 列出所有定时任务
-   - 用户说"列出任务"、"查看任务"、"有哪些任务"时使用
-   - 参数：status（可选，筛选状态）
-
-2. **create_scheduled_task** - 创建新的定时任务
-   - 用户说"创建任务"、"设置定时任务"、"每隔X执行"时使用
-   - 参数：name（任务名称）、type（periodic/scheduled）、command（命令）
-   - 周期任务需指定 interval（毫秒），定时任务需指定 scheduledTime（时间戳）
-
-3. **update_scheduled_task** - 更新任务配置
-4. **delete_scheduled_task** - 删除任务
-5. **pause_scheduled_task** / **resume_scheduled_task** - 暂停/恢复任务
-6. **execute_scheduled_task_now** - 立即执行任务
-7. **get_task_statistics** - 获取任务统计信息
-
-## 使用示例
-- "列出workspace的文件" → 使用 list_directory 工具
-- "读取config.json的内容" → 使用 read_file 工具
-- "创建新的配置文件" → 使用 write_file 工具
-- "把 ai_news_summary.md 发给我" → 使用 send_file 工具（文件传输）
-
-## 平台特定说明
-
-${isWindows ? `**Windows 命令**:
-- 查找文件: \`find . -name "*.mp4"\` (Git Bash) 或 \`dir /s /b *.mp4\`
-- 文件操作: 使用 Git Bash 获得更好的兼容性` : `**Unix/Linux 命令**:
-- 查找文件: \`find . -name "*.mp4"\`
-- 系统操作: 使用标准 POSIX 命令`}
-
-${memoryContext ? `
-## 记忆上下文
-${memoryContext}` : ''}`;
+    // 添加记忆上下文（如果有）
+    if (memoryContext) {
+      systemPrompt += `\n## 记忆上下文\n${memoryContext}`;
+    }
 
     return systemPrompt;
   }
@@ -1467,14 +1459,14 @@ ${memoryContext}` : ''}`;
       type: 'function',
       function: {
         name: 'send_multiple_files',
-        description: '【批量文件传输】当用户请求发送多个文件时使用。触发词："把这些文件都发给我"、"发送所有test文件"、"批量发送文件"。参数 filePatterns 是文件名模式列表，如：["test.txt", "test.md", "test.json"]。注意：必须调用此工具才能发送文件，不能只列出文件名。',
+        description: '【批量文件传输 - 必须调用】当用户请求发送多个文件时必须使用此工具！⚠️ 列出文件后必须调用此工具才能真正发送文件！触发词："把这些文件都发给我"、"发送所有test文件"、"批量发送文件"、"把test相关的文件传给我"。参数 filePatterns 是文件名列表，如：["test.txt", "test.md", "test.json"]。注意：只列出文件名不算发送，必须调用此工具！',
         parameters: {
           type: 'object',
           properties: {
             filePatterns: {
               type: 'array',
               items: { type: 'string' } as any,
-              description: '文件名模式列表。例如：["test.txt", "test.md", "test.json"]',
+              description: '文件名列表（不是路径，只是文件名）。例如：["test.txt", "test.md", "test.json"]',
             } as any,
           } as any,
           required: ['filePatterns'],
