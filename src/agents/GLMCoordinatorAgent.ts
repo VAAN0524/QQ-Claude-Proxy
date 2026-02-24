@@ -1465,13 +1465,13 @@ ${memoryContext}` : ''}`;
       type: 'function',
       function: {
         name: 'send_file',
-        description: '【重要】当用户请求发送文件时使用此工具。适用场景：用户说"把xxx发给我"、"发送文件xxx"、"把xxx传到qq"等。将工作区(workspace)或存储区(uploads)的文件发送到用户QQ。',
+        description: '【文件传输】当用户请求把文件发送到QQ时使用。触发词："把xxx发给我"、"发送文件xxx"、"传文件给我"、"我要xxx文件"、"下载xxx"。注意：此工具用于文件传输，不是读取内容。执行后文件会发送到用户的QQ。',
         parameters: {
           type: 'object',
           properties: {
             filePath: {
               type: 'string',
-              description: '要发送的文件路径。支持绝对路径或相对路径(相对于workspace)，例如：ai_news_summary.md 或 workspace/test.txt',
+              description: '文件名。只需提供文件名如：ai_news_summary.md，系统会自动查找工作区中的文件',
             },
           },
           required: ['filePath'],
@@ -1484,7 +1484,7 @@ ${memoryContext}` : ''}`;
       type: 'function',
       function: {
         name: 'read_file',
-        description: '读取文件内容：支持文本文件和图片文件（图片以 base64 格式返回）',
+        description: '【读取内容】用于读取文本文件内容或查看图片。用于分析文件内容，不是用于文件传输。如果用户要接收文件，应使用send_file工具',
         parameters: {
           type: 'object',
           properties: {
