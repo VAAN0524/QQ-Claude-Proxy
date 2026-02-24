@@ -1,724 +1,324 @@
-# QQ-Claude-Proxy
+# 🤖 QQ-Claude-Proxy
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
+![Code](https://img.shields.io/badge/code-42k%20lines-orange.svg)
 
-### [本地 Claude Code] + [QQ 远程控制] = 你的移动 AI 工作站
+---
 
-通过手机 QQ 远程控制本地安装的 Claude Code CLI，让 AI 助手随身边随行。
+## 📱 手机 QQ → 控制 💻 本地 Claude Code CLI = 你的移动 AI 工作站
 
-**核心差异**: 与其他云端 AI 平台不同，本项目运行的是**你本地安装的 Claude Code CLI**，
-
-## 🔄 双模式切换
-
-系统支持 **两种 Agent 模式** 自由切换：
-
-### CLI 模式
-```
-/mode cli
-```
-- 直接调用本地 Claude Code CLI
-- 强大的代码分析和执行能力
-- 完整访问文件系统
-- 支持所有自定义 Skills 和 MCP 插件
-
-### 团队模式
-```
-/mode team
-```
-- GLM-4.7 主协调 Agent 智能分配任务
-- 5 个专业 Agent 协作工作：
-  - **Code Agent** - 代码编写与分析
-  - **Browser Agent** - 网页操作与截图
-  - **Shell Agent** - 命令执行
-  - **WebSearch Agent** - 网络搜索
-  - **DataAgent** - 数据分析
-- 分层记忆系统 (L0/L1/L2)
-
-这意味着：
-
-*   所有指令、工具和配置都沿用自己的 Claude Code 设置
-*   支持你自定义的所有 Skills 和 MCP 插件
-*   完全本地执行，无需上传代码到云端
-*   一次安装，终身使用，不受云端服务限制
-
-[快速开始](#快速开始) | [功能特性](#功能特性) | [配置说明](#配置说明) | [使用指南](#使用指南)
+### 把你的电脑变成随身 AI 助手 - 随时随地，通过手机 QQ 控制
 
 </div>
 
 ---
 
-## 📸 演示截图
+## ✨ 为什么选择 QQ-Claude-Proxy？
 
-### QQ 端实时交互
+### 🎯 与众不同的核心优势
+
+| 特性 | QQ-Claude-Proxy | 云端 AI 平台 |
+|------|:----------------:|:-------------:|
+| **执行环境** | 🏠 **本地运行** | ☁️ 云端服务器 |
+| **数据安全** | 🔒 **代码不上传** | ⚠️ 需上传云端 |
+| **配置自由** | ✅ **使用你自己的配置** | ❌ 平台预设配置 |
+| **插件扩展** | 🧩 **支持所有 Skills/MCP** | ❌ 受限或不可用 |
+| **使用成本** | 💰 **用自己的 API 配额** | 💸 平台收费或受限 |
+| **网络要求** | 📶 **仅 QQ 消息需网络** | 🌐 完全依赖网络 |
+
+---
+
+## 🚀 核心功能一览
+
+### 💪 强大的双模式系统
+
+#### CLI 模式 - 直接调用本地 Claude Code
+```
+/mode cli
+```
+- 💻 **完整代码能力** - 使用你本地的 Claude Code CLI
+- 🎨 **支持所有 Skills** - 自动加载 `~/.claude/skills/` 下的所有技能
+- 🔌 **支持所有 MCP** - 兼容 `~/.claude/mcp_servers.json` 配置的插件
+- 📁 **完整文件访问** - 读写 workspace 目录，处理项目文件
+
+#### 团队模式 - GLM-4.7 智能多 Agent 协作
+```
+/mode team
+```
+- 🧠 **智能协调** - GLM-4.7 分析任务，自动分配给最佳 Agent
+- 🤖 **5 个专业 Agent** - Code、Browser、Shell、WebSearch、Data 协作
+- 🧠 **分层记忆** - L0/L1/L2 三层记忆架构，跨会话记忆共享
+- 🧠 **知识缓存** - 自动缓存搜索结果，避免重复搜索
+
+---
+
+## 🎬 实际使用场景
+
+### 场景 1: 紧急 Bug 修复
+```
+你 (地铁上): "帮我检查 backend/auth.ts 的第 45 行有个 bug"
+Claude: [分析代码] "发现是 token 验证逻辑问题，已修复"
+你: "把修复后的代码发给我"
+Claude: [发送文件] ✅
+```
+**⏱️ 全程 3 分钟，无需打开电脑**
+
+### 场景 2: 远程监控部署
+```
+你: "监控生产服务器日志，有错误立即告诉我"
+Claude: [设置定时任务] "已设置每 5 分钟检查一次"
+(30 分钟后)
+Claude: [QQ 通知] "⚠️ 发现 3 个错误，已记录到日志"
+```
+**🔔 24 小时待命，随时汇报**
+
+### 场景 3: 学习新技术
+```
+你: "什么是 React Server Components？"
+Claude: [搜索 + 分析] 详细解释 + 代码示例
+你: "创建一个示例项目"
+Claude: [创建项目] ✅
+你: "把项目发给我"
+Claude: [发送 zip] ✅
+```
+**📚 边学边做，项目直接到手**
+
+---
+
+## 📊 项目规模
+
+| 分类 | 文件数 | 代码行数 |
+|------|-------|---------|
+| **后端** (TypeScript) | 72 | **30,000+** |
+| **前端** (HTML/CSS/JS) | 15 | 8,900 |
+| **配置** (JSON) | 16 | 7,800 |
+| **总计** | **103** | **~46,700** |
+
+💡 **核心组件**:
+- 🔷 LLM Provider 统一接口 (OpenAI/Anthropic/GLM)
+- 🟢 8 个专业 Agents (Code/Browser/Shell/WebSearch/Data/Vision/Refactor/SkillManager)
+- 🧠 分层记忆系统 (L0 快速记忆 / L1 短期记忆 / L2 长期记忆)
+- 💾 知识缓存服务 (智能 TTL，避免重复搜索)
+- 🔄 会话持久化 (服务重启后自动恢复)
+- 📅 定时任务调度 (支持周期任务和定时任务)
+- 🌐 Web Dashboard (http://localhost:8080)
+
+---
+
+## 📸 演示截图
 
 <table>
 <tr>
 <td width="33%"><img src="screenshots/IMG_2582.PNG" alt="视频传输"></td>
 <td width="33%"><img src="screenshots/IMG_2583.PNG" alt="图片传输"></td>
-<td width="33%"><img src="screenshots/IMG_2584.PNG" alt="工具实时状态"></td>
+<td width="33%"><img src="screenshots/IMG_2584.PNG" alt="工具状态"></td>
 </tr>
 <tr>
-<td align="center">视频传输</td>
-<td align="center">图片传输</td>
-<td align="center">工具实时状态</td>
+<td align="center">视频文件传输</td>
+<td align="center">图片分析</td>
+<td align="center">实时工具状态</td>
 </tr>
 </table>
 
 ---
 
-## 📊 项目统计
+## 🚀 快速开始 (5 分钟上手)
 
-| 分类 | 文件数 | 代码行数 |
-|------|-------|---------|
-| **后端** (TypeScript) | 67 | 25,054 |
-| **前端** (HTML/CSS/JS) | 15 | 8,917 |
-| **配置** (JSON) | 16 | 7,768 |
-| **总计** | 98 | 41,739 |
+### 1. 安装 Claude Code CLI ⭐ 必需
+```bash
+npm install -g @anthropic-ai/claude-code
+claude  # 登录你的 Anthropic 账户
+```
 
-💡 **估算有效代码**: 约 29,000+ 行（排除空行和注释）
-
-**主要组件**:
-- LLM Provider 系统 (OpenAI/Anthropic/GLM 统一接口)
-- Terminal 监控与 Diff 渲染
-- Agent 工具分类系统
-- 分层记忆系统 (L0/L1/L2)
-- 技能管理与会话持久化
-
----
-
-## 功能特性
-
-### 核心
-
-*   **[双模式切换](#-双模式切换)** - CLI 模式与团队模式自由切换，满足不同场景需求
-*   **[QQ Bot 集成](#qq-bot-集成)** - 通过手机 QQ 发送消息与 Claude Code CLI 交互
-*   **本地 CLI 执行** - 直接运行电脑端的 `claude` 命令行工具，使用你自己的配置和插件
-*   **文件双向传输** - 手机 QQ 与电脑互传文件，自动处理图片和文档
-
-### 监控
-
-*   **Web Dashboard** - 精美的 Web 界面 (http://localhost:8080) 实时监控任务状态
-*   **实时进度跟踪** - VS Code 风格的任务进度展示，支持工具使用实时显示
-*   **定时任务调度** - 支持周期任务和定时任务，QQ 通知执行结果
-*   **Agent 协作系统** - 多 Agent 协作执行复杂任务（代码、浏览器、Shell、搜索等）
-*   **分层记忆系统** - L0/L1/L2 三层记忆架构，支持跨会话上下文恢复
-
-### 高级功能
-
-*   **LLM Provider 系统** - 统一接口支持 OpenAI (GPT-4)、Anthropic (Claude)、GLM (智谱 AI)
-*   **终端监控** - 实时监控 CLI 进程，智能 Diff 渲染输出
-*   **技能管理** - 通过 QQ 安装、卸载、搜索技能，支持从 GitHub/GitLab 安装
-*   **会话持久化** - 服务重启后自动恢复对话状态
-*   **视觉理解** - 图像分析和理解能力
-*   **MCP 协议** - 支持 Model Context Protocol 扩展
-*   **Agent 工具** - 代码分析、重构、Shell 执行、Web 搜索等专用工具
-
-### 运维
-
-*   **自动重启** - 支持通过 Dashboard 一键重启服务
-*   **端口自动清理** - 启动时自动清理被占用的端口
-*   **状态持久化** - 自动保存和恢复任务状态
-*   **权限控制** - 支持用户白名单限制访问
-
----
-
-## 快速开始
-
-### 1. 安装依赖
-
+### 2. 安装本项目
 ```bash
 git clone https://github.com/VAAN0524/QQ-Claude-Proxy.git
 cd QQ-Claude-Proxy
 npm install
 ```
 
-### 2. 安装 Claude Code CLI
-
-**这是本项目的核心依赖**，必须先安装并登录：
-
-```bash
-# 全局安装 Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# 登录你的 Anthropic 账户
-claude
-```
-
-> **注意**: Claude Code CLI 使用你本地安装的配置，包括：
-> - `~/.claude/` 下的自定义 Skills
-> - `~/.claude/` 下的 MCP 插件配置
-> - 你个人的 API Key 和使用配额
-
 ### 3. 配置 QQ Bot
-
-1. 访问 [QQ 开放平台](https://q.qq.com/) 注册开发者账号
-2. 创建机器人应用，获取 **AppID** 和 **AppSecret**
+1. 访问 [QQ 开放平台](https://q.qq.com/) 注册并创建机器人
+2. 获取 **AppID** 和 **AppSecret**
 3. 配置沙箱用户（添加你的 QQ 号）
 4. 用手机 QQ 扫码添加机器人
 
-复制环境变量模板并编辑：
-
 ```bash
 cp .env.example .env
+# 编辑 .env，填入 QQ_BOT_APP_ID 和 QQ_BOT_SECRET
 ```
 
-编辑 `.env` 文件：
-
-```env
-# QQ Bot 配置 (从 QQ 开放平台获取)
-QQ_BOT_APP_ID=your_app_id
-QQ_BOT_SECRET=your_app_secret
-
-# 可选：用户白名单 (逗号分隔的 OpenID)
-# ALLOWED_USERS=
-```
-
-### 4. 运行服务
-
-**开发模式** (支持热重载):
-
+### 4. 启动服务
 ```bash
-npm run dev
-```
-
-**生产模式**:
-
-```bash
-npm run build
-npm start
-```
-
-**Windows 快捷启动**:
-
-```batch
-quick-start.bat
+npm run dev  # 开发模式
+# 或
+quick-start.bat  # Windows 一键启动
 ```
 
 ### 5. 访问 Dashboard
-
-打开浏览器访问: **http://localhost:8080**
-
----
-
-## 配置说明
-
-### 环境变量 (.env)
-
-| 变量 | 说明 | 必需 |
-|------|------|------|
-| `QQ_BOT_APP_ID` | QQ 机器人 AppID | 是 |
-| `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
-| `ALLOWED_USERS` | 用户白名单 (逗号分隔的 OpenID) | 否 |
-| `GLM_API_KEY` | GLM API Key (智谱 AI，用于团队模式) | 否 |
-| `GLM_BASE_URL` | GLM API 地址 | 否 |
-| `ANTHROPIC_API_KEY` | Anthropic API Key (Claude) | 否 |
-
-### 配置文件 (config.json)
-
-```json
-{
-  "gateway": {
-    "port": 18789,
-    "host": "127.0.0.1"
-  },
-  "channels": {
-    "qqbot": {
-      "enabled": true,
-      "appId": "",
-      "clientSecret": "",
-      "sandbox": true
-    }
-  },
-  "agent": {
-    "allowedUsers": [],
-    "timeout": 300000
-  },
-  "storage": {
-    "downloadPath": "./workspace",
-    "uploadPath": "./uploads"
-  },
-  "scheduler": {
-    "enabled": true,
-    "storagePath": "./scheduler-data",
-    "resultDir": "./scheduler-results"
-  }
-}
-```
+打开浏览器访问 **http://localhost:8080**
 
 ---
 
-## 使用指南
+## 🎮 使用指南
 
 ### 模式切换
-
-通过 QQ 发送命令切换模式：
-
 ```
-/mode cli      # 切换到 CLI 模式
-/mode team     # 切换到团队模式
-/模式 cli      # 中文命令
-/模式 团队     # 中文命令
+/mode cli      # CLI 模式 - 使用本地 Claude Code
+/mode team     # 团队模式 - 使用多 Agent 协作
 ```
 
-**模式对比**:
-
-| 特性 | CLI 模式 | 团队模式 |
-|------|---------|---------|
-| 执行引擎 | Claude Code CLI | GLM-4.7 Coordinator |
-| 代码能力 | ★★★★★ | ★★★★☆ |
-| 网页操作 | 依赖 MCP 插件 | 内置 Browser Agent |
-| 网络搜索 | 依赖 MCP 插件 | 内置 WebSearch Agent |
-| 记忆系统 | CLI 自带 | L0/L1/L2 分层记忆 |
-| 技能扩展 | 全部 Skills | 内置技能 + MCP |
-| 适用场景 | 复杂代码任务 | 多步骤协作任务 |
-
-### QQ 消息交互
-
-通过手机 QQ，你可以：
-
-*   **对话交互**: 直接发送消息与 Claude 对话
-*   **发送图片**: 发送图片，Claude 会保存到工作区并读取
-*   **发送文件**: 发送文件，Claude 会自动处理
-*   **请求文件**: 让 Claude 生成文件并发送给你
-
-**示例命令**:
-
+### QQ 常用命令
 ```
-帮我读取 package.json 文件
-创建一个 hello.txt 文件，内容是 Hello World
-分析这张图片 (附上图片)
-把刚才生成的代码发给我
-列出文件
-清空历史
-新任务
+列出文件              # 查看工作区文件
+把 xxx.md 发给我      # 发送文件到 QQ
+清空历史              # 重置对话
+新任务                # 开始新任务
+创建任务              # 创建定时任务 (团队模式)
 ```
 
 ### Dashboard 功能
-
-访问 **http://localhost:8080** 可以:
-
-*   **实时监控** - 查看运行中的任务和进度
-*   **Agent 管理** - 查看和管理各个 Agent 状态
-*   **定时任务** - 创建和管理周期/定时任务
-*   **系统设置** - 修改配置并重启服务
-*   **日志查看** - 实时查看系统日志
-*   **技能管理** - 管理已安装的技能
-*   **任务历史** - 查看已完成任务的历史记录
-
-### 定时任务
-
-支持通过 **QQ 对话** 和 **Dashboard** 两种方式设置定时任务：
-
-**1. 周期任务** - 按固定间隔重复执行
-- 间隔单位：秒、分钟、小时、天
-- 例如：每 6 分钟执行一次、每天早上 8 点执行
-
-**2. 定时任务** - 在指定时间执行一次
-- 指定具体日期和时间
-- 执行完成后自动标记为完成
-
-#### 通过 QQ 对话管理定时任务
-
-在**团队模式**下，你可以直接通过 QQ 对话管理定时任务：
-
-| 功能 | 说明 | 示例 |
-|------|------|------|
-| **列出任务** | 查看所有定时任务 | "列出任务"、"查看任务" |
-| **创建任务** | 创建新的周期/定时任务 | "创建一个每小时执行的任务" |
-| **更新任务** | 修改任务配置 | "把任务A改为每30分钟执行" |
-| **删除任务** | 删除指定任务 | "删除任务A" |
-| **暂停/恢复** | 暂停或恢复任务 | "暂停任务A"、"恢复任务A" |
-| **立即执行** | 手动触发任务执行 | "立即执行任务A" |
-| **任务统计** | 查看任务执行统计 | "查看任务统计" |
-
-#### 通过 Dashboard 管理
-
-访问 **http://localhost:8080** 在 Web 界面管理任务。
-
-**任务特性**:
-- ✅ 执行状态实时监控
-- ✅ QQ 通知执行结果
-- ✅ 执行历史记录
-- ✅ 支持暂停/恢复/手动执行
+- 📊 **实时监控** - 任务进度、工具使用、Agent 状态
+- 🤖 **Agent 管理** - 查看 8 个 Agents 的详细信息
+- 📅 **定时任务** - 创建周期任务和定时任务
+- 📝 **日志查看** - 实时日志，支持过滤和搜索
+- ⚙️ **系统配置** - 在线修改配置并重启服务
 
 ---
 
-## 项目架构
-
-### 系统架构图
+## 🏗️ 项目架构
 
 ```mermaid
 flowchart TD
     User[📱 QQ 用户] -->|消息/文件| QQ[QQ 开放平台]
-    QQ -->|WebSocket 事件| Channel[QQ Bot Channel]
+    QQ -->|WebSocket| Channel[QQ Bot Channel]
     Channel -->|事件转发| Gateway[Internal Gateway<br/>Port: 18789]
 
-    Gateway -->|消息分发| Agent[Agent 处理器]
-    Gateway -->|API 请求| Dashboard[Web Dashboard<br/>Port: 8080]
+    Gateway -->|模式选择| Mode{模式管理器}
+    Mode -->|CLI 模式| CLI[本地 Claude Code CLI]
+    Mode -->|团队模式| GLM[GLM-4.7 Coordinator]
 
-    subgraph Agent 系统
-        Agent -->|模式选择| ModeManager{Mode Manager}
-        ModeManager -->|CLI 模式| CLI[本地 Claude Code CLI]
-        ModeManager -->|团队模式| Coordinator[GLM Coordinator]
-
-        Coordinator -->|任务分发| SubAgents[专业 Agents]
-        SubAgents --> CodeAgent[Code Agent]
-        SubAgents --> BrowserAgent[Browser Agent]
-        SubAgents --> ShellAgent[Shell Agent]
-        SubAgents --> WebSearchAgent[WebSearch Agent]
-        SubAgents --> DataAgent[Data Agent]
+    subgraph 团队模式 Agents
+        GLM -->|任务分发| Agents[专业 Agents]
+        Agents --> Code[Code Agent]
+        Agents --> Browser[Browser Agent]
+        Agents --> Shell[Shell Agent]
+        Agents --> Search[WebSearch Agent]
+        Agents --> Data[Data Agent]
+        Agents --> Vision[Vision Agent]
     end
 
-    subgraph LLM Provider 层
-        Coordinator -->|调用| LLM[LLM Provider Pool]
-        LLM --> OpenAI[OpenAI API]
-        LLM --> Anthropic[Anthropic API]
-        LLM --> GLM[GLM API]
+    subgraph 记忆系统
+        Memory[分层记忆 L0/L1/L2]
+        Cache[知识缓存服务]
+        Session[会话持久化]
     end
 
-    CLI -->|返回结果| Agent
-    Coordinator -->|返回结果| Agent
+    GLM --> Memory
+    Search --> Cache
+    Mode --> Session
 
-    subgraph 监控层
-        TerminalMonitor[终端监控]
-        DiffRenderer[Diff 渲染器]
-        Progress[实时进度跟踪]
+    subgraph 监控系统
+        Dashboard[Web Dashboard<br/>Port: 8080]
+        Monitor[实时进度跟踪]
+        Scheduler[定时任务调度器]
     end
 
-    TerminalMonitor --> CLI
-    Progress -->|推送消息| Channel
-
-    Agent -->|文件操作| FileStore[文件存储管理]
-    Agent -->|定时任务| Scheduler[任务调度器]
-    Scheduler -->|触发执行| CLI
-    Scheduler -->|QQ 通知| Channel
-
-    subgraph 存储层
-        Workspace[./workspace<br/>工作目录]
-        Uploads[./uploads<br/>上传文件]
-        State[./scheduler-data<br/>状态持久化]
-        Memory[分层记忆系统<br/>L0/L1/L2]
-        Sessions[会话持久化]
-    end
-
-    FileStore --> Workspace
-    FileStore --> Uploads
-    Scheduler --> State
-    Coordinator --> Memory
-    Coordinator --> Sessions
+    Gateway --> Dashboard
+    CLI --> Monitor
+    Scheduler --> CLI
 ```
 
-### 数据流
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         QQ 消息处理流程                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ① 用户发送消息/文件                                                  │
-│        ↓                                                             │
-│  ② QQ Bot Channel 接收事件                                          │
-│        ↓                                                             │
-│  ③ Gateway 路由分发                                                 │
-│        ↓                                                             │
-│  ④ Agent 处理:                                                       │
-│      - 权限检查 (allowedUsers)                                       │
-│      - 文件下载 → uploads/                                           │
-│      - 调用 Claude Code CLI                                          │
-│        ↓                                                             │
-│  ⑤ Claude 执行 (本地)                                                │
-│      - 读取 workspace/ 文件                                          │
-│      - 执行命令/工具                                                  │
-│      - 生成新文件                                                     │
-│        ↓                                                             │
-│  ⑥ Agent 返回响应                                                    │
-│      - 文件自动发送                                                   │
-│      - 进度实时推送                                                   │
-│        ↓                                                             │
-│  ⑦ QQ Bot Channel 发送回用户                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+## 🔥 最新更新 (v1.3.0)
 
-### 核心模块
+### ✨ 新增功能
+
+- **🧠 知识缓存服务** - 智能缓存搜索结果，避免重复搜索
+  - 根据查询类型自动设置 TTL（天气 30 分钟、定义 7 天、API 文档 30 天）
+  - 缓存命中时显示 `[缓存答案]` 标记
+
+- **💾 会话持久化** - 每个用户/群组独立会话
+  - 服务重启后自动恢复对话历史
+  - 支持 `user_{userId}` 和 `group_{groupId}` 隔离
+
+- **🎯 系统提示词优化** - 添加记忆利用指导
+  - 明确告诉 LLM 优先使用历史记忆
+  - 添加记忆利用示例和禁止行为说明
+
+### 🔧 技术改进
+
+- GLMCoordinatorAgent 支持动态获取会话上下文
+- `web_search` 和 `run_websearch_agent` 集成缓存机制
+- 新增 `KnowledgeCache` 服务 (`src/agents/memory/KnowledgeCache.ts`)
+
+---
+
+## 📂 核心目录结构
 
 ```
 QQ-Claude-Proxy/
-├── 📂 src/                          # 源代码
-│   ├── index.ts                     # 🔷 主入口
-│   │
-│   ├── 📂 gateway/                  # 🔶 WebSocket 消息网关
-│   │   ├── server.ts                #    WS 服务器 (Port: 18789)
-│   │   ├── protocol.ts              #    消息协议定义
-│   │   ├── router.ts                #    消息路由分发
-│   │   ├── session.ts               #    会话管理
-│   │   ├── http-server.ts           #    HTTP 服务器 (Port: 8080)
-│   │   ├── dashboard-api.ts         #    Dashboard REST API
-│   │   └── dashboard-state-store.ts #    状态持久化
-│   │
-│   ├── 📂 channels/                 # 🔵 渠道适配器
-│   │   └── qqbot/                   #    QQ Bot 适配器
-│   │       ├── gateway.ts           #       QQ Gateway WebSocket
-│   │       ├── api.ts               #       QQ HTTP API
-│   │       ├── types.ts             #       类型定义
-│   │       └── index.ts             #       主入口
-│   │
-│   ├── 📂 agent/                    # 🟢 Claude Code Agent
-│   │   ├── index.ts                 #    Agent 主入口
-│   │   ├── cli-session-manager.ts  #    CLI 会话管理 (队列化)
-│   │   ├── progress-tracker.ts     #    实时进度跟踪
-│   │   ├── file-storage.ts         #    文件下载/存储
-│   │   ├── conversation-history.ts #    对话历史备份
-│   │   └── tools.ts                 #    工具定义
-│   │
-│   ├── 📂 agents/                   # 🟣 多 Agent 系统
-│   │   ├── index.ts                 #    Agent 注册中心
-│   │   ├── AgentRegistry.ts         #    Agent 注册表
-│   │   ├── AgentDispatcher.ts       #    任务分发器
-│   │   ├── ModeManager.ts           #    模式管理器
-│   │   ├── SharedContext.ts         #    共享上下文
-│   │   ├── SharedContextPersistence.ts  # 会话持久化
-│   │   ├── GLMCoordinatorAgent.ts   #    GLM-4.7 主协调器
-│   │   ├── CoordinatorAgent.ts      #    Claude 协调器
-│   │   ├── CodeAgent.ts             #    代码 Agent
-│   │   ├── BrowserAgent.ts          #    浏览器 Agent
-│   │   ├── ShellAgent.ts            #    Shell Agent
-│   │   ├── WebSearchAgent.ts        #    搜索 Agent
-│   │   ├── DataAnalysisAgent.ts     #    数据分析 Agent
-│   │   ├── VisionAgent.ts           #    视觉 Agent
-│   │   ├── CodeRefactorAgent.ts     #    重构 Agent
-│   │   ├── tools/                   #    Agent 工具分类
-│   │   ├── memory/                  #    分层记忆系统
-│   │   ├── learning/                #    学习模块
-│   │   ├── SkillInstaller.ts        #    技能安装器
-│   │   ├── SkillLoader.ts           #    技能加载器
-│   │   └── ZaiMcpClient.ts          #    MCP 客户端
-│   │
-│   ├── 📂 llm/                      # 🔷 LLM Provider 系统
-│   │   ├── index.ts                 #    LLM 接口
-│   │   ├── providers.ts             #    Provider 实现 (OpenAI/Anthropic/GLM)
-│   │   └── tool.ts                  #    工具定义
-│   │
-│   ├── 📂 terminal/                 # 🟠 终端监控
-│   │   ├── index.ts                 #    终端模块入口
-│   │   ├── AgentMonitor.ts          #    Agent 监控器
-│   │   └── DiffRenderer.ts          #    Diff 渲染器
-│   │
-│   ├── 📂 cli/                      # 🟡 CLI 监控
-│   │   └── monitor.ts               #    CLI 进程监控
-│   │
-│   ├── 📂 scheduler/                # 🟡 定时任务调度器
-│   │   ├── scheduler.ts             #    调度器核心
-│   │   ├── task-store.ts            #    任务存储
-│   │   ├── task-runner.ts           #    任务执行器
-│   │   └── types.ts                 #    类型定义
-│   │
-│   ├── 📂 config/                   # ⚙️ 配置管理
-│   │   ├── index.ts                 #    配置加载器
-│   │   ├── schema.ts                #    配置 Schema
-│   │   ├── validator.ts             #    配置验证器
-│   │   └── writer.ts                #    配置写入器
-│   │
-│   └── 📂 utils/                    # 🔧 工具函数
-│       └── logger.ts                #    结构化日志
-│
-├── 📂 public/dashboard/              # 🌐 Dashboard 前端
-│   ├── index.html                   #    主页面 (监控)
-│   ├── agents.html                  #    Agent 管理
-│   ├── config.html                  #    系统配置
-│   ├── logs.html                    #    日志查看
-│   └── skills.html                  #    技能管理
-│
-├── 📂 skills/                       # 📚 技能目录
-├── 📂 workspace/                     # 📁 Claude 工作目录
-├── 📂 uploads/                       # 📎 用户上传文件存储
-│
-├── start.bat                        # 🚀 启动脚本
-├── quick-start.bat                  # ⚡ 快速启动
-├── .env.example                     # 🔐 环境变量模板
-└── README.md                        # 📖 项目文档
-```
-
-### 端口说明
-
-| 端口 | 服务 | 说明 |
-|:----:|------|------|
-| 18789 | Gateway WebSocket | 内部消息总线，组件间通信 |
-| 8080 | Dashboard HTTP | Web 管理界面 |
-
----
-
-## 与其他平台的差异
-
-| 特性 | QQ-Claude-Proxy | 云端 AI 平台 |
-|------|----------------|-------------|
-| **执行环境** | 本地 Claude Code CLI | 云端服务器 |
-| **配置管理** | 沿用你自己的配置 | 平台预设配置 |
-| **自定义 Skills** | 支持所有本地 Skills | 受限或不可用 |
-| **MCP 插件** | 支持所有本地插件 | 受限或不可用 |
-| **代码安全** | 完全本地执行 | 需上传到云端 |
-| **使用成本** | 使用你自己的 API 配额 | 平台收费或受限 |
-| **网络要求** | 仅 QQ 消息需要网络 | 完全依赖网络 |
-
----
-
-## 安全注意事项
-
-1.  **不要泄露凭证** - AppSecret 需要妥善保管，不要提交到 Git
-2.  **设置用户白名单** - 限制谁可以使用你的机器人
-3.  **Claude CLI 认证** - Claude CLI 使用本地认证，无需在代码中存储 API Key
-4.  **定期审查日志** - 监控机器人的活动
-5.  **端口安全** - Gateway 默认只监听 127.0.0.1，不对外暴露
-
----
-
-## 常见问题
-
-### Q: Claude Code CLI 没有安装会怎样?
-
-A: 启动时会显示警告，但服务可以运行。当收到消息时会报错。
-
-### Q: 如何获取 QQ 用户的 OpenID?
-
-A: 用户首次发送消息后，可以在日志中看到其 OpenID。
-
-### Q: 支持群聊吗?
-
-A: 支持！机器人可以在私聊和群聊中使用。
-
-### Q: 如何查看实时日志?
-
-A: 服务运行时会输出结构化日志，包含任务进度和工具使用信息。
-
-### Q: 定时任务失败会重试吗?
-
-A: 周期任务默认会在失败后继续执行，可通过配置修改。
-
----
-
-## 开发命令
-
-```bash
-# 开发模式 (热重载)
-npm run dev
-
-# 编译
-npm run build
-
-# 生产运行
-npm start
-
-# 类型检查
-npm run typecheck
-
-# 测试
-npm test              # 运行所有测试
-npm run test:watch    # 监视模式
-npm run test:coverage # 覆盖率报告
+├── src/
+│   ├── agents/                 # 🤖 多 Agent 系统
+│   │   ├── memory/            # 🧠 记忆系统 (分层记忆 + 知识缓存)
+│   │   ├── learning/          # 📚 自主学习模块
+│   │   └── tools/             # 🔧 Agent 工具分类
+│   ├── gateway/              # 🔶 WebSocket 消息网关
+│   ├── channels/             # 🔵 QQ Bot Channel
+│   ├── llm/                  # 🔷 LLM Provider (OpenAI/Anthropic/GLM)
+│   ├── terminal/             # 🟠 终端监控与 Diff 渲染
+│   ├── scheduler/            # 🟡 定时任务调度器
+│   └── config/               # ⚙️ 配置管理
+├── public/dashboard/         # 🌐 Web Dashboard
+├── skills/                   # 📚 技能目录
+├── workspace/                # 📁 Claude 工作目录
+└── uploads/                  # 📎 用户上传文件
 ```
 
 ---
 
-## 更新日志
+## 🛡️ 安全注意事项
 
-### v1.2.0 (2026-02-23)
-
-#### 新增功能
-
-- **分层记忆系统** (`src/agents/memory/`)
-  - L0/L1/L2 三层记忆架构
-  - 跨 Agent 记忆共享
-  - 自动记忆清理
-
-- **技能管理系统**
-  - 通过 QQ 安装/卸载技能
-  - 支持 GitHub/GitLab URL 安装
-  - 技能元数据按需加载
-
-- **会话持久化** (`docs/session-persistence.md`)
-  - SessionManager 多会话管理
-  - 服务重启后自动恢复
-
-- **新增 Agents**
-  - `VisionAgent`: 图像理解
-  - `CodeRefactorAgent`: 代码重构
-
-- **MCP 客户端** (`ZaiMcpClient.ts`)
-
-#### 文档更新
-
-- 新增 [AGENTS.md](docs/AGENTS.md) - 多 Agent 系统完整文档
-- 新增 [SKILLS.md](docs/SKILLS.md) - 技能管理指南
-- 新增 [session-persistence.md](docs/session-persistence.md) - 会话持久化说明
-
-#### 项目清理
-
-- 删除测试脚本和临时文件
-- 清理运行时日志和测试数据
-
-### v1.1.0 (2026-02-22)
-
-#### 新增功能
-
-- **Agent 协作系统** (`src/agents/`)
-  - `CoordinatorAgent`: 智能任务协调器，自动分配子任务
-  - `GLMCoordinatorAgent`: 基于 GLM-4.7 的高性能协调器
-  - `CodeAgent`: 代码分析和生成 Agent
-  - `BrowserAgent`: 浏览器自动化 Agent
-  - `ShellAgent`: 命令行执行 Agent
-  - `WebSearchAgent`: 网页搜索 Agent
-  - `DataAnalysisAgent`: 数据分析 Agent
-
-- **定时任务增强**
-  - 修复 CLI 非交互模式执行问题 (`-p` 参数)
-  - 修复环境变量污染 (CLAUDECODE/VSCODE_*)
-  - 修复间隔计算错误
-  - 优化 QQ 通知目标验证
-  - 周期间隔人性化显示
-
-#### Bug 修复
-
-- 修复 CLI 嵌套会话检测导致的任务失败
-- 修复周期任务执行后无 QQ 通知的问题
-- 修复 Dashboard 缓存导致的配置更新不生效
-- 修复 TaskStore 不支持热重载的问题
-
-#### 配置更新
-
-- 更新 `.gitignore` 排除敏感文件和测试数据
-- 更新 `.env.example` 添加 Agent 系统配置项
-
-### v1.0.0 (2026-02-20)
-
-#### 初始版本
-
-- QQ Bot 集成
-- Web Dashboard
-- 定时任务调度
-- 实时进度跟踪
-- 文件双向传输
+1. 🔐 **保护 AppSecret** - 不要提交到 Git，使用 `.env` 文件
+2. 👥 **设置用户白名单** - 限制谁可以使用你的机器人
+3. 📍 **端口安全** - Gateway 默认只监听 `127.0.0.1`
+4. 📝 **定期审查日志** - 监控机器人的活动
 
 ---
 
-## 许可证
+## 📖 常见问题
 
-MIT License
+### Q: 和云端 AI 平台有什么区别？
+**A:** 核心区别是**执行环境**。本项目运行的是**你本地安装的 Claude Code CLI**，使用你自己的配置、Skills 和 MCP 插件，代码完全本地执行，不需要上传到云端。
+
+### Q: 支持群聊吗？
+**A:** 支持！机器人可以在私聊和群聊中使用，每个群组有独立的会话和记忆。
+
+### Q: 搜索结果会缓存吗？
+**A:** 是的！智能缓存系统会根据查询类型自动设置有效期，避免重复搜索同样的问题。
+
+### Q: 服务重启后会丢失对话历史吗？
+**A:** 不会！会话持久化系统会自动保存和恢复对话历史。
 
 ---
 
-## 相关链接
+## 🔗 相关链接
 
-*   [Claude Code CLI 官方文档](https://docs.anthropic.com/en/docs/claude-code)
-*   [QQ 开放平台](https://q.qq.com/)
-*   [GitHub 仓库](https://github.com/VAAN0524/QQ-Claude-Proxy)
+- [Claude Code CLI 官方文档](https://docs.anthropic.com/en/docs/claude-code)
+- [QQ 开放平台](https://q.qq.com/)
+- [GitHub 仓库](https://github.com/VAAN0524/QQ-Claude-Proxy)
+- [问题反馈](https://github.com/VAAN0524/QQ-Claude-Proxy/issues)
 
 ---
 
 <div align="center">
+
+## ⭐ Star this project if you find it helpful!
 
 **Made with [Heart] by VAAN**
 
