@@ -4,8 +4,6 @@
  * 简化架构（工具层模式）：
  * - Simple 模式：使用 SimpleCoordinatorAgent（单 Agent + 工具层）
  * - CLI 模式：直接调用本地 Claude Code CLI
- *
- * 专业 Agents 已移动到 legacy/ 目录，功能已整合到工具层
  */
 
 // 基础接口
@@ -68,28 +66,13 @@ export type { SimpleCoordinatorConfig } from './SimpleCoordinatorAgent.js';
 export { SkillManagerAgent } from './SkillManagerAgent.js';
 
 // ============================================
-// Legacy Agents（已整合到工具层）
+// 注意：专业 Agents 已整合到工具层
 // ============================================
-// 以下 Agents 已被工具层替代，保留仅为向后兼容
+// - 搜索功能 → tools-layer/search-tools.ts
+// - Shell 功能 → tools-layer/shell-tools.ts
+// - Web 功能 → tools-layer/web-tools.ts
 //
-// @deprecated 使用 tools-layer/search.ts 中的 smartSearch 代替
-export { WebSearchAgent } from './legacy/WebSearchAgent.js';
-//
-// @deprecated 使用 tools-layer/web-tools.ts 中的 fetchWebContent 代替
-export { BrowserAgent } from './legacy/BrowserAgent.js';
-//
-// @deprecated 使用 tools-layer/shell-tools.ts 中的 executeCommand 代替
-export { ShellAgent } from './legacy/ShellAgent.js';
-//
-// @deprecated 功能已整合到 SimpleCoordinatorAgent
-export { CodeAgent } from './legacy/CodeAgent.js';
-export { CodeRefactorAgent } from './legacy/CodeRefactorAgent.js';
-export { DataAnalysisAgent } from './legacy/DataAnalysisAgent.js';
-export { VisionAgent } from './legacy/VisionAgent.js';
-//
-// @deprecated 使用 tools-layer/search.ts 中的 tavilySearch 代替
-export { TavilySearchAgent } from './legacy/TavilySearchAgent.js';
-export { DuckSearchAgent } from './legacy/DuckSearchAgent.js';
+// 如果需要复杂的多 Agent 协作，请使用 CLI 模式调用本地 Claude Code CLI
 
 // 工具定义（避免重复导出）
 export * from './tools/agent-tools.js';

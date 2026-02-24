@@ -25,11 +25,7 @@ import { createHash } from 'crypto';
 import {
   AgentRegistry,
   AgentDispatcher,
-  CodeAgent,
-  BrowserAgent,
-  ShellAgent,
-  SimpleCoordinatorAgent, // Simple 模式的万金油 Agent
-  CodeRefactorAgent,
+  SimpleCoordinatorAgent, // Simple 模式的核心 Agent
   SkillManagerAgent,
   SharedContext,
   SharedContextPersistence,
@@ -574,120 +570,11 @@ async function main(): Promise<void> {
     glmBaseUrl: process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
   };
 
-  // Code Agent（如果有 GLM API Key，可以不依赖 Anthropic）
-  if (config.agents.code.enabled && (apiKeys.anthropic || apiKeys.glm)) {
-    try {
-      const codeAgent = new CodeAgent({
-        apiKey: apiKeys.anthropic,
-        glmApiKey: !apiKeys.anthropic ? apiKeys.glm : undefined,
-        glmBaseUrl: !apiKeys.anthropic ? apiKeys.glmBaseUrl : undefined,
-        model: (config.agents.code.options as any)?.model || 'claude-3-5-sonnet-20241022',
-        maxTokens: (config.agents.code.options as any)?.maxTokens || 4096,
-      });
-      await codeAgent.initialize?.();
-      agentRegistry.register(codeAgent);
-      logger.info('[Agent 系统] Code Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Code Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Browser Agent
-  if (config.agents.browser.enabled) {
-    try {
-      const browserAgent = new BrowserAgent({
-        headless: (config.agents.browser.options as any)?.headless ?? true,
-        timeout: (config.agents.browser.options as any)?.timeout ?? 30000,
-      });
-      await browserAgent.initialize?.();
-      agentRegistry.register(browserAgent);
-      logger.info('[Agent 系统] Browser Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Browser Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Shell Agent
-  if (config.agents.shell.enabled) {
-    try {
-      const shellAgent = new ShellAgent({
-        allowedCommands: (config.agents.shell.options as any)?.allowedCommands || [],
-        blockedCommands: (config.agents.shell.options as any)?.blockedCommands || [],
-        cwd: workspacePath,
-        timeout: config.agents.shell.timeout,
-      });
-      await shellAgent.initialize?.();
-      agentRegistry.register(shellAgent);
-      logger.info('[Agent 系统] Shell Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Shell Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Web Search Agent
-  if (config.agents.websearch?.enabled) {
-    try {
-      const { WebSearchAgent } = await import('./agents/legacy/WebSearchAgent.js');
-      const webSearchAgent = new WebSearchAgent({
-        maxResults: (config.agents.websearch.options as any)?.maxResults || 10,
-        timeout: config.agents.websearch.timeout,
-      });
-      await webSearchAgent.initialize?.();
-      agentRegistry.register(webSearchAgent);
-      logger.info('[Agent 系统] Web Search Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Web Search Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Data Analysis Agent
-  if (config.agents.data?.enabled) {
-    try {
-      const { DataAnalysisAgent } = await import('./agents/legacy/DataAnalysisAgent.js');
-      const dataAnalysisAgent = new DataAnalysisAgent({
-        supportedFileTypes: (config.agents.data.options as any)?.supportedFileTypes || ['.csv', '.json', '.txt'],
-        maxFileSize: (config.agents.data.options as any)?.maxFileSize || 10,
-      });
-      await dataAnalysisAgent.initialize?.();
-      agentRegistry.register(dataAnalysisAgent);
-      logger.info('[Agent 系统] Data Analysis Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Data Analysis Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Vision Agent (图像理解) - 使用官方 MCP Server
-  if (config.agents.vision?.enabled ?? true) {
-    try {
-      const { VisionAgent } = await import('./agents/legacy/VisionAgent.js');
-      const visionAgent = new VisionAgent({
-        apiKey: apiKeys.glm,
-        mode: 'ZHIPU', // 或 'ZAI'
-        autoConnect: true,
-      });
-      await visionAgent.initialize();
-      agentRegistry.register(visionAgent);
-      logger.info('[Agent 系统] Vision Agent 已启用 (官方 MCP Server)');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Vision Agent 初始化失败: ${error}`);
-    }
-  }
-
-  // Code Refactor Agent (代码重构专家)
-  if (config.agents.refactor?.enabled) {
-    try {
-      const refactorAgent = new CodeRefactorAgent({
-        autoApply: (config.agents.refactor.options as any)?.autoApply ?? false,
-        backup: (config.agents.refactor.options as any)?.backup ?? true,
-        maxFileSize: (config.agents.refactor.options as any)?.maxFileSize ?? 300,
-      });
-      // CodeRefactorAgent 没有 initialize 方法，直接注册
-      agentRegistry.register(refactorAgent);
-      logger.info('[Agent 系统] Code Refactor Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Code Refactor Agent 初始化失败: ${error}`);
-    }
-  }
+  // ============================================
+  // 注意：专业 Agents 功能已整合到 SimpleCoordinatorAgent 的工具层
+  // - Code, Browser, Shell, Search 等功能通过工具调用实现
+  // - 如需多 Agent 协作，请使用 CLI 模式
+  // ============================================
 
   // Skill Manager Agent (技能管理专家) - 无需配置，默认启用
   try {
@@ -697,19 +584,6 @@ async function main(): Promise<void> {
     logger.info('[Agent 系统] Skill Manager Agent 已启用');
   } catch (error) {
     logger.warn(`[Agent 系统] Skill Manager Agent 初始化失败: ${error}`);
-  }
-
-  // Tavily Search Agent (实时网络搜索) - 需要 TAVILY_API_KEY
-  if (process.env.TAVILY_API_KEY) {
-    try {
-      const { TavilySearchAgent } = await import('./agents/legacy/TavilySearchAgent.js');
-      const tavilySearchAgent = new TavilySearchAgent();
-      await tavilySearchAgent.initialize();
-      agentRegistry.register(tavilySearchAgent);
-      logger.info('[Agent 系统] Tavily Search Agent 已启用');
-    } catch (error) {
-      logger.warn(`[Agent 系统] Tavily Search Agent 初始化失败: ${error}`);
-    }
   }
 
   // ========== 会话持久化系统 ==========
