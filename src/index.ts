@@ -65,25 +65,32 @@ async function selfRestart(): Promise<void> {
       // 正确的 Windows start 命令语法：
       // start "窗口标题" cmd /c 命令
       // 这会打开一个新窗口执行命令
-      logger.info('[重启] 启动新窗口...');
+      logger.info('[重启] 启动新进程...');
 
-      const { execSync } = await import('child_process');
+      const { spawn } = await import('child_process');
 
-      try {
-        // 使用 start 命令打开新窗口运行 Start.bat
-        // 新窗口会独立运行，start 命令立即返回
-        execSync('start cmd /c Start.bat', {
-          cwd: projectDir,
-          stdio: 'inherit',
-        });
-        logger.info('[重启] 新窗口已启动');
-      } catch (e) {
-        logger.info('[重启] 启动命令执行完成');
-      }
+      // 使用 spawn 直接启动新进程，不打开新窗口
+      // 这样可以更好地控制进程和错误处理
+      const child = spawn('npm', ['run', 'dev'], {
+        cwd: projectDir,
+        stdio: 'ignore',  // 不继承 stdio，避免输出混乱
+        detached: true,    // 独立进程组
+        shell: true,       // 使用 shell 以支持 npm 命令
+        env: { ...process.env },
+      });
 
-      // 退出当前窗口
-      logger.info('[重启] 当前窗口关闭');
-      process.exit(0);
+      child.once('spawn', () => {
+        logger.info(`[重启] 新进程已启动 (PID: ${child.pid})`);
+        // unref() 让父进程不等待子进程
+        child.unref();
+        // 退出当前进程
+        process.exit(0);
+      });
+
+      child.once('error', (err) => {
+        logger.error(`[重启] 启动失败: ${err.message}`);
+        process.exit(1);
+      });
 
     } else {
       // Unix/Linux/macOS: 使用 stdio: 'inherit' 实现无缝重启

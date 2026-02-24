@@ -1,6 +1,7 @@
 import pino from 'pino';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { createWriteStream } from 'fs';
 
 // 检测是否为 Windows 环境
 const isWindows = process.platform === 'win32';
@@ -9,42 +10,51 @@ const isWindows = process.platform === 'win32';
 const logsDir = path.join(process.cwd(), 'logs');
 fs.mkdir(logsDir, { recursive: true }).catch(() => {});
 
-// Windows 下使用文件+控制台双输出，避免编码问题
-export const logger = pino({
-  level: 'info',
-  // Windows 下同时输出到文件和控制台
-  ...(isWindows ? {
-    transport: {
-      targets: [
-        {
-          target: 'pino/file',
-          options: {
-            destination: path.join(logsDir, 'app.log'),
-            mkdir: true,
-          },
+// Windows 下简单的日志配置，避免 pino-pretty 编码问题
+export const logger = isWindows
+  ? pino({
+      level: 'info',
+      // Windows: 文件输出 + 简单控制台输出
+      transport: {
+        target: 'pino/file',
+        options: {
+          destination: path.join(logsDir, 'app.log'),
+          mkdir: true,
         },
-        {
-          target: 'pino-pretty',
-          options: {
-            colorize: false,
-            translateTime: 'SYS:standard',
-            ignore: 'pid,hostname',
-            singleLine: true,
-          },
-        },
-      ],
-    },
-  } : {
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-        singleLine: true,
+      },
+      timestamp: pino.stdTimeFunctions.isoTime,
+    })
+  : pino({
+      level: 'info',
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+          singleLine: true,
+        }
+      },
+      timestamp: pino.stdTimeFunctions.isoTime,
+    });
+
+// Windows 下额外输出到控制台（简单的 console.log，避免编码问题）
+if (isWindows) {
+  const originalInfo = logger.info.bind(logger);
+  logger.info = function (...args: any[]) {
+    // 输出到日志文件
+    originalInfo(...args);
+    // 同时输出到控制台（使用 console.log 避免编码问题）
+    const msg = args.map((arg: any) => {
+      if (typeof arg === 'string') return arg;
+      if (arg && typeof arg === 'object') {
+        const time = arg.time || new Date().toISOString();
+        const level = arg.level || 'INFO';
+        const msg = arg.msg || JSON.stringify(arg);
+        return `[${time}] ${level}: ${msg}`;
       }
-    }
-  }),
-  // 注意：使用 targets 时不允许自定义 formatters
-  timestamp: pino.stdTimeFunctions.isoTime,
-});
+      return String(arg);
+    }).join(' ');
+    console.log(msg);
+  } as any;
+}
