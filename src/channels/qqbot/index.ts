@@ -358,6 +358,58 @@ export class QQBotChannel extends EventEmitter {
       logger.info(`[QQChannel.sendFile] File sent successfully to ${isGroup ? 'group' : 'user'} ${userId}: ${path.basename(filePath)}`);
     } catch (error) {
       logger.error(`[QQChannel.sendFile] File send failed: ${error}`);
+
+      // 备用方案：如果是文本文件，发送文件内容
+      const textFileExts = ['txt', 'md', 'json', 'xml', 'csv', 'log', 'yaml', 'yml'];
+      const ext = filePath.split('.').pop()?.toLowerCase() || '';
+
+      if (textFileExts.includes(ext) && fs.existsSync(filePath)) {
+        logger.info(`[QQChannel.sendFile] 尝试备用方案：发送文本文件内容`);
+
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const maxSize = 3000; // QQ 消息长度限制
+
+          if (content.length <= maxSize) {
+            // 直接发送文件内容
+            const message = `📄 ${path.basename(filePath)}:\n\n${content}`;
+
+            if (isGroup) {
+              await this.api.sendGroupMessage(userId, message);
+            } else {
+              await this.api.sendC2CMessage(userId, message);
+            }
+
+            logger.info(`[QQChannel.sendFile] 备用方案成功：已发送文件内容`);
+            return;
+          } else {
+            // 文件太大，分段发送
+            const chunks = content.match(/[\s\S]{1,2000}/g) || [];
+            const totalChunks = chunks.length;
+
+            for (let i = 0; i < chunks.length; i++) {
+              const chunkMessage = `📄 ${path.basename(filePath)} (${i + 1}/${totalChunks}):\n\n${chunks[i]}`;
+
+              if (isGroup) {
+                await this.api.sendGroupMessage(userId, chunkMessage);
+              } else {
+                await this.api.sendC2CMessage(userId, chunkMessage);
+              }
+
+              // 添加延迟，避免频率限制
+              if (i < chunks.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+
+            logger.info(`[QQChannel.sendFile] 备用方案成功：已分段发送文件内容 (${totalChunks} 段)`);
+            return;
+          }
+        } catch (fallbackError) {
+          logger.error(`[QQChannel.sendFile] 备用方案也失败: ${fallbackError}`);
+        }
+      }
+
       throw error;
     }
   }
