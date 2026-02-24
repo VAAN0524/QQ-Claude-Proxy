@@ -12,7 +12,7 @@
  * - 视频场景解析
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import type {
@@ -21,9 +21,9 @@ import type {
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
-import { ZaiMcpClient } from './ZaiMcpClient.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
+import { ZaiMcpClient } from '../ZaiMcpClient.js';
 
 /**
  * Vision Agent 配置选项

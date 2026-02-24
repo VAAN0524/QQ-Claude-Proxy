@@ -4,15 +4,15 @@
  * 实时网络搜索，支持代理和备用端点解决网络问题
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 interface TavilySearchOptions {
   query: string;

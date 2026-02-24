@@ -6,15 +6,15 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 const execAsync = promisify(exec);
 

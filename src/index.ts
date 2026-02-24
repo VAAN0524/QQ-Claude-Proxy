@@ -39,6 +39,7 @@ import {
   type AgentContext,
   type AgentResponse,
 } from './agents/index.js';
+import { HierarchicalMemoryService } from './agents/memory/HierarchicalMemoryService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -537,6 +538,28 @@ async function main(): Promise<void> {
     maxAge: 60 * 60 * 1000, // 1 小时
   });
 
+  // 初始化分层记忆服务
+  logger.info('初始化分层记忆服务...');
+  const hierarchicalMemoryService = new HierarchicalMemoryService({
+    storagePath: path.join(process.cwd(), 'data', 'hierarchical-memory'),
+    agentConfigs: [
+      {
+        agentId: 'simple-coordinator',
+        memoryPath: path.join(process.cwd(), 'data', 'memory', 'simple-coordinator'),
+        enableHierarchical: true,
+      }
+    ],
+    sharedConfig: {
+      enabled: true,
+      sharedPath: path.join(process.cwd(), 'data', 'shared-memory'),
+      participatingAgents: ['simple-coordinator'],
+      syncInterval: 5 * 60 * 1000, // 5 分钟同步
+    },
+    autoCleanup: true,
+    retentionTime: 90 * 24 * 60 * 60 * 1000, // 90 天
+  });
+  await hierarchicalMemoryService.initialize();
+
   // 初始化 Agent Registry
   logger.info('初始化 Agent 系统...');
   const agentRegistry = new AgentRegistry();
@@ -604,7 +627,7 @@ async function main(): Promise<void> {
   // Web Search Agent
   if (config.agents.websearch?.enabled) {
     try {
-      const { WebSearchAgent } = await import('./agents/WebSearchAgent.js');
+      const { WebSearchAgent } = await import('./agents/legacy/WebSearchAgent.js');
       const webSearchAgent = new WebSearchAgent({
         maxResults: (config.agents.websearch.options as any)?.maxResults || 10,
         timeout: config.agents.websearch.timeout,
@@ -620,7 +643,7 @@ async function main(): Promise<void> {
   // Data Analysis Agent
   if (config.agents.data?.enabled) {
     try {
-      const { DataAnalysisAgent } = await import('./agents/DataAnalysisAgent.js');
+      const { DataAnalysisAgent } = await import('./agents/legacy/DataAnalysisAgent.js');
       const dataAnalysisAgent = new DataAnalysisAgent({
         supportedFileTypes: (config.agents.data.options as any)?.supportedFileTypes || ['.csv', '.json', '.txt'],
         maxFileSize: (config.agents.data.options as any)?.maxFileSize || 10,
@@ -636,7 +659,7 @@ async function main(): Promise<void> {
   // Vision Agent (图像理解) - 使用官方 MCP Server
   if (config.agents.vision?.enabled ?? true) {
     try {
-      const { VisionAgent } = await import('./agents/VisionAgent.js');
+      const { VisionAgent } = await import('./agents/legacy/VisionAgent.js');
       const visionAgent = new VisionAgent({
         apiKey: apiKeys.glm,
         mode: 'ZHIPU', // 或 'ZAI'
@@ -679,7 +702,7 @@ async function main(): Promise<void> {
   // Tavily Search Agent (实时网络搜索) - 需要 TAVILY_API_KEY
   if (process.env.TAVILY_API_KEY) {
     try {
-      const { TavilySearchAgent } = await import('./agents/TavilySearchAgent.js');
+      const { TavilySearchAgent } = await import('./agents/legacy/TavilySearchAgent.js');
       const tavilySearchAgent = new TavilySearchAgent();
       await tavilySearchAgent.initialize();
       agentRegistry.register(tavilySearchAgent);
@@ -729,7 +752,7 @@ async function main(): Promise<void> {
   // 初始化 SimpleCoordinatorAgent (Simple 模式的万金油 Agent)
   try {
     logger.info('[Agent 系统] 尝试初始化 SimpleCoordinatorAgent...');
-    const skillsPath = path.join(process.cwd(), 'skills/simple');
+    const skillsPath = path.join(process.cwd(), 'skills');
     const memoryPath = path.join(process.cwd(), 'memory/simple');
     const rulesPath = path.join(process.cwd(), 'rules/simple');
 
@@ -743,6 +766,7 @@ async function main(): Promise<void> {
       memoryPath,
       rulesPath,
       sharedContext, // 传入共享上下文
+      hierarchicalMemory: hierarchicalMemoryService, // 传入分层记忆服务
     });
 
     await simpleCoordinatorAgent.initialize();

@@ -1,89 +1,177 @@
 /**
  * Agent Configuration Page Application
- * Handles Agent configuration management
+ * Handles Agent configuration management with Tool Layer support
  */
 
 // API base URL
 const API_BASE = '/api';
 
-// Agent definitions
+// Agent definitions - 新架构
 const AGENT_DEFINITIONS = {
+  // 主要协调器 (新架构)
+  'simple-coordinator': {
+    id: 'simple-coordinator',
+    name: 'Simple Coordinator',
+    description: '单 Agent + 工具层模式，技能驱动的智能助手。支持动态技能加载和工具层调用。',
+    icon: 'coordinator',
+    capabilities: ['General', 'Complex', 'Tools', 'Skills'],
+    defaultPriority: 10,
+    defaultTimeout: 60000,
+    defaultEnabled: true,
+    color: '#9b59b6',
+    category: 'core',
+    isNew: true
+  },
+
+  // Legacy Agents (标记为废弃)
   code: {
     id: 'code',
     name: 'Code Agent',
-    description: '代码编写、分析和重构专家，支持多种编程语言',
+    description: '代码编写、分析和重构专家 [已废弃 - 功能已集成到工具层]',
     icon: 'code',
     capabilities: ['Code', 'Analyze', 'File'],
     defaultPriority: 10,
     defaultTimeout: 60000,
-    defaultEnabled: true,
-    color: '#007acc'
+    defaultEnabled: false,
+    color: '#007acc',
+    category: 'legacy',
+    deprecated: true
   },
   browser: {
     id: 'browser',
     name: 'Browser Agent',
-    description: '网页自动化操作专家，支持浏览器控制和页面交互',
+    description: '网页自动化操作专家 [已废弃 - 功能已集成到工具层]',
     icon: 'browser',
     capabilities: ['Web', 'File'],
     defaultPriority: 8,
     defaultTimeout: 120000,
-    defaultEnabled: true,
-    color: '#4ec9b0'
+    defaultEnabled: false,
+    color: '#4ec9b0',
+    category: 'legacy',
+    deprecated: true
   },
   shell: {
     id: 'shell',
     name: 'Shell Agent',
-    description: '命令执行专家，支持 Shell 命令和系统操作',
+    description: '命令执行专家 [已废弃 - 功能已集成到工具层]',
     icon: 'shell',
     capabilities: ['Shell', 'File'],
     defaultPriority: 7,
     defaultTimeout: 30000,
-    defaultEnabled: true,
-    color: '#f14c4c'
+    defaultEnabled: false,
+    color: '#f14c4c',
+    category: 'legacy',
+    deprecated: true
   },
   websearch: {
     id: 'websearch',
     name: 'Web Search Agent',
-    description: '网络搜索专家，快速获取最新信息和数据',
+    description: '网络搜索专家 [已废弃 - 功能已集成到工具层]',
     icon: 'search',
     capabilities: ['General', 'Complex'],
     defaultPriority: 9,
     defaultTimeout: 60000,
-    defaultEnabled: true,
-    color: '#75beff'
+    defaultEnabled: false,
+    color: '#75beff',
+    category: 'legacy',
+    deprecated: true
   },
   data: {
     id: 'data',
     name: 'Data Analysis Agent',
-    description: '数据分析专家，支持 CSV、JSON 等格式数据处理',
+    description: '数据分析专家 [已废弃 - 功能已集成到工具层]',
     icon: 'data',
     capabilities: ['Analyze', 'File'],
     defaultPriority: 6,
     defaultTimeout: 30000,
-    defaultEnabled: true,
-    color: '#dcdcaa'
+    defaultEnabled: false,
+    color: '#dcdcaa',
+    category: 'legacy',
+    deprecated: true
   },
   vision: {
     id: 'vision',
     name: 'Vision Agent',
-    description: '图像分析专家，支持图片理解和视觉内容处理',
+    description: '图像分析专家 [已废弃 - 功能已集成到工具层]',
     icon: 'vision',
     capabilities: ['Analyze', 'General'],
     defaultPriority: 5,
     defaultTimeout: 60000,
-    defaultEnabled: true,
-    color: '#c586c0'
+    defaultEnabled: false,
+    color: '#c586c0',
+    category: 'legacy',
+    deprecated: true
   },
   claude: {
     id: 'claude',
     name: 'Claude Agent',
-    description: '通用 Claude Agent，处理常规对话和任务',
+    description: '通用 Claude Agent',
     icon: 'claude',
     capabilities: ['General', 'Complex'],
     defaultPriority: 5,
     defaultTimeout: 300000,
-    defaultEnabled: true,
-    color: '#ce9178'
+    defaultEnabled: false,
+    color: '#ce9178',
+    category: 'legacy',
+    deprecated: true
+  }
+};
+
+// 工具层定义
+const TOOL_DEFINITIONS = {
+  'smart_search': {
+    id: 'smart_search',
+    name: '智能搜索',
+    description: '自动选择 DuckDuckGo 或 Tavily 进行网络搜索',
+    category: 'search',
+    icon: 'search'
+  },
+  'duckduckgo_search': {
+    id: 'duckduckgo_search',
+    name: 'DuckDuckGo 搜索',
+    description: '使用 DuckDuckGo 进行网络搜索',
+    category: 'search',
+    icon: 'search'
+  },
+  'tavily_search': {
+    id: 'tavily_search',
+    name: 'Tavily 搜索',
+    description: '使用 Tavily API 进行深度搜索',
+    category: 'search',
+    icon: 'search',
+    requiresApiKey: true
+  },
+  'fetch_web': {
+    id: 'fetch_web',
+    name: '网页内容提取',
+    description: '获取并提取网页内容',
+    category: 'web',
+    icon: 'browser'
+  },
+  'execute_command': {
+    id: 'execute_command',
+    name: '命令执行',
+    description: '执行系统命令（带安全检查）',
+    category: 'shell',
+    icon: 'shell'
+  }
+};
+
+// 运行模式定义
+const MODE_DEFINITIONS = {
+  'cli': {
+    id: 'cli',
+    name: 'CLI 模式',
+    description: '使用 Claude Code CLI 处理复杂任务',
+    icon: 'terminal',
+    features: ['完整 Claude Code 功能', 'IDE 集成', '代码审查', '高级调试']
+  },
+  'simple': {
+    id: 'simple',
+    name: 'Simple 模式',
+    description: '单 Agent + 工具层模式，快速响应',
+    icon: 'coordinator',
+    features: ['技能驱动', '工具层调用', '轻量快速', '统一管理']
   }
 };
 
@@ -91,7 +179,9 @@ const AGENT_DEFINITIONS = {
 const state = {
   config: null,
   agents: {},
+  tools: {},
   stats: {},
+  currentMode: 'simple', // cli or simple
   currentAgent: null,
 };
 
@@ -136,7 +226,6 @@ async function apiRequest(endpoint, options = {}) {
     });
 
     if (!response.ok) {
-      // 为 404 错误提供更友好的消息
       if (response.status === 404 && endpoint.includes('/agents/')) {
         throw new Error('Agent 未在后端初始化。请检查配置文件或重启服务。');
       }
@@ -155,6 +244,25 @@ async function fetchAgents() {
   return data.agents || {};
 }
 
+async function fetchTools() {
+  try {
+    const data = await apiRequest('/tools');
+    return data.tools || {};
+  } catch (error) {
+    console.log('Tools API not available, using default definitions');
+    return TOOL_DEFINITIONS;
+  }
+}
+
+async function fetchMode() {
+  try {
+    const data = await apiRequest('/mode');
+    return data.mode || 'simple';
+  } catch (error) {
+    return 'simple'; // 默认模式
+  }
+}
+
 async function fetchAgentStats(agentId) {
   const data = await apiRequest(`/agents/stats?id=${encodeURIComponent(agentId)}`);
   return data.stats || {};
@@ -166,6 +274,18 @@ async function updateAgentConfig(agentId, config) {
     body: JSON.stringify({ agentId, config }),
   });
   return data;
+}
+
+async function updateMode(mode) {
+  try {
+    const data = await apiRequest('/mode', {
+      method: 'PUT',
+      body: JSON.stringify({ mode }),
+    });
+    return data;
+  } catch (error) {
+    throw new Error('模式切换失败: ' + error.message);
+  }
 }
 
 async function updateSystemConfig(config) {
@@ -183,107 +303,151 @@ function renderAgentsGrid() {
   const container = document.getElementById('agentsGrid');
   if (!container) return;
 
-  const agentDefs = Object.values(AGENT_DEFINITIONS);
+  // 按 category 分组
+  const coreAgents = Object.values(AGENT_DEFINITIONS).filter(a => a.category === 'core');
+  const legacyAgents = Object.values(AGENT_DEFINITIONS).filter(a => a.category === 'legacy');
 
-  container.innerHTML = agentDefs.map(agentDef => {
-    const agentState = state.agents[agentDef.id] || {};
-    const stats = state.stats[agentDef.id] || {};
-
-    // 使用默认值处理未加载的 agent
-    const enabled = agentState.enabled !== undefined ? agentState.enabled : agentDef.defaultEnabled;
-    const priority = agentState.priority !== undefined ? agentState.priority : agentDef.defaultPriority;
-    const timeout = agentState.timeout !== undefined ? agentState.timeout : agentDef.defaultTimeout;
-
-    return `
-      <div class="agent-card ${!enabled ? 'disabled' : ''}" data-agent-id="${agentDef.id}">
-        <div class="agent-card-header">
-          <div class="agent-card-title">
-            <div class="agent-card-icon" style="color: ${agentDef.color}">
-              ${getAgentIcon(agentDef.icon)}
-            </div>
-            <div>
-              <div class="agent-card-name">${escapeHtml(agentDef.name)}</div>
-              <span class="agent-card-status ${enabled ? 'enabled' : 'disabled'}">
-                ${enabled ? '已启用' : '已禁用'}
-              </span>
-            </div>
-          </div>
-          <label class="switch">
-            <input type="checkbox" class="agent-toggle" data-agent-id="${agentDef.id}"
-                   ${enabled ? 'checked' : ''}>
-            <span class="switch-slider"></span>
-          </label>
-        </div>
-        <div class="agent-card-body">
-          <p class="agent-card-description">${escapeHtml(agentDef.description)}</p>
-
-          <div class="agent-config-field">
-            <div class="agent-config-label">
-              <span>优先级</span>
-              <span class="agent-config-value">${priority}</span>
-            </div>
-            <input type="range" class="range-slider priority-slider"
-                   data-agent-id="${agentDef.id}"
-                   min="1" max="100" value="${priority}">
-          </div>
-
-          <div class="agent-config-field">
-            <div class="agent-config-label">
-              <span>超时时间</span>
-              <span class="agent-config-value">${formatDuration(timeout)}</span>
-            </div>
-            <input type="range" class="range-slider timeout-slider"
-                   data-agent-id="${agentDef.id}"
-                   min="10000" max="600000" step="10000"
-                   value="${timeout}">
-          </div>
-
-          <div class="agent-capabilities">
-            ${agentDef.capabilities.map(cap =>
-              `<span class="capability-badge">${cap}</span>`
-            ).join('')}
-          </div>
-        </div>
-        <div class="agent-card-footer">
-          <div class="agent-stats">
-            ${stats.totalExecutions !== undefined ? `
-              <div class="agent-stat">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-                </svg>
-                <span>执行: ${formatNumber(stats.totalExecutions)}</span>
-              </div>
-            ` : ''}
-            ${stats.successRate !== undefined ? `
-              <div class="agent-stat">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-                <span>成功率: ${Math.round(stats.successRate * 100)}%</span>
-              </div>
-            ` : ''}
-          </div>
-          <div class="agent-card-actions">
-            <button class="btn-icon-small" data-action="detail" data-agent-id="${agentDef.id}" title="详情">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="16" x2="12" y2="12"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </button>
-          </div>
+  container.innerHTML = `
+    <!-- Core Agents Section -->
+    ${coreAgents.length > 0 ? `
+      <div class="agents-section">
+        <h3 class="section-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          核心 Agent
+        </h3>
+        <div class="agents-grid-inner">
+          ${coreAgents.map(agentDef => renderAgentCard(agentDef)).join('')}
         </div>
       </div>
-    `;
-  }).join('');
+    ` : ''}
+
+    <!-- Legacy Agents Section -->
+    ${legacyAgents.length > 0 ? `
+      <div class="agents-section">
+        <h3 class="section-title legacy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Legacy Agents <span class="legacy-badge">已废弃</span>
+        </h3>
+        <div class="agents-grid-inner">
+          ${legacyAgents.map(agentDef => renderAgentCard(agentDef)).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
 
   // Attach event listeners
   attachAgentCardListeners();
 }
 
+function renderAgentCard(agentDef) {
+  const agentState = state.agents[agentDef.id] || {};
+  const stats = state.stats[agentDef.id] || {};
+
+  const enabled = agentState.enabled !== undefined ? agentState.enabled : agentDef.defaultEnabled;
+  const priority = agentState.priority !== undefined ? agentState.priority : agentDef.defaultPriority;
+  const timeout = agentState.timeout !== undefined ? agentState.timeout : agentDef.defaultTimeout;
+
+  return `
+    <div class="agent-card ${!enabled ? 'disabled' : ''} ${agentDef.deprecated ? 'deprecated' : ''} ${agentDef.isNew ? 'new' : ''}" data-agent-id="${agentDef.id}">
+      ${agentDef.deprecated ? '<div class="deprecated-ribbon">已废弃</div>' : ''}
+      ${agentDef.isNew ? '<div class="new-ribbon">新</div>' : ''}
+
+      <div class="agent-card-header">
+        <div class="agent-card-title">
+          <div class="agent-card-icon" style="color: ${agentDef.color}">
+            ${getAgentIcon(agentDef.icon)}
+          </div>
+          <div>
+            <div class="agent-card-name">${escapeHtml(agentDef.name)}</div>
+            <span class="agent-card-status ${enabled ? 'enabled' : 'disabled'}">
+              ${enabled ? '已启用' : '已禁用'}
+            </span>
+          </div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" class="agent-toggle" data-agent-id="${agentDef.id}"
+                 ${enabled ? 'checked' : ''} ${agentDef.deprecated ? 'disabled' : ''}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="agent-card-body">
+        <p class="agent-card-description">${escapeHtml(agentDef.description)}</p>
+
+        <div class="agent-config-field">
+          <div class="agent-config-label">
+            <span>优先级</span>
+            <span class="agent-config-value">${priority}</span>
+          </div>
+          <input type="range" class="range-slider priority-slider"
+                 data-agent-id="${agentDef.id}"
+                 min="1" max="100" value="${priority}"
+                 ${agentDef.deprecated ? 'disabled' : ''}>
+        </div>
+
+        <div class="agent-config-field">
+          <div class="agent-config-label">
+            <span>超时时间</span>
+            <span class="agent-config-value">${formatDuration(timeout)}</span>
+          </div>
+          <input type="range" class="range-slider timeout-slider"
+                 data-agent-id="${agentDef.id}"
+                 min="10000" max="600000" step="10000"
+                 value="${timeout}"
+                 ${agentDef.deprecated ? 'disabled' : ''}>
+        </div>
+
+        <div class="agent-capabilities">
+          ${agentDef.capabilities.map(cap =>
+            `<span class="capability-badge">${cap}</span>`
+          ).join('')}
+        </div>
+      </div>
+      <div class="agent-card-footer">
+        <div class="agent-stats">
+          ${stats.totalExecutions !== undefined ? `
+            <div class="agent-stat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              <span>执行: ${formatNumber(stats.totalExecutions)}</span>
+            </div>
+          ` : ''}
+          ${stats.successRate !== undefined ? `
+            <div class="agent-stat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span>成功率: ${Math.round(stats.successRate * 100)}%</span>
+            </div>
+          ` : ''}
+        </div>
+        <div class="agent-card-actions">
+          <button class="btn-icon-small" data-action="detail" data-agent-id="${agentDef.id}" title="详情">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function getAgentIcon(iconType) {
   const icons = {
+    coordinator: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+    </svg>`,
     code: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="16 18 22 12 16 6"/>
       <polyline points="8 6 2 12 8 18"/>
@@ -312,9 +476,68 @@ function getAgentIcon(iconType) {
     </svg>`,
     claude: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>`,
+    terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="4 17 10 11 4 5"/>
+      <line x1="12" y1="19" x2="20" y2="19"/>
     </svg>`
   };
   return icons[iconType] || icons.claude;
+}
+
+/**
+ * Mode Switching UI
+ */
+function renderModeSwitcher() {
+  const container = document.querySelector('.system-settings .settings-body');
+  if (!container) return;
+
+  const modeSwitcherHTML = `
+    <div class="setting-row">
+      <div class="setting-info">
+        <label class="setting-label">运行模式</label>
+        <span class="setting-description">选择系统运行模式</span>
+      </div>
+      <div class="mode-switcher">
+        ${Object.values(MODE_DEFINITIONS).map(mode => `
+          <label class="mode-option ${state.currentMode === mode.id ? 'active' : ''}">
+            <input type="radio" name="mode" value="${mode.id}" ${state.currentMode === mode.id ? 'checked' : ''}>
+            <div class="mode-card">
+              <div class="mode-icon">${getAgentIcon(mode.icon)}</div>
+              <div class="mode-info">
+                <div class="mode-name">${escapeHtml(mode.name)}</div>
+                <div class="mode-desc">${escapeHtml(mode.description)}</div>
+                <div class="mode-features">
+                  ${mode.features.map(f => `<span class="mode-feature">${f}</span>`).join('')}
+                </div>
+              </div>
+            </div>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // 在系统设置区域的开头插入模式切换器
+  container.insertAdjacentHTML('afterbegin', modeSwitcherHTML);
+
+  // Attach mode switcher listeners
+  document.querySelectorAll('input[name="mode"]').forEach(radio => {
+    radio.addEventListener('change', async (e) => {
+      const newMode = e.target.value;
+      if (newMode !== state.currentMode) {
+        try {
+          await updateMode(newMode);
+          state.currentMode = newMode;
+          showToast(`已切换到 ${MODE_DEFINITIONS[newMode].name}`, 'success');
+          setTimeout(() => location.reload(), 1000);
+        } catch (error) {
+          showToast(error.message, 'error');
+          e.target.checked = false;
+        }
+      }
+    });
+  });
 }
 
 /**
@@ -329,13 +552,11 @@ function attachAgentCardListeners() {
 
       try {
         await updateAgentConfig(agentId, { enabled });
-        // 确保 state.agents[agentId] 存在
         if (!state.agents[agentId]) {
           state.agents[agentId] = {};
         }
         state.agents[agentId].enabled = enabled;
 
-        // Update UI
         const card = document.querySelector(`.agent-card[data-agent-id="${agentId}"]`);
         const statusBadge = card.querySelector('.agent-card-status');
 
@@ -361,6 +582,8 @@ function attachAgentCardListeners() {
 
   // Priority sliders
   document.querySelectorAll('.priority-slider').forEach(slider => {
+    if (slider.disabled) return;
+
     slider.addEventListener('input', (e) => {
       const agentId = e.target.dataset.agentId;
       const value = parseInt(e.target.value);
@@ -374,7 +597,6 @@ function attachAgentCardListeners() {
 
       try {
         await updateAgentConfig(agentId, { priority });
-        // 确保 state.agents[agentId] 存在
         if (!state.agents[agentId]) {
           state.agents[agentId] = {};
         }
@@ -388,6 +610,8 @@ function attachAgentCardListeners() {
 
   // Timeout sliders
   document.querySelectorAll('.timeout-slider').forEach(slider => {
+    if (slider.disabled) return;
+
     slider.addEventListener('input', (e) => {
       const agentId = e.target.dataset.agentId;
       const value = parseInt(e.target.value);
@@ -401,7 +625,6 @@ function attachAgentCardListeners() {
 
       try {
         await updateAgentConfig(agentId, { timeout });
-        // 确保 state.agents[agentId] 存在
         if (!state.agents[agentId]) {
           state.agents[agentId] = {};
         }
@@ -456,6 +679,12 @@ function openAgentDetailModal(agentId) {
           ).join(' ')}
         </span>
       </div>
+      ${agentDef.deprecated ? `
+        <div class="detail-row warning">
+          <span class="detail-label">⚠️ 状态</span>
+          <span class="detail-value">此 Agent 已废弃，功能已集成到 Simple Coordinator 的工具层</span>
+        </div>
+      ` : ''}
     </div>
 
     <div class="detail-section">
@@ -466,7 +695,7 @@ function openAgentDetailModal(agentId) {
           <div class="detail-input-group">
             <label class="switch">
               <input type="checkbox" id="detailEnabled"
-                     ${agentState.enabled ? 'checked' : ''}>
+                     ${agentState.enabled ? 'checked' : ''} ${agentDef.deprecated ? 'disabled' : ''}>
               <span class="switch-slider"></span>
             </label>
           </div>
@@ -477,7 +706,8 @@ function openAgentDetailModal(agentId) {
           <label>优先级 (1-100)</label>
           <div class="detail-input-group">
             <input type="number" id="detailPriority" class="form-input"
-                   min="1" max="100" value="${agentState.priority || agentDef.defaultPriority}">
+                   min="1" max="100" value="${agentState.priority || agentDef.defaultPriority}"
+                   ${agentDef.deprecated ? 'disabled' : ''}>
           </div>
         </div>
         <div class="detail-action-group">
@@ -485,20 +715,9 @@ function openAgentDetailModal(agentId) {
           <div class="detail-input-group">
             <input type="number" id="detailTimeout" class="form-input"
                    min="5000" max="600000" step="1000"
-                   value="${agentState.timeout || agentDef.defaultTimeout}">
+                   value="${agentState.timeout || agentDef.defaultTimeout}"
+                   ${agentDef.deprecated ? 'disabled' : ''}>
             <span class="detail-input-unit">ms</span>
-          </div>
-        </div>
-      </div>
-      <div class="detail-actions">
-        <div class="detail-action-group">
-          <label>模型 (仅 Code/Coordinator)</label>
-          <div class="detail-input-group">
-            <select id="detailModel" class="form-input form-select">
-              <option value="claude-3-5-sonnet-20241022" ${(agentState.options?.model || '').includes('sonnet') ? 'selected' : ''}>Claude 3.5 Sonnet</option>
-              <option value="claude-3-5-haiku-20241022" ${(agentState.options?.model || '').includes('haiku') ? 'selected' : ''}>Claude 3.5 Haiku</option>
-              <option value="claude-3-opus-20240229" ${(agentState.options?.model || '').includes('opus') ? 'selected' : ''}>Claude 3 Opus</option>
-            </select>
           </div>
         </div>
       </div>
@@ -556,17 +775,11 @@ async function saveAgentDetail() {
   const enabled = document.getElementById('detailEnabled').checked;
   const priority = parseInt(document.getElementById('detailPriority').value);
   const timeout = parseInt(document.getElementById('detailTimeout').value);
-  const model = document.getElementById('detailModel').value;
 
   try {
     const updates = { enabled, priority, timeout };
-    if (model) {
-      updates.options = { model };
-    }
-
     await updateAgentConfig(agentId, updates);
 
-    // Update state
     state.agents[agentId] = { ...state.agents[agentId], ...updates };
 
     showToast('配置已保存', 'success');
@@ -624,9 +837,15 @@ function getToastIcon(type) {
  */
 async function init() {
   try {
+    // Fetch current mode
+    state.currentMode = await fetchMode();
+
     // Fetch agents configuration
     const data = await fetchAgents();
     state.agents = data.agents || {};
+
+    // Fetch tools
+    state.tools = await fetchTools();
 
     // Fetch stats for each agent
     for (const agentId of Object.keys(AGENT_DEFINITIONS)) {
@@ -639,38 +858,16 @@ async function init() {
     }
 
     renderAgentsGrid();
+    renderModeSwitcher();
 
-    // System settings
-    document.getElementById('defaultAgent').addEventListener('change', async (e) => {
-      try {
-        await updateSystemConfig({
-          agents: { default: e.target.value }
-        });
-        showToast('默认 Agent 已更新', 'success');
-      } catch (error) {
-        showToast('更新失败: ' + error.message, 'error');
-      }
-    });
-
-    document.getElementById('smartRouting').addEventListener('change', async (e) => {
-      try {
-        await updateSystemConfig({
-          agents: { smartRouting: e.target.checked }
-        });
-        showToast('智能路由设置已更新', 'success');
-      } catch (error) {
-        showToast('更新失败: ' + error.message, 'error');
-      }
-    });
-
-    document.getElementById('useCoordinator').addEventListener('change', async (e) => {
-      try {
-        await updateSystemConfig({
-          agents: { useCoordinator: e.target.checked }
-        });
-        showToast('协作模式设置已更新', 'success');
-      } catch (error) {
-        showToast('更新失败: ' + error.message, 'error');
+    // Remove old system settings (now replaced by mode switcher)
+    const oldSettings = document.querySelectorAll('.setting-row');
+    oldSettings.forEach(row => {
+      const label = row.querySelector('.setting-label');
+      if (label && (label.textContent.includes('默认 Agent') ||
+                   label.textContent.includes('智能路由') ||
+                   label.textContent.includes('协作模式'))) {
+        row.remove();
       }
     });
 

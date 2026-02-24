@@ -311,40 +311,49 @@ export class QQBotChannel extends EventEmitter {
       // 获取原始文件名（不含路径）
       const originalFileName = path.basename(filePath);
 
-      // 上传文件到QQ服务器 (使用正确的端点 /v2/users/{openid}/files 或 /v2/groups/{group_openid}/files)
-      // 使用 srv_send_msg=0 仅上传文件，然后单独发送富媒体消息
-      logger.info(`[QQChannel.sendFile] Uploading file to QQ servers (srv_send_msg=0, upload only)...`);
-      const uploadResult = isGroup
-        ? await this.api.uploadGroupFile(userId, buffer, fileType, ext, false, originalFileName)
-        : await this.api.uploadC2CFile(userId, buffer, fileType, ext, false, originalFileName);
-      logger.info(`[QQChannel.sendFile] Upload successful: ${JSON.stringify(uploadResult).substring(0, 200)}`);
+      // ========== 根据 QQ Bot 官方文档，不同类型使用不同方式 ==========
+      // 图片/视频：先上传获取 file_info，再用富媒体消息发送
+      // 普通文件：直接使用 srv_send_msg=1 发送
+      if (fileType === 1 || fileType === 2) {
+        // ===== 图片或视频：使用富媒体消息方式 =====
+        logger.info(`[QQChannel.sendFile] 图片/视频使用富媒体消息方式发送`);
 
-      // 发送富媒体消息（实际发送文件）
-      logger.info(`[QQChannel.sendFile] Sending media message with file_info...`);
-      // 根据文件类型确定 attachment type
-      let attachmentType: 'image' | 'video' | 'audio' | 'file';
-      if (fileType === 1) {
-        attachmentType = 'image';
-      } else if (fileType === 2) {
-        attachmentType = 'video';
-      } else if (fileType === 3) {
-        attachmentType = 'audio';
-      } else {
-        attachmentType = 'file';
-      }
+        // 步骤 1: 上传文件（srv_send_msg=0），获取 file_info
+        logger.info(`[QQChannel.sendFile] 步骤 1: 上传文件获取 file_info...`);
+        const uploadResult = isGroup
+          ? await this.api.uploadGroupFile(userId, buffer, fileType, ext, false, originalFileName)
+          : await this.api.uploadC2CFile(userId, buffer, fileType, ext, false, originalFileName);
 
-      if (isGroup) {
-        await this.api.sendGroupMediaMessage(userId, [{
-          type: attachmentType,
-          content: uploadResult.file_info,
-        }]);
+        logger.info(`[QQChannel.sendFile] 上传成功，file_info: ${JSON.stringify(uploadResult).substring(0, 200)}`);
+
+        // 步骤 2: 使用富媒体消息发送
+        const fileInfo = uploadResult.file_info || '';
+        if (!fileInfo) {
+          throw new Error('上传成功但未返回 file_info');
+        }
+
+        logger.info(`[QQChannel.sendFile] 步骤 2: 发送富媒体消息...`);
+        const attachment: import('./types.js').MessageAttachment = {
+          type: fileType === 1 ? ('image' as const) : ('video' as const),
+          file: fileInfo,
+        };
+
+        if (isGroup) {
+          await this.api.sendGroupMediaMessage(userId, [attachment]);
+        } else {
+          await this.api.sendC2CMediaMessage(userId, [attachment]);
+        }
+
+        logger.info(`[QQChannel.sendFile] 富媒体消息发送成功`);
+
       } else {
-        await this.api.sendC2CMediaMessage(userId, [{
-          type: attachmentType,
-          content: uploadResult.file_info,
-        }]);
+        // ===== 普通文件：使用 srv_send_msg=1 直接发送 =====
+        logger.info(`[QQChannel.sendFile] 普通文件使用直接发送方式 (srv_send_msg=1)`);
+        const uploadResult = isGroup
+          ? await this.api.uploadGroupFile(userId, buffer, fileType, ext, true, originalFileName)
+          : await this.api.uploadC2CFile(userId, buffer, fileType, ext, true, originalFileName);
+        logger.info(`[QQChannel.sendFile] 直接发送成功: ${JSON.stringify(uploadResult).substring(0, 200)}`);
       }
-      logger.info(`[QQChannel.sendFile] Media message sent successfully`);
 
       // 发送附加文本消息
       if (message) {

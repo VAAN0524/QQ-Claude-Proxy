@@ -17,6 +17,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
 import { MemoryService, MemoryType, MemoryMetadata, MemoryRetrieveOptions } from './MemoryService.js';
+import { BM25SearchEngine } from './SearchEngine.js';
+import { TextProcessor } from '../../utils/text-processor.js';
 
 /**
  * 记忆层级
@@ -256,6 +258,7 @@ class HierarchicalMemoryStore {
  */
 export class HierarchicalMemoryService extends MemoryService {
   private hierarchicalStore: HierarchicalMemoryStore;
+  private searchEngine: BM25SearchEngine;
   private agentConfigs: Map<string, AgentMemoryConfig>;
   private sharedConfig?: SharedMemoryConfig;
   private sharedMemoryPath: string;
@@ -265,6 +268,7 @@ export class HierarchicalMemoryService extends MemoryService {
     super(options);
 
     this.hierarchicalStore = new HierarchicalMemoryStore();
+    this.searchEngine = new BM25SearchEngine();
     this.agentConfigs = new Map();
     this.sharedMemoryPath = options.sharedConfig?.sharedPath ||
       path.join(process.cwd(), 'data', 'shared-memory');
@@ -297,6 +301,11 @@ export class HierarchicalMemoryService extends MemoryService {
       // 加载或创建 .abstract 索引文件
       await this.loadOrCreateAbstractIndex(agentId, config.memoryPath);
     }
+
+    // 加载现有记忆到搜索引擎
+    const allEntries = this.hierarchicalStore.getAllL0();
+    this.searchEngine.indexEntries(allEntries);
+    logger.debug(`[HierarchicalMemoryService] 搜索引擎已加载 ${allEntries.length} 条记忆`);
 
     // 启动共享记忆同步
     if (this.sharedConfig) {
@@ -340,6 +349,10 @@ export class HierarchicalMemoryService extends MemoryService {
 
     this.hierarchicalStore.add(entry);
 
+    // 添加到搜索引擎索引
+    const searchContent = L0.summary + ' ' + L1.overview;
+    this.searchEngine.indexDocument(id, searchContent);
+
     // 异步保存
     this.saveHierarchicalMemory(entry).catch(error => {
       logger.error(`[HierarchicalMemoryService] 保存失败: ${error}`);
@@ -371,37 +384,27 @@ export class HierarchicalMemoryService extends MemoryService {
   }
 
   /**
-   * 搜索分层记忆（L0 快速检索）
+   * 搜索分层记忆（语义搜索 - 使用 BM25 算法）
    */
   searchHierarchicalMemories(
     query: string,
     options: MemoryRetrieveOptions = {}
   ): HierarchicalMemoryEntry[] {
-    // 从 L0 索引开始搜索
-    let results = this.hierarchicalStore.getAllL0();
-
-    // 关键词匹配
-    const keywords = this.extractKeywords(query);
-    for (const keyword of keywords) {
-      const keywordResults = this.hierarchicalStore.getByKeyword(keyword);
-      results = results.concat(keywordResults);
-    }
+    // 获取所有 L0 条目作为候选
+    let candidates = this.hierarchicalStore.getAllL0();
 
     // Agent 过滤
     if (options.userId) {
-      const config = this.agentConfigs.get(options.userId);
-      if (config) {
-        results = results.concat(this.hierarchicalStore.getByAgent(options.userId));
-      }
+      const agentEntries = this.hierarchicalStore.getByAgent(options.userId);
+      const agentIds = new Set(agentEntries.map(e => e.id));
+      candidates = candidates.filter(c => agentIds.has(c.id));
     }
 
-    // 去重
-    const unique = new Map<string, HierarchicalMemoryEntry>();
-    for (const result of results) {
-      unique.set(result.id, result);
-    }
+    // 使用搜索引擎进行语义搜索
+    const limit = options.limit || 10;
+    const results = this.searchEngine.search(query, candidates, 'bm25', limit);
 
-    return Array.from(unique.values());
+    return results.map(r => r.entry);
   }
 
   /**
@@ -411,12 +414,19 @@ export class HierarchicalMemoryService extends MemoryService {
     content: string,
     metadata: MemoryMetadata
   ): HierarchicalMemoryEntry['L0'] {
-    // 提取关键信息生成摘要
-    const summary = content.substring(0, 100).trim();
-    const keywords = this.extractKeywords(content);
+    // 移除 "用户:" 或 "助手:" 前缀
+    let cleanContent = TextProcessor.cleanContentPrefix(content);
+
+    // 使用 TextProcessor 提取关键句子
+    const keySentences = TextProcessor.extractKeySentences(cleanContent, 1);
+    const summary = keySentences[0] || cleanContent.substring(0, 150);
+
+    // 使用 TextProcessor 提取关键词
+    const keywordsWithWeights = TextProcessor.extractKeywords(cleanContent, 10);
+    const keywords = keywordsWithWeights.map(k => k.word);
 
     return {
-      summary,
+      summary: summary.substring(0, 150), // 放宽到 150 字符
       keywords,
       timestamp: new Date().toISOString(),
     };
@@ -429,49 +439,29 @@ export class HierarchicalMemoryService extends MemoryService {
     content: string,
     metadata: MemoryMetadata
   ): HierarchicalMemoryEntry['L1'] {
-    // 结构化内容
-    const lines = content.split('\n');
-    const keyPoints: string[] = [];
+    // 移除前缀
+    let cleanContent = TextProcessor.cleanContentPrefix(content);
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      // 提取关键点（以 -、*、数字开头的行）
-      if (/^[-*•]\s/.test(trimmed) || /^\d+[.)]\s/.test(trimmed)) {
-        keyPoints.push(trimmed);
-      }
-    }
+    // 使用 TextProcessor 提取关键句子
+    const keyPoints = TextProcessor.extractKeySentences(cleanContent, 10);
 
     // 生成上下文
     const context = metadata.tags?.join(', ') || '';
 
     return {
-      overview: content.substring(0, 2000).trim(),
-      keyPoints: keyPoints.slice(0, 20),
+      overview: cleanContent.substring(0, 2000).trim(),
+      keyPoints,
       context,
     };
   }
 
   /**
-   * 提取关键词
+   * 提取关键词（已废弃，使用 TextProcessor.extractKeywords）
+   * @deprecated
    */
   private extractKeywords(content: string): string[] {
-    // 简单的关键词提取
-    const words = content.toLowerCase()
-      .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 2);
-
-    // 统计词频
-    const freq = new Map<string, number>();
-    for (const word of words) {
-      freq.set(word, (freq.get(word) || 0) + 1);
-    }
-
-    // 返回高频词
-    return Array.from(freq.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([word]) => word);
+    const keywordsWithWeights = TextProcessor.extractKeywords(content, 10);
+    return keywordsWithWeights.map(k => k.word);
   }
 
   /**
@@ -487,6 +477,26 @@ export class HierarchicalMemoryService extends MemoryService {
       await fs.access(abstractPath);
       const content = await fs.readFile(abstractPath, 'utf-8');
       const index: AbstractIndex = JSON.parse(content);
+
+      // 将索引条目加载到内存存储
+      for (const entryData of index.entries) {
+        const entry: HierarchicalMemoryEntry = {
+          id: entryData.id,
+          type: MemoryType.MESSAGE, // 默认类型，可根据需要调整
+          layer: entryData.layer,
+          L0: {
+            summary: entryData.summary,
+            keywords: entryData.keywords,
+            timestamp: entryData.timestamp,
+          },
+          metadata: {},
+          createdAt: new Date(entryData.timestamp),
+          lastAccessedAt: new Date(entryData.timestamp),
+          accessCount: 0,
+          lifecycle: 'active',
+        };
+        this.hierarchicalStore.add(entry);
+      }
 
       logger.debug(`[HierarchicalMemoryService] 加载索引: ${agentId} (${index.count} 条)`);
     } catch {

@@ -4,15 +4,15 @@
  * 使用 DuckDuckGo 进行真实搜索（通过 DuckSearchAgent）
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 import type { DuckSearchAgent } from './DuckSearchAgent.js';
 
 /**

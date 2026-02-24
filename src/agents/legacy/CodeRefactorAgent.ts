@@ -5,7 +5,7 @@
  * 处理文件重组、组件提取、依赖管理等重构任务
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import type {
@@ -14,8 +14,8 @@ import type {
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 /**
  * 重构选项

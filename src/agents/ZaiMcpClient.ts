@@ -166,12 +166,20 @@ export class ZaiMcpClient {
 
   /**
    * 图像分析
+   * @param imagePath 图片路径
+   * @param prompt 分析提示词
+   * @param model 模型名称（如 'glm-4.6v'），默认使用 MCP Server 配置的模型
    */
-  async analyzeImage(imagePath: string, prompt?: string): Promise<string> {
-    const result = await this.callTool('analyze_image', {
+  async analyzeImage(imagePath: string, prompt?: string, model?: string): Promise<string> {
+    const args: Record<string, any> = {
       image_source: imagePath,
       prompt: prompt || '请描述这张图片的内容',
-    });
+    };
+    // 支持指定模型
+    if (model) {
+      args.model = model;
+    }
+    const result = await this.callTool('analyze_image', args);
 
     return this.extractTextContent(result);
   }

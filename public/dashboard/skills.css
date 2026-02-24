@@ -857,4 +857,81 @@
   display: none;
 }
 
+/* ==================== Tool Badges ==================== */
+.skill-tool-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  background: rgba(155, 89, 182, 0.15);
+  border: 1px solid rgba(155, 89, 182, 0.3);
+  border-radius: var(--radius-sm);
+  color: #9b59b6;
+  display: inline-block;
+  margin: 2px;
+}
+
+.skill-tool-badge.more {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.skill-tool-badge-sm {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  background: rgba(155, 89, 182, 0.1);
+  border-radius: var(--radius-sm);
+  color: #9b59b6;
+  display: inline-block;
+  margin: 1px;
+}
+
+/* Skill Card Tools Section */
+.skill-card-tools {
+  margin-top: var(--spacing-sm);
+}
+
+.skill-card-tools-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.skill-card-tools-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-primary);
+}
+
+.skill-card-tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+/* Skill List Tools */
+.skill-list-tools {
+  margin-top: var(--spacing-xs);
+}
+
+/* Skill Detail Tools Section */
+.skill-detail-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.skill-detail-tools .skill-tool-badge {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: rgba(155, 89, 182, 0.1);
+  border: 1px solid rgba(155, 89, 182, 0.3);
+  border-radius: var(--radius-md);
+  color: #9b59b6;
+}
+
 

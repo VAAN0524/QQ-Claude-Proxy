@@ -28,5 +28,8 @@
   "run_websearch_agent": true,
   "tavily-search": true,
   "test-case-generator": true,
-  "test-runner": true
+  "test-runner": true,
+  "default-skill": true,
+  "smart-code": true,
+  "smart-search": true
 }

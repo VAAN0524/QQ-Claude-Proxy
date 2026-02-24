@@ -1,9 +1,11 @@
 /**
  * Agent 系统导出
  *
- * 简化架构：
- * - Simple 模式：使用 SimpleCoordinatorAgent（万金油 agent，支持 SKILL.md）
+ * 简化架构（工具层模式）：
+ * - Simple 模式：使用 SimpleCoordinatorAgent（单 Agent + 工具层）
  * - CLI 模式：直接调用本地 Claude Code CLI
+ *
+ * 专业 Agents 已移动到 legacy/ 目录，功能已整合到工具层
  */
 
 // 基础接口
@@ -26,7 +28,7 @@ export type {
   SkillInstallResult,
 } from './SkillInstaller.js';
 
-// 记忆服务（CLI 模式使用）
+// 记忆服务
 export { MemoryService, RAGService, HierarchicalMemoryService, KnowledgeCache } from './memory/index.js';
 export type {
   MemoryEntry,
@@ -49,24 +51,51 @@ export type {
 // 学习模块
 export { LearningModule } from './learning/index.js';
 
-// 内置 Agents（保留用于 CLI 模式的特殊任务）
-export { CodeAgent } from './CodeAgent.js';
-export { BrowserAgent } from './BrowserAgent.js';
-export { ShellAgent } from './ShellAgent.js';
-export { WebSearchAgent } from './WebSearchAgent.js';
-export { DataAnalysisAgent } from './DataAnalysisAgent.js';
-export { VisionAgent } from './VisionAgent.js';
-export { CodeRefactorAgent } from './CodeRefactorAgent.js';
-export { SkillManagerAgent } from './SkillManagerAgent.js';
-export { TavilySearchAgent } from './TavilySearchAgent.js';
-export { DuckSearchAgent } from './DuckSearchAgent.js';
+// ============================================
+// 工具层（新架构）
+// ============================================
+export * from './tools-layer/index.js';
 
-// 简化协调 Agent（Simple 模式的核心）
+// ============================================
+// 核心 Agents
+// ============================================
+
+// SimpleCoordinatorAgent - 单 Agent 模式的核心
 export { SimpleCoordinatorAgent } from './SimpleCoordinatorAgent.js';
 export type { SimpleCoordinatorConfig } from './SimpleCoordinatorAgent.js';
 
-// 工具定义
-export * from './tools/index.js';
+// SkillManagerAgent - 技能管理
+export { SkillManagerAgent } from './SkillManagerAgent.js';
+
+// ============================================
+// Legacy Agents（已整合到工具层）
+// ============================================
+// 以下 Agents 已被工具层替代，保留仅为向后兼容
+//
+// @deprecated 使用 tools-layer/search.ts 中的 smartSearch 代替
+export { WebSearchAgent } from './legacy/WebSearchAgent.js';
+//
+// @deprecated 使用 tools-layer/web-tools.ts 中的 fetchWebContent 代替
+export { BrowserAgent } from './legacy/BrowserAgent.js';
+//
+// @deprecated 使用 tools-layer/shell-tools.ts 中的 executeCommand 代替
+export { ShellAgent } from './legacy/ShellAgent.js';
+//
+// @deprecated 功能已整合到 SimpleCoordinatorAgent
+export { CodeAgent } from './legacy/CodeAgent.js';
+export { CodeRefactorAgent } from './legacy/CodeRefactorAgent.js';
+export { DataAnalysisAgent } from './legacy/DataAnalysisAgent.js';
+export { VisionAgent } from './legacy/VisionAgent.js';
+//
+// @deprecated 使用 tools-layer/search.ts 中的 tavilySearch 代替
+export { TavilySearchAgent } from './legacy/TavilySearchAgent.js';
+export { DuckSearchAgent } from './legacy/DuckSearchAgent.js';
+
+// 工具定义（避免重复导出）
+export * from './tools/agent-tools.js';
+export * from './tools/file-tools.js';
+export * from './tools/learning-tools.js';
+export * from './tools/network_tool.js';
 
 // 技能管理器
 export { SkillManager } from '../skills/SkillManager.js';

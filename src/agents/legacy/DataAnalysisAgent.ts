@@ -4,7 +4,7 @@
  * 用于数据分析、统计计算、数据可视化建议等
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import type {
@@ -13,8 +13,8 @@ import type {
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 /**
  * Data Analysis Agent 配置选项

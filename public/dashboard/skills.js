@@ -71,6 +71,133 @@ function safeAddEventListener(elementId, event, handler) {
   }
 }
 
+/**
+ * 解析标准 SKILL.md 格式
+ * 支持 YAML frontmatter 格式
+ */
+function parseSkillMarkdown(content) {
+  const result = {
+    name: '',
+    description: '',
+    availableTools: [],
+    systemPrompt: '',
+    rules: [],
+    examples: [],
+    hasYamlFrontmatter: false
+  };
+
+  const lines = content.split('\n');
+  let lineIndex = 0;
+
+  // 解析 YAML frontmatter
+  if (lines[0] === '---') {
+    result.hasYamlFrontmatter = true;
+    lineIndex = 1;
+    let yamlContent = '';
+
+    while (lineIndex < lines.length && lines[lineIndex] !== '---') {
+      yamlContent += lines[lineIndex] + '\n';
+      lineIndex++;
+    }
+    lineIndex++; // 跳过结束的 ---
+
+    // 解析 YAML 内容
+    if (yamlContent.includes('name:')) {
+      const match = yamlContent.match(/name:\s*(.+)/);
+      if (match) result.name = match[1].trim();
+    }
+    if (yamlContent.includes('description:')) {
+      const match = yamlContent.match(/description:\s*(.+)/);
+      if (match) result.description = match[1].trim();
+    }
+    if (yamlContent.includes('availableTools:')) {
+      const match = yamlContent.match(/availableTools:\s*\[(.+)\]/);
+      if (match) {
+        result.availableTools = match[1].split(',').map(t => t.trim().replace(/['"]/g, ''));
+      }
+    }
+  }
+
+  // 解析 Markdown 内容
+  let currentSection = '';
+  let currentExample = null;
+
+  for (; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+
+    if (line.startsWith('# ')) {
+      currentSection = line.substring(2).trim().toLowerCase();
+      continue;
+    }
+
+    // 解析可用工具列表（Markdown 格式）
+    if ((currentSection.includes('可用工具') || currentSection.includes('tools')) && line.includes('- ') && line.includes('`')) {
+      const match = line.match(/`([^`]+)`/);
+      if (match && !result.availableTools.includes(match[1])) {
+        result.availableTools.push(match[1]);
+      }
+    }
+
+    // 收集系统提示内容
+    if (currentSection.includes('系统') || currentSection.includes('system')) {
+      result.systemPrompt += line + '\n';
+    }
+
+    // 解析规则
+    if ((currentSection.includes('规则') || currentSection.includes('rules')) && (line.startsWith('- ') || line.startsWith('* '))) {
+      result.rules.push(line.substring(line.startsWith('- ') ? 2 : 1).trim());
+    }
+
+    // 解析示例
+    if (currentSection.includes('示例') || currentSection.includes('examples')) {
+      if (line.startsWith('输入:') || line.startsWith('Input:')) {
+        currentExample = { input: line.split(':')[1].trim(), output: '' };
+      } else if (line.startsWith('输出:') || line.startsWith('Output:')) {
+        if (currentExample) {
+          currentExample.output = line.split(':')[1].trim();
+          result.examples.push(currentExample);
+          currentExample = null;
+        }
+      }
+    }
+  }
+
+  result.systemPrompt = result.systemPrompt.trim();
+
+  return result;
+}
+
+/**
+ * 格式化技能元数据用于显示
+ */
+function formatSkillMetadata(skill) {
+  // 如果有标准格式的字段，使用它们
+  if (skill.name || skill.description || skill.availableTools) {
+    return {
+      name: skill.name || skill.trigger || '未命名技能',
+      trigger: skill.trigger || skill.name || '',
+      description: skill.description || '暂无描述',
+      path: skill.path || '',
+      enabled: skill.enabled ?? false,
+      fullyLoaded: skill.fullyLoaded ?? false,
+      availableTools: skill.availableTools || [],
+      capabilities: skill.capabilities || []
+    };
+  }
+
+  // 兼容旧格式
+  return {
+    name: skill.trigger || skill.name || '未命名技能',
+    trigger: skill.trigger || skill.name || '',
+    description: skill.description || '暂无描述',
+    path: skill.path || '',
+    enabled: skill.enabled ?? false,
+    fullyLoaded: skill.fullyLoaded ?? false,
+    availableTools: [],
+    capabilities: skill.capabilities || []
+  };
+}
+
 async function fetchSkills() {
   console.log('[fetchSkills] 开始获取技能列表...');
   try {
@@ -207,26 +334,36 @@ function renderSkillsGrid() {
 
 function renderSkillListItem(skill) {
   const isSelected = state.selectedSkills.has(skill.name);
+  const formattedSkill = formatSkillMetadata(skill);
+
   return `
-    <div class="skill-list-item ${!skill.enabled ? 'disabled' : ''} ${isSelected ? 'selected' : ''}" data-skill-name="${escapeHtml(skill.name)}">
-      <input type="checkbox" class="skill-list-checkbox" data-skill-name="${escapeHtml(skill.name)}" ${isSelected ? 'checked' : ''}>
+    <div class="skill-list-item ${!formattedSkill.enabled ? 'disabled' : ''} ${isSelected ? 'selected' : ''}" data-skill-name="${escapeHtml(formattedSkill.name)}">
+      <input type="checkbox" class="skill-list-checkbox" data-skill-name="${escapeHtml(formattedSkill.name)}" ${isSelected ? 'checked' : ''}>
       <div class="skill-list-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
       </div>
       <div class="skill-list-content">
-        <div class="skill-list-name">${escapeHtml(skill.name)}</div>
-        <div class="skill-list-trigger">${escapeHtml(skill.trigger)}</div>
+        <div class="skill-list-name">${escapeHtml(formattedSkill.name)}</div>
+        <div class="skill-list-trigger">${escapeHtml(formattedSkill.trigger)}</div>
+        ${formattedSkill.availableTools && formattedSkill.availableTools.length > 0 ? `
+          <div class="skill-list-tools">
+            ${formattedSkill.availableTools.slice(0, 3).map(tool =>
+              `<span class="skill-tool-badge-sm">${escapeHtml(tool)}</span>`
+            ).join('')}
+            ${formattedSkill.availableTools.length > 3 ? `<span class="skill-tool-badge-sm">+${formattedSkill.availableTools.length - 3}</span>` : ''}
+          </div>
+        ` : ''}
       </div>
       <div class="skill-list-toggle">
         <label class="switch">
-          <input type="checkbox" class="skill-enable-toggle" data-skill-name="${escapeHtml(skill.name)}" ${skill.enabled ? 'checked' : ''}>
+          <input type="checkbox" class="skill-enable-toggle" data-skill-name="${escapeHtml(formattedSkill.name)}" ${formattedSkill.enabled ? 'checked' : ''}>
           <span class="switch-slider"></span>
         </label>
       </div>
       <div class="skill-list-actions">
-        <button class="skill-list-btn" data-action="detail" data-skill-name="${escapeHtml(skill.name)}" title="详情">
+        <button class="skill-list-btn" data-action="detail" data-skill-name="${escapeHtml(formattedSkill.name)}" title="详情">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="16" x2="12" y2="12"/>
@@ -239,8 +376,11 @@ function renderSkillListItem(skill) {
 }
 
 function renderSkillCard(skill) {
+  // 使用格式化函数处理技能元数据
+  const formattedSkill = formatSkillMetadata(skill);
+
   return `
-    <div class="skill-card ${!skill.enabled ? 'disabled' : ''}" data-skill-name="${escapeHtml(skill.name)}">
+    <div class="skill-card ${!formattedSkill.enabled ? 'disabled' : ''}" data-skill-name="${escapeHtml(formattedSkill.name)}">
       <div class="skill-card-header">
         <div class="skill-card-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -248,30 +388,49 @@ function renderSkillCard(skill) {
           </svg>
         </div>
         <div class="skill-card-title">
-          <div class="skill-card-name">${escapeHtml(skill.name)}</div>
-          <div class="skill-card-trigger">${escapeHtml(skill.trigger)}</div>
+          <div class="skill-card-name">${escapeHtml(formattedSkill.name)}</div>
+          <div class="skill-card-trigger">${escapeHtml(formattedSkill.trigger)}</div>
         </div>
         <label class="switch skill-card-toggle">
-          <input type="checkbox" class="skill-enable-toggle" data-skill-name="${escapeHtml(skill.name)}"
-                 ${skill.enabled ? 'checked' : ''}>
+          <input type="checkbox" class="skill-enable-toggle" data-skill-name="${escapeHtml(formattedSkill.name)}"
+                 ${formattedSkill.enabled ? 'checked' : ''}>
           <span class="switch-slider"></span>
         </label>
       </div>
       <div class="skill-card-body">
-        <p class="skill-card-description">${escapeHtml(skill.description)}</p>
-        ${skill.capabilities && skill.capabilities.length > 0 ? `
+        <p class="skill-card-description">${escapeHtml(formattedSkill.description)}</p>
+
+        <!-- 可用工具列表 -->
+        ${formattedSkill.availableTools && formattedSkill.availableTools.length > 0 ? `
+          <div class="skill-card-tools">
+            <div class="skill-card-tools-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+              可用工具
+            </div>
+            <div class="skill-card-tools-list">
+              ${formattedSkill.availableTools.slice(0, 4).map(tool =>
+                `<span class="skill-tool-badge">${escapeHtml(tool)}</span>`
+              ).join('')}
+              ${formattedSkill.availableTools.length > 4 ? `<span class="skill-tool-badge more">+${formattedSkill.availableTools.length - 4}</span>` : ''}
+            </div>
+          </div>
+        ` : ''}
+
+        ${formattedSkill.capabilities && formattedSkill.capabilities.length > 0 ? `
           <div class="skill-card-tags">
-            ${skill.capabilities.slice(0, 3).map(cap =>
+            ${formattedSkill.capabilities.slice(0, 3).map(cap =>
               `<span class="skill-tag">${escapeHtml(cap)}</span>`
             ).join('')}
-            ${skill.capabilities.length > 3 ? `<span class="skill-tag">+${skill.capabilities.length - 3}</span>` : ''}
+            ${formattedSkill.capabilities.length > 3 ? `<span class="skill-tag">+${formattedSkill.capabilities.length - 3}</span>` : ''}
           </div>
         ` : ''}
       </div>
       <div class="skill-card-footer">
-        <span class="skill-card-path" title="${escapeHtml(skill.path)}">${escapeHtml(skill.path)}</span>
+        <span class="skill-card-path" title="${escapeHtml(formattedSkill.path)}">${escapeHtml(formattedSkill.path)}</span>
         <div class="skill-card-actions">
-          <button class="btn-icon-small" data-action="detail" data-skill-name="${escapeHtml(skill.name)}" title="详情">
+          <button class="btn-icon-small" data-action="detail" data-skill-name="${escapeHtml(formattedSkill.name)}" title="详情">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
               <line x1="12" y1="16" x2="12" y2="12"/>
@@ -714,11 +873,14 @@ async function openSkillDetailModal(skillName) {
       return;
     }
 
+    // 使用格式化函数处理技能数据
+    const formattedSkill = formatSkillMetadata(skill);
+
     const modal = document.getElementById('skillDetailModal');
     const title = document.getElementById('skillDetailTitle');
     const body = document.getElementById('skillDetailBody');
 
-    title.textContent = skill.name;
+    title.textContent = formattedSkill.name;
 
     body.innerHTML = `
       <div class="skill-detail-content">
@@ -727,26 +889,43 @@ async function openSkillDetailModal(skillName) {
             <h3>基本信息</h3>
             <div class="skill-detail-meta">
               <span class="skill-detail-label">技能名称</span>
-              <span class="skill-detail-value">${escapeHtml(skill.name)}</span>
+              <span class="skill-detail-value">${escapeHtml(formattedSkill.name)}</span>
               <span class="skill-detail-label">触发词</span>
-              <span class="skill-detail-value">${escapeHtml(skill.trigger)}</span>
+              <span class="skill-detail-value">${escapeHtml(formattedSkill.trigger)}</span>
               <span class="skill-detail-label">状态</span>
-              <span class="skill-detail-value">${skill.enabled ? '已启用' : '已禁用'}</span>
+              <span class="skill-detail-value">${formattedSkill.enabled ? '已启用' : '已禁用'}</span>
               <span class="skill-detail-label">路径</span>
-              <span class="skill-detail-value" style="font-family: monospace; font-size: 0.75rem;">${escapeHtml(skill.path)}</span>
+              <span class="skill-detail-value" style="font-family: monospace; font-size: 0.75rem;">${escapeHtml(formattedSkill.path)}</span>
             </div>
           </div>
 
           <div class="skill-detail-section">
             <h3>描述</h3>
-            <p style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(skill.description)}</p>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(formattedSkill.description)}</p>
           </div>
 
-          ${skill.capabilities && skill.capabilities.length > 0 ? `
+          <!-- 可用工具列表 -->
+          ${formattedSkill.availableTools && formattedSkill.availableTools.length > 0 ? `
+            <div class="skill-detail-section">
+              <h3>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+                可用工具
+              </h3>
+              <div class="skill-detail-tools">
+                ${formattedSkill.availableTools.map(tool =>
+                  `<span class="skill-tool-badge">${escapeHtml(tool)}</span>`
+                ).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${formattedSkill.capabilities && formattedSkill.capabilities.length > 0 ? `
             <div class="skill-detail-section">
               <h3>功能</h3>
               <ul class="skill-detail-capabilities">
-                ${skill.capabilities.map(cap => `<li>${escapeHtml(cap)}</li>`).join('')}
+                ${formattedSkill.capabilities.map(cap => `<li>${escapeHtml(cap)}</li>`).join('')}
               </ul>
             </div>
           ` : ''}
@@ -773,7 +952,9 @@ async function openSkillDetailModal(skillName) {
             <div class="skill-detail-section">
               <h3>文档</h3>
               <p style="color: var(--text-muted); text-align: center; padding: var(--spacing-lg);">
-                此技能暂无完整文档
+                ${formattedSkill.availableTools && formattedSkill.availableTools.length > 0
+                  ? '此技能已配置工具列表'
+                  : '此技能暂无完整文档'}
               </p>
             </div>
           `}

@@ -8,15 +8,15 @@
  * 注意：ducksearch 包在模块级别执行 program.parse()，所以必须延迟导入
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 interface SearchResult {
   title: string;

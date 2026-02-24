@@ -6,15 +6,15 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
 
 /**
  * Code Agent 配置选项

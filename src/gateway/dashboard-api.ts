@@ -72,7 +72,9 @@ export interface ApiHandlerContext {
 export interface ExtendedApiHandlerContext extends ApiHandlerContext {
   agentRegistry?: any;
   skillLoader?: any;
+  toolManager?: any; // 工具层管理器
   logFilePath?: string;
+  currentMode?: 'cli' | 'simple'; // 当前运行模式
 }
 
 /**
@@ -1116,6 +1118,218 @@ export function createExtendedApiHandlers(context: ExtendedApiHandlerContext): M
     } catch (error) {
       logger.error(`Failed to reload agents: ${error}`);
       sendJson(res, { error: error instanceof Error ? error.message : '重新加载失败' }, 500);
+    }
+  });
+
+  // ==================== 工具层管理 API ====================
+
+  /**
+   * GET /api/tools - 获取所有可用工具
+   */
+  handlers.set('GET:/api/tools', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      // 如果有 ToolManager，从其获取工具列表
+      if (context.toolManager) {
+        const tools = context.toolManager.getAll();
+        sendJson(res, {
+          tools,
+          total: tools.length,
+          categories: {
+            search: tools.filter((t: any) => t.category === 'search').length,
+            web: tools.filter((t: any) => t.category === 'web').length,
+            shell: tools.filter((t: any) => t.category === 'shell').length,
+          }
+        });
+      } else {
+        // 返回默认工具定义
+        const defaultTools = {
+          'smart_search': {
+            id: 'smart_search',
+            name: '智能搜索',
+            description: '自动选择 DuckDuckGo 或 Tavily 进行网络搜索',
+            category: 'search',
+            enabled: true
+          },
+          'duckduckgo_search': {
+            id: 'duckduckgo_search',
+            name: 'DuckDuckGo 搜索',
+            description: '使用 DuckDuckGo 进行网络搜索',
+            category: 'search',
+            enabled: true
+          },
+          'tavily_search': {
+            id: 'tavily_search',
+            name: 'Tavily 搜索',
+            description: '使用 Tavily API 进行深度搜索',
+            category: 'search',
+            enabled: !!process.env.TAVILY_API_KEY,
+            requiresApiKey: true
+          },
+          'fetch_web': {
+            id: 'fetch_web',
+            name: '网页内容提取',
+            description: '获取并提取网页内容',
+            category: 'web',
+            enabled: true
+          },
+          'execute_command': {
+            id: 'execute_command',
+            name: '命令执行',
+            description: '执行系统命令（带安全检查）',
+            category: 'shell',
+            enabled: true
+          }
+        };
+        sendJson(res, {
+          tools: defaultTools,
+          total: Object.keys(defaultTools).length
+        });
+      }
+    } catch (error) {
+      logger.error(`Failed to get tools: ${error}`);
+      sendJson(res, { error: '获取工具列表失败' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/tools/:id/stats - 获取工具使用统计
+   */
+  handlers.set('GET:/api/tools/stats', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const toolId = url.searchParams.get('id');
+
+      // 从 dashboard state 获取任务统计
+      const toolTasks = toolId
+        ? Array.from(context.dashboardState.tasks.values()).filter(t => t.prompt.includes(`tool:${toolId}`))
+        : Array.from(context.dashboardState.tasks.values());
+
+      if (toolId) {
+        const stats = {
+          totalExecutions: toolTasks.length,
+          successfulExecutions: toolTasks.filter(t => t.status === 'completed').length,
+          failedExecutions: toolTasks.filter(t => t.status === 'error').length,
+          averageExecutionTime: toolTasks.length > 0
+            ? toolTasks.reduce((sum, t) => sum + t.elapsed, 0) / toolTasks.length
+            : 0,
+          successRate: toolTasks.length > 0
+            ? toolTasks.filter(t => t.status === 'completed').length / toolTasks.length
+            : 0
+        };
+        sendJson(res, { stats });
+      } else {
+        // 返回所有工具的统计
+        const allStats: Record<string, any> = {};
+        const allTools = ['smart_search', 'duckduckgo_search', 'tavily_search', 'fetch_web', 'execute_command'];
+        for (const tid of allTools) {
+          const tTasks = Array.from(context.dashboardState.tasks.values()).filter(t => t.prompt.includes(`tool:${tid}`));
+          allStats[tid] = {
+            totalExecutions: tTasks.length,
+            successfulExecutions: tTasks.filter(t => t.status === 'completed').length,
+            failedExecutions: tTasks.filter(t => t.status === 'error').length
+          };
+        }
+        sendJson(res, { stats: allStats });
+      }
+    } catch (error) {
+      logger.error(`Failed to get tool stats: ${error}`);
+      sendJson(res, { error: '获取工具统计失败' }, 500);
+    }
+  });
+
+  // ==================== 模式管理 API ====================
+
+  /**
+   * GET /api/mode - 获取当前运行模式
+   */
+  handlers.set('GET:/api/mode', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const currentMode = context.currentMode || 'simple';
+      sendJson(res, {
+        mode: currentMode,
+        modes: {
+          cli: {
+            id: 'cli',
+            name: 'CLI 模式',
+            description: '使用 Claude Code CLI 处理复杂任务',
+            features: ['完整 Claude Code 功能', 'IDE 集成', '代码审查', '高级调试']
+          },
+          simple: {
+            id: 'simple',
+            name: 'Simple 模式',
+            description: '单 Agent + 工具层模式，快速响应',
+            features: ['技能驱动', '工具层调用', '轻量快速', '统一管理']
+          }
+        }
+      });
+    } catch (error) {
+      logger.error(`Failed to get mode: ${error}`);
+      sendJson(res, { error: '获取模式失败' }, 500);
+    }
+  });
+
+  /**
+   * PUT /api/mode - 切换运行模式
+   */
+  handlers.set('PUT:/api/mode', async (req, res) => {
+    if (req.method !== 'PUT') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { mode } = await getBody(req);
+
+      if (!mode || !['cli', 'simple'].includes(mode)) {
+        sendJson(res, { error: '无效的模式，必须是 cli 或 simple' }, 400);
+        return;
+      }
+
+      // 更新配置文件
+      const configPath = resolve(process.cwd(), 'config.json');
+      const currentConfig = existsSync(configPath)
+        ? JSON.parse(readFileSync(configPath, 'utf-8'))
+        : {};
+
+      if (!currentConfig.agent) {
+        currentConfig.agent = {};
+      }
+
+      // 更新模式设置
+      currentConfig.agent.mode = mode;
+      currentConfig.agent.cliMode = (mode === 'cli');
+
+      writeFileSync(configPath, JSON.stringify(currentConfig, null, 2), 'utf-8');
+
+      // 更新上下文中的模式
+      if (context) {
+        context.currentMode = mode;
+      }
+
+      logger.info(`[API] 模式已切换到: ${mode}`);
+      sendJson(res, {
+        success: true,
+        mode,
+        message: `模式已切换到 ${mode === 'cli' ? 'CLI' : 'Simple'} 模式，重启服务后生效`
+      });
+    } catch (error) {
+      logger.error(`Failed to switch mode: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '切换模式失败' }, 500);
     }
   });
 

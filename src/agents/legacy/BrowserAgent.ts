@@ -5,17 +5,17 @@
  * 增强版：支持智能重试、镜像访问、中国大陆网络适配
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IAgent,
   AgentConfig,
   AgentMessage,
   AgentContext,
   AgentResponse,
-} from './base/Agent.js';
-import { AgentCapability } from './base/Agent.js';
-import { quickFetch, type SmartFetchResult } from './tools/network_tool.js';
-import { diagnoseNetworkError } from '../utils/network-helper.js';
+} from '../base/Agent.js';
+import { AgentCapability } from '../base/Agent.js';
+import { quickFetch, type SmartFetchResult } from '../tools/network_tool.js';
+import { diagnoseNetworkError } from '../../utils/network-helper.js';
 
 /**
  * Browser Agent 配置选项

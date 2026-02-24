@@ -9,10 +9,12 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "declaration": true,
     "noImplicitAny": false,
     "strictNullChecks": false,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": []
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
