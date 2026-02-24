@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
-![Code](https://img.shields.io/badge/code-29k%20lines-orange.svg)
+![Code](https://img.shields.io/badge/code-29.5k%20lines-orange.svg)
 
 ---
 
@@ -60,9 +60,9 @@
 
 | 分类 | 文件数 | 代码行数 |
 |------|-------|---------|
-| **后端** (TypeScript) | 83 | **~26,000** |
+| **后端** (TypeScript) | 83 | **~25,500** |
 | **前端** (HTML/CSS/JS) | 15 | ~4,000 |
-| **总计** | **98** | **~30,000** |
+| **总计** | **98** | **~29,500** |
 
 **核心模块**:
 - LLM Provider 统一接口 (OpenAI/Anthropic/GLM)
