@@ -409,7 +409,7 @@ export class SimpleCoordinatorAgent implements IAgent {
 - 保持简洁明了的回答
 - 遇到不确定的信息时，先搜索再回答`,
       rules: [],
-      availableTools: ['smart_search', 'fetch_web', 'llm'], // 默认可用工具
+      availableTools: ['smart_search', 'fetch_web'], // 默认可用工具
       examples: [],
     };
   }
@@ -1027,8 +1027,9 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
             systemPrompt += `- \`${tool.name}\`: ${tool.description}\n`;
             availableToolNames.push(tool.name);
 
-            // 添加到 Function Calling tools
+            // 为所有可用工具添加 Function Calling 定义
             if (tool.name === 'smart_search' || tool.name === 'tavily_search') {
+              // 搜索工具
               tools.push({
                 type: 'function',
                 function: {
@@ -1050,12 +1051,33 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
                   },
                 },
               });
+            } else if (tool.name === 'fetch_web') {
+              // 网页抓取工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: '要抓取的网页 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
             }
+          } else {
+            logger.warn(`[SimpleCoordinator] 工具 ${toolName} 未找到`);
           }
         }
       }
 
-      logger.info(`[SimpleCoordinator] 使用 GLM-4.7 文本模型 (工具: ${availableToolNames.join(', ') || '无'})`);
+      logger.info(`[SimpleCoordinator] 使用 GLM-4.7 文本模型 (工具: ${availableToolNames.join(', ') || '无'}, FC工具: ${tools.map(t => t.function.name).join(', ') || '无'})`);
 
       // 第一轮调用
       let messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string; name?: string }> = [
