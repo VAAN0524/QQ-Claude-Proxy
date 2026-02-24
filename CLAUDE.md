@@ -4,64 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-**QQ-Claude-Proxy** 是通过 QQ 远程控制本地 Claude Code CLI 的代理系统。用户通过手机 QQ 发送消息，消息经过 QQ 开放平台传送到本地服务器，本地服务器调用 `claude` CLI 执行命令，然后将结果返回给 QQ。
+**QQ-Claude-Proxy** 是通过 QQ 远程控制本地 Claude Code CLI 的代理系统，支持多 Agent 协作、人格设定、分层记忆等高级功能。
 
 ## 核心架构
-
-项目采用**三层架构**，通过 WebSocket Gateway 实现组件解耦：
 
 ```
 QQ Bot → QQ Gateway ──────┐
                           │
                     Internal Gateway (WS, port 18789)
                           │
-                          ├──→ Agent (Claude Code CLI)
-                          └──→ 可扩展其他 Channel
+                          ├──→ GLM Coordinator Agent (团队模式)
+                          │       └──→ 专业 Agents (Code/Browser/Search/Data...)
+                          │
+                          └──→ Claude Code CLI (CLI 模式)
 ```
-
-### Gateway 模块 (`src/gateway/`)
-
-Gateway 是核心消息总线，支持两种消息协议：
-
-- **Request/Response**: RPC 风格的方法调用
-- **Event**: Pub/Sub 风格的事件发布
-
-关键文件：
-- [server.ts](src/gateway/server.ts) - WebSocket 服务器，监听 18789 端口
-- [protocol.ts](src/gateway/protocol.ts) - 消息协议定义 (Request, Response, Event)
-- [router.ts](src/gateway/router.ts) - 消息路由和方法分发
-- [session.ts](src/gateway/session.ts) - WebSocket 会话管理
-
-Gateway 内置方法：
-- `ping` - 健康检查
-- `session.info` - 获取会话信息
-- `channel.subscribe/unsubscribe` - 订阅/取消频道
-- `agent.register/unregister` - 注册 Agent
-- `gateway.stats` - 获取统计信息
-
-### Channel 模块 (`src/channels/`)
-
-Channel 是外部平台的适配器层。当前只有 QQ Bot 实现：
-
-- [qqbot/gateway.ts](src/channels/qqbot/gateway.ts) - 连接 QQ 开放平台 WebSocket
-- [qqbot/api.ts](src/channels/qqbot/api.ts) - QQ Bot HTTP API (发送消息、上传文件)
-- [qqbot/index.ts](src/channels/qqbot/index.ts) - Channel 主入口，将 QQ 消息转发到 Gateway
-
-添加新 Channel 的步骤：
-1. 在 `src/channels/` 下创建新目录
-2. 实现类似 QQ Bot 的接口（WebSocket + HTTP API）
-3. 在 Gateway Router 注册事件处理器
-
-### Agent 模块 (`src/agent/`)
-
-Agent 负责与 Claude Code CLI 交互：
-
-- [index.ts](src/agent/index.ts) - Agent 主入口，处理用户消息和权限检查
-- [cli-session-manager.ts](src/agent/cli-session-manager.ts) - **关键组件**：管理长期运行的 CLI 会话，使用队列机制确保同一用户的请求串行执行
-- [conversation-history.ts](src/agent/conversation-history.ts) - 对话历史备份管理
-- [file-storage.ts](src/agent/file-storage.ts) - 文件下载和存储管理
-
-**CLI 会话管理**：每个用户/群组有独立的会话键（`user_{userId}` 或 `group_{groupId}`），同一会话的请求通过 Promise 链串行执行，避免 session ID 冲突。
 
 ## 开发命令
 
@@ -84,87 +40,156 @@ npm run test:watch    # 监视模式
 npm run test:coverage # 覆盖率报告
 ```
 
-## 配置管理
+## Agent 系统（核心）
 
-配置加载优先级：`.env` 环境变量 > `config.json` 文件 > `config/default.json` 默认值
+### 多 Agent 架构
 
-关键配置项（[config/schema.ts](src/config/schema.ts)）：
+项目支持**两种模式**：
 
-```json
-{
-  "gateway": { "port": 18789, "host": "127.0.0.1" },
-  "channels": {
-    "qqbot": {
-      "appId": "从 QQ 开放平台获取",
-      "clientSecret": "从 QQ 开放平台获取",
-      "sandbox": true  // 沙箱模式
-    }
-  },
-  "agent": {
-    "allowedUsers": [],  // 用户白名单（OpenID 列表）
-    "timeout": 300000
-  },
-  "storage": {
-    "downloadPath": "./workspace",  // Claude 工作目录
-    "uploadPath": "./uploads"       // 用户上传文件存储
-  }
-}
-```
+| 模式 | 协调器 | 子 Agents | 适用场景 |
+|------|--------|-----------|----------|
+| **CLI 模式** | - | Claude Code CLI | 复杂代码任务 |
+| **团队模式** | GLMCoordinatorAgent | Code/Browser/Shell/WebSearch/Data | 多步骤协作任务 |
 
-环境变量（[.env.example](.env.example)）：
-- `QQ_BOT_APP_ID` - QQ Bot AppID
-- `QQ_BOT_SECRET` - QQ Bot AppSecret
-- `ALLOWED_USERS` - 逗号分隔的 OpenID 列表
+### Agent 人格设定系统
 
-## 工作流程
+**位置**: [src/agents/personas.ts](src/agents/personas.ts)
 
-### 消息处理流程
+每个 Agent 都有人格设定，包含：
+- **角色定位**: Agent 的身份和职责
+- **核心职责**: 具体负责什么
+- **性格特点**: 行为风格（简洁/详细/友好/专业）
+- **工作原则**: 决策准则
+- **协作方式**: 与其他 Agent 配合
 
-1. QQ 用户发送消息 → QQ 开放平台
-2. QQ Gateway 接收 WebSocket 事件
-3. QQ Bot Channel 解析消息，调用 `gateway.handleChannelEvent()`
-4. Gateway Router 分发到 `qqbot` channel 的 event handler
-5. Agent 处理消息：
-   - 权限检查（`allowedUsers`）
-   - 附件处理（下载到 `uploads/`）
-   - 调用 Claude Code CLI
-6. Agent 返回响应 → QQ Bot Channel 发送回复
+**三种应用方案**：
+1. **System Prompt 注入**: 将人格设定转换为 LLM System Prompt
+2. **基类扩展**: PersonaAgent 提供人格默认实现
+3. **通信风格**: Agent 间通信时传递人格标签
 
-### 文件处理
+### 已注册 Agents
 
-- **接收文件**：用户发送文件 → 自动下载到 `uploads/` → 路径传给 Claude
-- **发送文件**：Claude 生成文件 → 自动检测新文件 → 用户请求"把 xxx 发给我" → 发送回 QQ
-- **新文件检测**：扫描最近 2 分钟内修改的文件（[agent/index.ts:416-446](src/agent/index.ts#L416-L446)）
+| Agent ID | 名称 | 能力 |
+|----------|------|------|
+| `glm-coordinator` | GLM 模型协调器 | 任务分发、队列管理、成本控制 |
+| `coordinator` | 任务协调器 | 意图分析、策略规划、上下文管理 |
+| `code-agent` | 代码专家 | Code, Analyze, Refactoring |
+| `browser-agent` | 浏览器自动化 | Browser, Automation, Testing |
+| `shell-agent` | 命令行专家 | Shell, System, File |
+| `web-search-agent` | 网络搜索 | Web, Search, Info Retrieval |
+| `tavily-search` | 深度搜索分析师 | Web, Deep Research, Vertical Search |
+| `data-analysis-agent` | 数据分析专家 | Analysis, Data, Statistics |
+| `vision-agent` | 视觉理解专家 | Vision, OCR, Image Analysis |
+| `code-refactor-agent` | 代码重构专家 | Code, Refactoring, Quality |
+| `skill-manager` | 技能管理员 | Skill Management, Installation |
 
-### 会话管理
+**查看人格设定**: `node scripts/list-agents.ts`
 
-CLI 使用 `--continue` 参数继续最近的对话，而不是 `--session-id`（避免锁定冲突）。每个用户请求启动新的 CLI 进程，但通过 `--continue` 保持上下文连续性。
+## 分层记忆系统
+
+**位置**: [src/agents/memory/](src/agents/memory/)
+
+### L0/L1/L2 三层架构
+
+| 层级 | 用途 | 保留时间 | 访问范围 |
+|------|------|----------|----------|
+| **L0** | 原始对话 | 7 天 | 仅当前 Agent |
+| **L1** | 提炼摘要 | 30 天 | Agent 间共享 |
+| **L2** | 知识沉淀 | 90 天 | 全局共享 |
+
+**配置**: 在 `src/index.ts` 中初始化 `HierarchicalMemoryService`
+
+## 技能管理系统
+
+**位置**: [src/agents/SkillLoader.ts](src/agents/SkillLoader.ts), [src/agents/SkillInstaller.ts](src/agents/SkillInstaller.ts)
+
+- **渐进式加载**: 只扫描 SKILL.md 元数据，按需加载完整代码
+- **安装源**: 本地、GitHub、GitLab
+- **管理接口**: SkillManagerAgent 提供安装/卸载/搜索/启用/禁用
+
+## LLM Provider 系统
+
+**位置**: [src/llm/providers.ts](src/llm/providers.ts)
+
+统一接口支持多提供商：
+- **OpenAI**: GPT-4 系列
+- **Anthropic**: Claude 系列
+- **GLM**: 智谱 AI GLM-4.7
 
 ## 重要约定
 
-1. **ES Modules**: 项目使用 `"type": "module"`，所有 import 必须包含 `.js` 扩展名
-2. **日志**: 使用 `src/utils/logger.ts` 的 pino logger，支持结构化日志
-3. **类型安全**: TypeScript 配置较宽松（`strict: false`），但核心类型定义完整
-4. **文件路径安全**: 用户输入的文件名必须经过 `sanitizeFileName()` 清理，防止路径穿越攻击
-5. **消息分段**: QQ 消息长度限制约 2000 字符，Channel 会自动分段发送长消息
+### ES Modules
+- 项目使用 `"type": "module"`
+- 所有 import 必须包含 `.js` 扩展名
+- 动态 import: `await import('./agents/CodeAgent.js')`
+
+### 日志
+- 使用 `src/utils/logger.ts` 的 pino logger
+- 结构化日志：`logger.info({ context }, 'message')`
+
+### 配置加载
+- 优先级: `.env` > `config.json` > `config/default.json`
+- 配置 Schema: [src/config/schema.ts](src/config/schema.ts)
+
+### 文件路径安全
+- 用户输入文件名必须经过 `sanitizeFileName()` 清理
+- 防止路径穿越攻击
+
+### Agent 工具分类
+
+**位置**: [src/agents/tools/](src/agents/tools/)
+
+- **agent-tools**: Agent 调用相关
+- **file-tools**: 文件操作相关
+- **learning-tools**: 学习模块相关
 
 ## 扩展开发
 
-### 添加新的 Agent
+### 添加新 Agent
 
-在 [src/index.ts](src/index.ts#L117) 的 `router.onEvent()` 中添加新的 channel 处理逻辑。
+1. 创建 `src/agents/NewAgent.ts`，实现 `IAgent` 接口
+2. 在 `src/index.ts` 的 Agent 注册部分添加初始化代码
+3. 在 `src/agents/personas.ts` 中添加人格设定
+4. 在 `src/agents/AgentRegistryWithPersonas.ts` 中注册元数据
 
-### 添加新的 Channel
+### 添加新技能
+
+1. 在 `skills/` 目录创建技能文件夹
+2. 创建 `SKILL.md` 元数据文件
+3. 通过 Dashboard 或 QQ 命令安装
+
+### 添加新 Channel
 
 1. 创建 `src/channels/{name}/` 目录
-2. 实现 Gateway 连接和 HTTP API
-3. 在 [src/index.ts](src/index.ts) 中初始化并注册到 Gateway
-4. 在 Gateway Router 注册 channel event handler
+2. 实现 Gateway WebSocket 连接
+3. 实现 HTTP API（发送消息）
+4. 在 Gateway Router 注册事件处理器
 
-### 添加新的快捷命令
+## Dashboard 功能
 
-在 [agent/index.ts](src/agent/index.ts) 中添加新的 `isXxxRequest()` 检测方法和 `handleXxx()` 处理方法。现有命令：
-- `列出文件` - 列出工作区和存储区文件
-- `把 xxx 文件发给我` - 发送指定文件
-- `清空历史` - 清空对话历史
-- `新任务` - 创建新任务（重置 CLI 会话）
+访问 **http://localhost:8080**
+
+- **监控** (index.html): 实时任务进度、工具状态
+- **Agents** (agents.html): Agent 管理、状态查看
+- **Skills** (skills.html): 技能管理（安装/卸载/启用/禁用）
+- **Tasks** (tasks.html): 定时任务管理
+- **Config** (config.html): 系统配置
+- **Logs** (logs.html): 日志查看
+
+## 端口说明
+
+| 端口 | 服务 |
+|:----:|------|
+| 18789 | Gateway WebSocket (内部通信) |
+| 8080 | Dashboard HTTP |
+
+## 环境变量
+
+| 变量 | 说明 | 必需 |
+|------|------|------|
+| `QQ_BOT_APP_ID` | QQ 机器人 AppID | 是 |
+| `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
+| `ALLOWED_USERS` | 用户白名单 | 否 |
+| `GLM_API_KEY` | GLM API Key（团队模式） | 否 |
+| `ANTHROPIC_API_KEY` | Anthropic API Key | 否 |
+| `TAVILY_API_KEY` | Tavily Search API Key | 否 |
