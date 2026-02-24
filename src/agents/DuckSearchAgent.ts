@@ -4,6 +4,8 @@
  * 基于 ducksearch npm 包，提供：
  * - DuckDuckGo 网络搜索
  * - 网页内容提取
+ *
+ * 注意：ducksearch 包在模块级别执行 program.parse()，所以必须延迟导入
  */
 
 import { logger } from '../utils/logger.js';
@@ -16,14 +18,35 @@ import type {
 } from './base/Agent.js';
 import { AgentCapability } from './base/Agent.js';
 
-// 导入 ducksearch
-import { duckDuckGoSearch, fetchContent } from 'ducksearch';
-
 interface SearchResult {
   title: string;
   link: string;
   snippet: string;
   position: number;
+}
+
+// 延迟加载 ducksearch，避免模块级别的 program.parse()
+let duckDuckGoSearch: ((query: string, maxResults?: number) => Promise<SearchResult[]>) | null = null;
+let fetchContent: ((url: string) => Promise<string>) | null = null;
+
+/**
+ * 初始化 ducksearch 函数（延迟加载）
+ */
+async function initDuckSearch() {
+  if (duckDuckGoSearch && fetchContent) {
+    return; // 已初始化
+  }
+
+  try {
+    // 动态导入，避免模块级别的副作用
+    const ducksearch = await import('ducksearch');
+    duckDuckGoSearch = ducksearch.duckDuckGoSearch;
+    fetchContent = ducksearch.fetchContent;
+    logger.info('[DuckSearchAgent] ducksearch 函数已加载');
+  } catch (error) {
+    logger.error(`[DuckSearchAgent] 加载 ducksearch 失败: ${error}`);
+    throw new Error('ducksearch 包加载失败');
+  }
 }
 
 /**
@@ -111,6 +134,12 @@ export class DuckSearchAgent implements IAgent {
    */
   private async handleSearch(query: string): Promise<AgentResponse> {
     try {
+      // 确保已初始化
+      await initDuckSearch();
+      if (!duckDuckGoSearch) {
+        throw new Error('duckDuckGoSearch 未初始化');
+      }
+
       const results = await duckDuckGoSearch(query, 5);
 
       if (results.length === 0) {
@@ -144,6 +173,12 @@ export class DuckSearchAgent implements IAgent {
    */
   private async handleFetch(url: string): Promise<AgentResponse> {
     try {
+      // 确保已初始化
+      await initDuckSearch();
+      if (!fetchContent) {
+        throw new Error('fetchContent 未初始化');
+      }
+
       const content = await fetchContent(url);
 
       let output = `📥 已获取: ${url}\n\n`;
