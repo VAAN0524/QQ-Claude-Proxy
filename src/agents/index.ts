@@ -36,6 +36,8 @@ export { WebSearchAgent } from './WebSearchAgent.js';
 export { DataAnalysisAgent } from './DataAnalysisAgent.js';
 export { VisionAgent } from './VisionAgent.js';
 export { CodeRefactorAgent } from './CodeRefactorAgent.js';
+export { SkillManagerAgent } from './SkillManagerAgent.js';
+export { TavilySearchAgent } from './TavilySearchAgent.js';
 
 // 主协调 Agent
 export { CoordinatorAgent } from './CoordinatorAgent.js';
@@ -44,6 +46,14 @@ export type { CoordinatorAgentOptions } from './CoordinatorAgent.js';
 // GLM 协调 Agent
 export { GLMCoordinatorAgent } from './GLMCoordinatorAgent.js';
 export type { GLMCoordinatorAgentOptions } from './GLMCoordinatorAgent.js';
+
+// 真正的团队协调器
+export { TeamCoordinator } from './TeamCoordinator.js';
+export type { SubAgentConfig, TeamTask, TeamCoordinatorOptions } from './TeamCoordinator.js';
+
+// 技能管理器
+export { SkillManager } from '../skills/SkillManager.js';
+export type { SkillMetadata as SkillManagerMetadata } from '../skills/SkillManager.js';
 
 // 工具定义（简化 API）
 export * from './tools/index.js';

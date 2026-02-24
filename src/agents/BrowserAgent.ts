@@ -1,7 +1,7 @@
 /**
  * Browser Agent - 网页自动化操作
  *
- * 使用 Playwright 进行网页访问、截图、表单填充等操作
+ * 使用 fetch 和 MCP 工具进行网页访问、内容提取
  */
 
 import { logger } from '../utils/logger.js';
@@ -24,6 +24,15 @@ export interface BrowserAgentOptions {
   timeout?: number;
   /** 用户代理 */
   userAgent?: string;
+}
+
+/**
+ * 网页内容提取结果
+ */
+interface WebContent {
+  title?: string;
+  content: string;
+  url: string;
 }
 
 /**
@@ -57,7 +66,7 @@ export class BrowserAgent implements IAgent {
   constructor(options: BrowserAgentOptions = {}) {
     this.headless = options.headless !== false;
     this.pageTimeout = options.timeout || 30000;
-    this.userAgent = options.userAgent || '';
+    this.userAgent = options.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
     logger.info(`[BrowserAgent] 初始化完成 (无头: ${this.headless})`);
   }
 
@@ -117,35 +126,155 @@ export class BrowserAgent implements IAgent {
   }
 
   /**
-   * 处理 URL 访问
+   * 处理 URL 访问 - 实际抓取网页内容
    */
   private async handleUrlVisit(url: string, context: AgentContext): Promise<AgentResponse> {
     logger.info(`[BrowserAgent] 访问 URL: ${url}`);
 
-    // 检查是否有 Playwright MCP 可用
-    // 这里简化实现，返回说明信息
-    const helpMessage = `
-🤖 [Browser Agent]
+    try {
+      // 尝试使用多种方法获取网页内容
+      const webContent = await this.fetchWebContent(url);
 
-检测到 URL: ${url}
+      // 格式化输出
+      let output = `🤖 [Browser Agent]\n\n`;
+      output += `📄 已访问: ${url}\n\n`;
 
-当前为简化实现版本。要完整使用网页自动化功能，请：
+      if (webContent.title) {
+        output += `**标题**: ${webContent.title}\n\n`;
+      }
 
-1. 发送 /claude 前缀使用 Claude Code Agent
-2. 或安装配置 Playwright MCP 插件
+      output += `**内容摘要**:\n\n${webContent.content}\n`;
 
-支持的操作：
-- 访问网页并截图
-- 填充表单
-- 点击元素
-- 提取页面信息
-- 执行 JavaScript
-`;
+      // 限制输出长度
+      const maxLength = 2000;
+      if (output.length > maxLength) {
+        output = output.substring(0, maxLength) + '\n... (内容过长已截断)';
+      }
+
+      return {
+        content: output.trim(),
+        agentId: this.id,
+      };
+    } catch (error) {
+      logger.error(`[BrowserAgent] 获取网页内容失败: ${error}`);
+      return {
+        content: `❌ [Browser Agent] 无法访问网页: ${url}\n错误: ${error instanceof Error ? error.message : String(error)}`,
+        agentId: this.id,
+      };
+    }
+  }
+
+  /**
+   * 抓取网页内容
+   */
+  private async fetchWebContent(url: string): Promise<WebContent> {
+    // 验证 URL 格式
+    try {
+      new URL(url);
+    } catch {
+      throw new Error('无效的 URL 格式');
+    }
+
+    // 使用 fetch 获取网页内容
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': this.userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+      signal: AbortSignal.timeout(this.pageTimeout),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+
+    // 提取标题
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+
+    // 移除 script 和 style 标签
+    let cleanHtml = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '');
+
+    // 提取主要内容
+    let content = this.extractMainContent(cleanHtml);
+
+    // 如果提取失败，使用备用方法
+    if (!content || content.length < 50) {
+      content = this.extractTextFallback(cleanHtml);
+    }
+
+    // 清理内容
+    content = content
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s*\n/g, '\n\n')
+      .trim();
+
+    // 限制内容长度
+    const maxLength = 1500;
+    if (content.length > maxLength) {
+      content = content.substring(0, maxLength) + '...';
+    }
 
     return {
-      content: helpMessage.trim(),
-      agentId: this.id,
+      title,
+      content,
+      url,
     };
+  }
+
+  /**
+   * 提取主要内容 - 优先提取 article、main、body 等标签
+   */
+  private extractMainContent(html: string): string {
+    // 尝试按优先级提取内容
+    const patterns = [
+      /<article[^>]*>([\s\S]*?)<\/article>/i,
+      /<main[^>]*>([\s\S]*?)<\/main>/i,
+      /<body[^>]*>([\s\S]*?)<\/body>/i,
+      /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class="[^"]*main[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match && match[1] && match[1].length > 100) {
+        return this.stripHtmlTags(match[1]);
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * 备用文本提取方法
+   */
+  private extractTextFallback(html: string): string {
+    // 移除所有 HTML 标签
+    const text = this.stripHtmlTags(html);
+    return text;
+  }
+
+  /**
+   * 移除 HTML 标签，保留文本
+   */
+  private stripHtmlTags(html: string): string {
+    return html
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   /**
@@ -158,14 +287,15 @@ export class BrowserAgent implements IAgent {
 我是网页自动化助手，当前支持以下功能：
 
 **基本操作**:
-- 直接发送 URL，我会访问并截图
-- "截图 http://example.com"
-- "填充表单 http://example.com"
-- "点击元素 http://example.com button"
+- 直接发送 URL，我会访问并提取内容
+- "访问 http://example.com"
+- "打开网页 https://example.com"
 
-**注意**: 当前为简化实现版本。完整功能需要：
-1. 配置 Playwright MCP 插件
-2. 或使用 /claude 前缀调用完整 Claude Code Agent
+**支持的网站**:
+- 大部分静态网页
+- GitHub 仓库页面
+- 博客和新闻网站
+- 技术文档网站
 
 你的消息: "${content.substring(0, 100)}"
 `;

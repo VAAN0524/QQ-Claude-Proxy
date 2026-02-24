@@ -1130,13 +1130,17 @@ export function createExtendedApiHandlers(context: ExtendedApiHandlerContext): M
       return;
     }
 
+    logger.info('[API] GET /api/skills 请求');
+
     if (!context.skillLoader) {
+      logger.error('[API] SkillLoader 未初始化');
       sendJson(res, { error: 'SkillLoader 未初始化' }, 503);
       return;
     }
 
     try {
       const metadata = context.skillLoader.getAllMetadata();
+      logger.info(`[API] 获取到 ${metadata.size} 个技能`);
       const skills = Array.from(metadata.values()).map((skill: any) => ({
         name: skill.name,
         path: skill.path,
@@ -1146,6 +1150,7 @@ export function createExtendedApiHandlers(context: ExtendedApiHandlerContext): M
         enabled: skill.enabled ?? false,
       }));
 
+      logger.info(`[API] 返回 ${skills.length} 个技能`);
       sendJson(res, { skills, total: skills.length });
     } catch (error) {
       logger.error(`Failed to get skills: ${error}`);

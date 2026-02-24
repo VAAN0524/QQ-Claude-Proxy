@@ -1022,6 +1022,58 @@ export class GLMCoordinatorAgent implements IAgent {
   }
 
   /**
+   * 执行网络搜索（使用 Zhipu API）
+   */
+  private async performWebSearch(query: string): Promise<string> {
+    const apiKey = process.env.GLM_API_KEY;
+    if (!apiKey) {
+      throw new Error('GLM_API_KEY not set');
+    }
+
+    const baseUrl = process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'glm-4.7',
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个搜索助手。请根据用户的问题进行网络搜索，提供准确、详细的答案。如果搜索到相关信息，请总结要点并提供来源。'
+          },
+          {
+            role: 'user',
+            content: query
+          }
+        ],
+        tools: [
+          {
+            type: 'web_search',
+            web_search: {
+              enable: true,
+              search_result: true
+            }
+          }
+        ],
+        max_tokens: 4096,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '搜索失败，未获取到结果';
+  }
+
+  /**
    * 构建系统提示词 - 使用 SKILL.md 技能系统
    */
   private async buildSystemPrompt(context: AgentContext, message?: AgentMessage): Promise<string> {
@@ -1315,6 +1367,25 @@ ${memoryContext}` : ''}`;
         },
       });
     }
+
+    // Web Search Tool - 使用 Zhipu API 直接搜索（推荐使用）
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: '网络搜索工具：使用 Zhipu AI 搜索引擎进行实时网络搜索，获取最新信息',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: '搜索关键词或问题',
+            },
+          },
+          required: ['query'],
+        },
+      },
+    });
 
     // Data Analysis Agent
     if (this.subAgents.has('data')) {
@@ -2582,6 +2653,84 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
             toolCallId: toolCall.id,
             result: `执行失败: ${error instanceof Error ? error.message : String(error)}`,
             agentId: 'glm-coordinator',
+          });
+        }
+        continue;
+      }
+
+      // 处理 web_search 工具（使用 Zhipu API 直接搜索）
+      if (toolCall.function.name === 'web_search') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const query = args.query as string;
+
+          if (!query) {
+            results.push({
+              toolCallId: toolCall.id,
+              result: `错误：缺少必需参数 query`,
+              agentId: 'glm-coordinator',
+            });
+            continue;
+          }
+
+          logger.info(`[GLMCoordinatorAgent] 执行网络搜索: "${query}"`);
+
+          // 直接调用 Zhipu API 进行网络搜索
+          const searchResult = await this.performWebSearch(query);
+
+          results.push({
+            toolCallId: toolCall.id,
+            result: `[网络搜索结果]\n\n${searchResult}`,
+            agentId: 'glm-coordinator',
+          });
+
+          logger.info(`[GLMCoordinatorAgent] 网络搜索完成`);
+
+        } catch (error) {
+          logger.error(`[GLMCoordinatorAgent] web_search 工具执行失败: ${error}`);
+          results.push({
+            toolCallId: toolCall.id,
+            result: `搜索失败: ${error instanceof Error ? error.message : String(error)}`,
+            agentId: 'glm-coordinator',
+          });
+        }
+        continue;
+      }
+
+      // 处理 run_websearch_agent 工具（兼容旧版，使用真实搜索）
+      if (toolCall.function.name === 'run_websearch_agent') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const query = args.query as string;
+
+          if (!query) {
+            results.push({
+              toolCallId: toolCall.id,
+              result: `错误：缺少必需参数 query`,
+              agentId: 'glm-coordinator',
+            });
+            continue;
+          }
+
+          logger.info(`[GLMCoordinatorAgent] 执行网络搜索 (run_websearch_agent): "${query}"`);
+
+          // 直接调用 Zhipu API 进行网络搜索
+          const searchResult = await this.performWebSearch(query);
+
+          results.push({
+            toolCallId: toolCall.id,
+            result: `[网络搜索结果]\n\n${searchResult}`,
+            agentId: 'websearch',
+          });
+
+          logger.info(`[GLMCoordinatorAgent] 网络搜索完成`);
+
+        } catch (error) {
+          logger.error(`[GLMCoordinatorAgent] run_websearch_agent 工具执行失败: ${error}`);
+          results.push({
+            toolCallId: toolCall.id,
+            result: `搜索失败: ${error instanceof Error ? error.message : String(error)}`,
+            agentId: 'websearch',
           });
         }
         continue;

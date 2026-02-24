@@ -61,6 +61,8 @@ export interface AgentSystemConfig {
   vision?: AgentInstanceConfig;
   /** Claude Agent 配置 (即现有的 ClaudeCodeAgent) */
   claude: AgentInstanceConfig;
+  /** Code Refactor Agent 配置 */
+  refactor?: AgentInstanceConfig;
   /** Coordinator Agent 配置 */
   coordinator: CoordinatorConfig;
 }
@@ -164,7 +166,7 @@ export const defaultConfig: Config = {
     smartRouting: true,
     useCoordinator: true,  // 默认启用 Coordinator Agent
     code: {
-      enabled: true,
+      enabled: false,  // 禁用 CodeAgent，使用 GLMCoordinatorAgent 代替
       priority: 10,
       timeout: 60000,
       options: {

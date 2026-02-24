@@ -144,7 +144,13 @@ export class HttpServer {
       pathname = '/index.html';
     }
 
-    const filePath = resolve(this.staticPath, pathname.substring(1));
+    // Remove /dashboard prefix if present (staticPath already points to dashboard directory)
+    let requestPath = pathname.substring(1);
+    if (requestPath.startsWith('dashboard/')) {
+      requestPath = requestPath.substring(8); // Remove 'dashboard/'
+    }
+
+    const filePath = resolve(this.staticPath, requestPath);
 
     // Security check - prevent directory traversal
     if (!filePath.startsWith(resolve(this.staticPath))) {

@@ -31,6 +31,7 @@ import {
   CoordinatorAgent,
   GLMCoordinatorAgent,
   CodeRefactorAgent,
+  SkillManagerAgent,
   SharedContext,
   MemoryService,
   RAGService,
@@ -48,83 +49,74 @@ const __dirname = dirname(__filename);
  * 等待新进程启动完成后再退出当前进程
  */
 async function selfRestart(): Promise<void> {
-  const args = process.argv.slice(1);
-
-  // 检测运行环境
-  const isDev = process.env.TSX_WATCH !== undefined || args.some(a => a.includes('tsx'));
-
   logger.info('[重启] 准备启动新进程...');
 
   try {
-    if (isDev) {
-      // 开发模式：使用 tsx watch
-      logger.info('[重启] 开发模式: tsx watch src/index.ts');
-      const child = spawn(process.execPath, ['node_modules/.bin/tsx', 'watch', 'src/index.ts', ...args], {
+    if (process.platform === 'win32') {
+      // Windows: 直接使用现有的 Start.bat 文件
+      const projectDir = process.cwd();
+      const startBat = path.join(projectDir, 'Start.bat');
+
+      // 检查 Start.bat 是否存在
+      if (!fs.existsSync(startBat)) {
+        logger.error('[重启] Start.bat 文件不存在');
+        process.exit(1);
+        return;
+      }
+
+      logger.info('[重启] 使用 Start.bat 启动新窗口');
+
+      // 正确的 Windows start 命令语法：
+      // start "窗口标题" cmd /c 命令
+      // 这会打开一个新窗口执行命令
+      logger.info('[重启] 启动新窗口...');
+
+      const { execSync } = await import('child_process');
+
+      try {
+        // 使用 start 命令打开新窗口运行 Start.bat
+        // 新窗口会独立运行，start 命令立即返回
+        execSync('start cmd /c Start.bat', {
+          cwd: projectDir,
+          stdio: 'inherit',
+        });
+        logger.info('[重启] 新窗口已启动');
+      } catch (e) {
+        logger.info('[重启] 启动命令执行完成');
+      }
+
+      // 退出当前窗口
+      logger.info('[重启] 当前窗口关闭');
+      process.exit(0);
+
+    } else {
+      // Unix/Linux/macOS: 使用 stdio: 'inherit' 实现无缝重启
+      const child = spawn(process.execPath, [
+        'node_modules/.bin/tsx',
+        'watch',
+        'src/index.ts'
+      ], {
         stdio: 'inherit',
         cwd: process.cwd(),
         env: { ...process.env, TSX_WATCH: '1' },
-        // 不使用 detached，保持父子关系
+        detached: true,
       });
 
-      // 等待进程启动
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('进程启动超时')), 10000);
-
-        child.once('spawn', () => {
-          clearTimeout(timeout);
-          logger.info(`[重启] 新进程已启动 (PID: ${child.pid})`);
-          resolve();
-        });
-
-        child.once('error', (err) => {
-          clearTimeout(timeout);
-          reject(new Error(`进程启动失败: ${err.message}`));
-        });
+      child.once('spawn', () => {
+        logger.info('[重启] 新进程已启动');
+        child.unref();
+        process.exit(0);
       });
 
-      // 等待新进程初始化（绑定端口等）
-      logger.info('[重启] 等待新进程初始化...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-    } else {
-      // 生产模式：使用编译后的文件
-      logger.info('[重启] 生产模式: node dist/index.js');
-      const child = spawn(process.execPath, ['dist/index.js', ...args], {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-        env: process.env,
-        // 不使用 detached，保持父子关系
+      child.once('error', (err) => {
+        logger.error(`[重启] 启动失败: ${err.message}`);
+        process.exit(1);
       });
-
-      // 等待进程启动
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('进程启动超时')), 10000);
-
-        child.once('spawn', () => {
-          clearTimeout(timeout);
-          logger.info(`[重启] 新进程已启动 (PID: ${child.pid})`);
-          resolve();
-        });
-
-        child.once('error', (err) => {
-          clearTimeout(timeout);
-          reject(new Error(`进程启动失败: ${err.message}`));
-        });
-      });
-
-      // 等待新进程初始化（绑定端口等）
-      logger.info('[重启] 等待新进程初始化...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
     }
-
-    logger.info('[重启] 新进程已就绪，退出当前进程');
-    // 新进程会自动清理旧进程占用的端口（通过 killPort）
-    process.exit(0);
 
   } catch (error) {
     logger.error(`[重启] 重启失败: ${error}`);
-    // 重启失败，保持当前进程运行
-    throw error;
+    process.exit(1);
   }
 }
 
@@ -401,6 +393,9 @@ function detectFileTypeFromBuffer(buffer: Buffer): { ext: string; mime: string; 
 }
 
 async function main(): Promise<void> {
+  // 声明 shutdown 函数变量（在后面定义）
+  let shutdown: (signal: string) => Promise<void>;
+
   // 自动清理可能被占用的端口
   logger.info('[启动] 检查并清理端口占用...');
   await killPort(18789);
@@ -664,11 +659,70 @@ async function main(): Promise<void> {
         backup: (config.agents.refactor.options as any)?.backup ?? true,
         maxFileSize: (config.agents.refactor.options as any)?.maxFileSize ?? 300,
       });
-      await refactorAgent.initialize?.();
+      // CodeRefactorAgent 没有 initialize 方法，直接注册
       agentRegistry.register(refactorAgent);
       logger.info('[Agent 系统] Code Refactor Agent 已启用');
     } catch (error) {
       logger.warn(`[Agent 系统] Code Refactor Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Skill Manager Agent (技能管理专家) - 无需配置，默认启用
+  try {
+    const skillManagerAgent = new SkillManagerAgent();
+    await skillManagerAgent.initialize();
+    agentRegistry.register(skillManagerAgent);
+    logger.info('[Agent 系统] Skill Manager Agent 已启用');
+  } catch (error) {
+    logger.warn(`[Agent 系统] Skill Manager Agent 初始化失败: ${error}`);
+  }
+
+  // Tavily Search Agent (实时网络搜索) - 需要 TAVILY_API_KEY
+  if (process.env.TAVILY_API_KEY) {
+    try {
+      const { TavilySearchAgent } = await import('./agents/TavilySearchAgent.js');
+      const tavilySearchAgent = new TavilySearchAgent();
+      await tavilySearchAgent.initialize();
+      agentRegistry.register(tavilySearchAgent);
+      logger.info('[Agent 系统] Tavily Search Agent 已启用');
+    } catch (error) {
+      logger.warn(`[Agent 系统] Tavily Search Agent 初始化失败: ${error}`);
+    }
+  }
+
+  // Team Coordinator (真正的多进程团队协调器) - 可选功能
+  if ((process.env.ENABLE_TEAM_COORDINATOR === '1') || (config as any).agents?.enableTeam) {
+    try {
+      const { TeamCoordinator } = await import('./agents/TeamCoordinator.js');
+
+      // 定义子 Agent 配置
+      const subAgents: any[] = [];
+
+      // 如果 Code Agent 可用，添加为子 Agent
+      if (agentRegistry.get('code')) {
+        subAgents.push({
+          id: 'code-worker-1',
+          name: 'Code Worker 1',
+          command: process.execPath,
+          args: [path.join(process.cwd(), 'dist', 'workers', 'code-worker.js')],
+          cwd: process.cwd(),
+          restartPolicy: 'on-failure',
+        });
+      }
+
+      if (subAgents.length > 0) {
+        const teamCoordinator = new TeamCoordinator({
+          agents: subAgents,
+          maxConcurrentTasks: 3,
+          autoRestart: true,
+        });
+
+        await teamCoordinator.initialize();
+        agentRegistry.register(teamCoordinator);
+        logger.info('[Agent 系统] Team Coordinator 已启用 (多进程模式)');
+      }
+    } catch (error) {
+      logger.warn(`[Agent 系统] Team Coordinator 初始化失败: ${error}`);
     }
   }
 
@@ -1054,27 +1108,62 @@ async function main(): Promise<void> {
   await qqChannel.start();
 
   // 优雅退出
-  const shutdown = async (signal: string) => {
+  shutdown = async (signal: string) => {
     logger.info(`收到 ${signal} 信号，正在关闭...`);
 
+    // 创建超时保护机制
+    const SHUTDOWN_TIMEOUT = 15000; // 15秒超时
+    let shutdownCompleted = false;
+
+    // 设置超时定时器
+    const timeoutHandle = setTimeout(() => {
+      if (!shutdownCompleted) {
+        logger.error(`关闭超时 (${SHUTDOWN_TIMEOUT}ms)，强制退出`);
+        process.exit(1);
+      }
+    }, SHUTDOWN_TIMEOUT);
+
     try {
-      // 停止调度器
+      // 停止调度器（带超时）
       if (scheduler) {
         logger.info('停止定时任务调度器...');
-        await scheduler.stop();
+        await Promise.race([
+          scheduler.stop(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('调度器停止超时')), 5000)
+          )
+        ]).catch(err => logger.warn(`调度器停止警告: ${err.message}`));
       }
 
-      // 保存最终状态
-      await stateStore.destroy(dashboardState);
+      // 保存最终状态（带超时）
+      await Promise.race([
+        stateStore.destroy(dashboardState),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('状态保存超时')), 3000)
+        )
+      ]).catch(err => logger.warn(`状态保存警告: ${err.message}`));
       logger.info('Dashboard 状态已保存');
 
-      await qqChannel.stop();
-      await gateway.stop();
-      await httpServer.stop();
+      // 停止服务（带超时）
+      await Promise.race([
+        Promise.all([
+          qqChannel.stop(),
+          gateway.stop(),
+          httpServer.stop(),
+        ]),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('服务停止超时')), 5000)
+        )
+      ]).catch(err => logger.warn(`服务停止警告: ${err.message}`));
+
       logger.info('服务已关闭');
     } catch (error) {
       logger.error(`关闭时发生错误: ${error}`);
     }
+
+    // 清除超时定时器
+    clearTimeout(timeoutHandle);
+    shutdownCompleted = true;
 
     // 如果是重启请求，启动新进程后退出
     if (signal === 'RESTART') {

@@ -59,9 +59,30 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
+/**
+ * 安全地为元素添加事件监听器
+ */
+function safeAddEventListener(elementId, event, handler) {
+  const element = document.getElementById(elementId);
+  if (element) {
+    element.addEventListener(event, handler);
+  } else {
+    console.warn(`[safeAddEventListener] Element not found: ${elementId}`);
+  }
+}
+
 async function fetchSkills() {
-  const data = await apiRequest('/skills');
-  return data.skills || [];
+  console.log('[fetchSkills] 开始获取技能列表...');
+  try {
+    const data = await apiRequest('/skills');
+    console.log('[fetchSkills] API 响应:', data);
+    const skills = data.skills || [];
+    console.log('[fetchSkills] 获取到技能数量:', skills.length);
+    return skills;
+  } catch (error) {
+    console.error('[fetchSkills] 获取技能失败:', error);
+    throw error;
+  }
 }
 
 async function fetchSkillDetail(skillName) {
@@ -582,6 +603,11 @@ function setupUploadModal() {
 function setupTabNavigation() {
   const tabBtns = document.querySelectorAll('.tab-btn');
 
+  if (tabBtns.length === 0) {
+    console.warn('[setupTabNavigation] No tab buttons found');
+    return;
+  }
+
   tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const tabName = btn.dataset.tab;
@@ -611,6 +637,11 @@ function setupGithubInstall() {
   const urlInput = document.getElementById('githubUrlInput');
   const installBtn = document.getElementById('installFromGithubBtn');
   const statusEl = document.getElementById('installStatus');
+
+  if (!urlInput || !installBtn || !statusEl) {
+    console.warn('[setupGithubInstall] Required elements not found');
+    return;
+  }
 
   installBtn.addEventListener('click', async () => {
     const url = urlInput.value.trim();
@@ -842,11 +873,15 @@ function getToastIcon(type) {
  * Initialization
  */
 async function init() {
+  console.log('[Skills] Initializing...');
   try {
     // Fetch skills
+    console.log('[Skills] Fetching skills from API...');
     const skills = await fetchSkills();
+    console.log('[Skills] Received skills:', skills);
     state.skills = skills;
     renderSkillsGrid();
+    console.log('[Skills] Skills rendered successfully');
 
     // Setup search and filter
     setupSearchAndFilter();
@@ -863,8 +898,8 @@ async function init() {
     // Setup GitHub install
     setupGithubInstall();
 
-    // Event listeners
-    document.getElementById('refreshBtn').addEventListener('click', async () => {
+    // Event listeners (with null checks)
+    safeAddEventListener('refreshBtn', 'click', async () => {
       try {
         const skills = await fetchSkills();
         state.skills = skills;
@@ -875,44 +910,46 @@ async function init() {
       }
     });
 
-    document.getElementById('uploadSkillBtn').addEventListener('click', openUploadModal);
-    document.getElementById('closeUploadBtn').addEventListener('click', closeUploadModal);
-    document.getElementById('cancelUploadBtn').addEventListener('click', closeUploadModal);
+    safeAddEventListener('uploadSkillBtn', 'click', openUploadModal);
+    safeAddEventListener('closeUploadBtn', 'click', closeUploadModal);
+    safeAddEventListener('cancelUploadBtn', 'click', closeUploadModal);
 
     // Skill detail modal
-    document.getElementById('closeSkillDetailBtn').addEventListener('click', closeSkillDetailModal);
-    document.getElementById('cancelSkillDetailBtn').addEventListener('click', closeSkillDetailModal);
-    document.getElementById('deleteSkillBtn').addEventListener('click', deleteCurrentSkill);
+    safeAddEventListener('closeSkillDetailBtn', 'click', closeSkillDetailModal);
+    safeAddEventListener('cancelSkillDetailBtn', 'click', closeSkillDetailModal);
+    safeAddEventListener('deleteSkillBtn', 'click', deleteCurrentSkill);
 
     // Select all checkbox
-    document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
+    safeAddEventListener('selectAllCheckbox', 'change', (e) => {
       toggleSelectAll(e.target.checked);
     });
 
     // Batch operations
-    document.getElementById('batchEnableBtn').addEventListener('click', () => {
+    safeAddEventListener('batchEnableBtn', 'click', () => {
       batchEnableSkills(true);
     });
 
-    document.getElementById('batchDisableBtn').addEventListener('click', () => {
+    safeAddEventListener('batchDisableBtn', 'click', () => {
       batchEnableSkills(false);
     });
 
     // Close modals on overlay click
-    document.getElementById('uploadModal').addEventListener('click', (e) => {
+    safeAddEventListener('uploadModal', 'click', (e) => {
       if (e.target.id === 'uploadModal') {
         closeUploadModal();
       }
     });
 
-    document.getElementById('skillDetailModal').addEventListener('click', (e) => {
+    safeAddEventListener('skillDetailModal', 'click', (e) => {
       if (e.target.id === 'skillDetailModal') {
         closeSkillDetailModal();
       }
     });
 
     showToast('技能管理已加载', 'success');
+    console.log('[Skills] Initialization complete');
   } catch (error) {
+    console.error('[Skills] Initialization failed:', error);
     showToast('加载失败: ' + error.message, 'error');
     document.getElementById('skillsContainer').innerHTML = `
       <div class="empty-state">
@@ -922,6 +959,7 @@ async function init() {
           <line x1="9" y1="9" x2="15" y2="15"/>
         </svg>
         <p>加载失败: ${escapeHtml(error.message)}</p>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">请检查浏览器控制台获取更多信息</p>
       </div>
     `;
   }
