@@ -744,24 +744,30 @@ async function main(): Promise<void> {
       // 添加已启用的子 Agent
       if (config.agents.coordinator.subAgents.code && agentRegistry.get('code')) {
         subAgentMap.set('code', agentRegistry.get('code')!);
+        logger.info('[Agent 系统] 添加 Code Agent 到子 Agent 列表');
       }
       if (config.agents.coordinator.subAgents.browser && agentRegistry.get('browser')) {
         subAgentMap.set('browser', agentRegistry.get('browser')!);
+        logger.info('[Agent 系统] 添加 Browser Agent 到子 Agent 列表');
       }
       if (config.agents.coordinator.subAgents.shell && agentRegistry.get('shell')) {
         subAgentMap.set('shell', agentRegistry.get('shell')!);
+        logger.info('[Agent 系统] 添加 Shell Agent 到子 Agent 列表');
       }
-      // 添加 Vision Agent
+      // 添加 Vision Agent（如果已注册）
       if (agentRegistry.get('vision')) {
         subAgentMap.set('vision', agentRegistry.get('vision')!);
+        logger.info('[Agent 系统] 添加 Vision Agent 到子 Agent 列表');
       }
-      // 添加 Web Search Agent
-      if (agentRegistry.get('websearch')) {
+      // 添加 Web Search Agent（如果配置启用且已注册）
+      if (config.agents.coordinator.subAgents.websearch && agentRegistry.get('websearch')) {
         subAgentMap.set('websearch', agentRegistry.get('websearch')!);
+        logger.info('[Agent 系统] 添加 Web Search Agent 到子 Agent 列表');
       }
-      // 添加 Data Analysis Agent
-      if (agentRegistry.get('data')) {
+      // 添加 Data Analysis Agent（如果配置启用且已注册）
+      if (config.agents.coordinator.subAgents.data && agentRegistry.get('data')) {
         subAgentMap.set('data', agentRegistry.get('data')!);
+        logger.info('[Agent 系统] 添加 Data Analysis Agent 到子 Agent 列表');
       }
 
       // 优先使用 GLM API Key，否则使用 Anthropic
@@ -795,6 +801,34 @@ async function main(): Promise<void> {
           knowledgeRetentionTime: 90 * 24 * 60 * 60 * 1000, // 90 天
         });
 
+        // ========== 初始化分层记忆服务（OpenViking 风格）==========
+        let hierarchicalMemoryService = null;
+        try {
+          const { HierarchicalMemoryService } = await import('./agents/memory/HierarchicalMemoryService.js');
+          const hierarchicalMemoryPath = path.join(process.cwd(), 'data', 'hierarchical-memory');
+          hierarchicalMemoryService = new HierarchicalMemoryService({
+            agentConfigs: [
+              {
+                agentId: 'glm-coordinator',
+                memoryPath: path.join(hierarchicalMemoryPath, 'agent'),
+                enableHierarchical: true,
+              }
+            ],
+            sharedConfig: {
+              enabled: true,
+              sharedPath: path.join(hierarchicalMemoryPath, 'shared'),
+              participatingAgents: ['glm-coordinator', 'code', 'browser', 'websearch', 'data'],
+              syncInterval: 60000, // 1 分钟
+            },
+            storagePath: hierarchicalMemoryPath,
+            autoCleanup: true,
+          });
+          await hierarchicalMemoryService.initialize();
+          logger.info('[Agent 系统] 分层记忆服务已初始化 (OpenViking 风格)');
+        } catch (error) {
+          logger.warn(`[Agent 系统] 分层记忆服务初始化失败: ${error}`);
+        }
+
         coordinatorAgent = new GLMCoordinatorAgent({
           apiKey: apiKeys.glm,
           baseUrl: apiKeys.glmBaseUrl,
@@ -805,6 +839,7 @@ async function main(): Promise<void> {
           memoryService,
           ragService,
           learningModule,
+          hierarchicalMemoryService, // 添加分层记忆服务
           enableMemory: true,
           enableLearning: true,
           scheduler: scheduler || undefined,
