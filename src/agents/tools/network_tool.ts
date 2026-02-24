@@ -169,16 +169,34 @@ export class SmartNetworkTool {
   }
 
   /**
-   * Web Reader MCP 获取
+   * Web Reader MCP 获取（备用方案）
    */
   private async webReaderFetch(url: string): Promise<string | null> {
     try {
       // 尝试使用 MCP web_reader 工具
       logger.debug(`[SmartNetworkTool] 尝试使用 web_reader: ${url}`);
 
-      // 注意：这里需要在实际使用时通过 MCP 调用
-      // 这里只是预留接口
-      throw new Error('Web Reader MCP 未集成');
+      // 动态导入 web_reader（如果可用）
+      try {
+        // 使用 global 上的 MCP 工具（如果存在）
+        if (typeof (global as any).mcp__web_reader__webReader === 'function') {
+          const result = await (global as any).mcp__web_reader__webReader({
+            url,
+            timeout: 15,
+            retain_images: false,
+          });
+
+          if (result && result[0]) {
+            const content = result[0].text || '';
+            logger.info(`[SmartNetworkTool] web_reader 成功，内容长度: ${content.length}`);
+            return content;
+          }
+        }
+      } catch (mcpError) {
+        logger.debug(`[SmartNetworkTool] MCP web_reader 不可用: ${mcpError}`);
+      }
+
+      throw new Error('Web Reader MCP 不可用');
     } catch (error) {
       logger.debug(`[SmartNetworkTool] webReaderFetch 失败: ${error}`);
       throw error;
@@ -213,6 +231,13 @@ export class SmartNetworkTool {
       name: 'direct',
       description: '直接访问',
       execute: (u) => this.directFetch(u, options.timeout)
+    });
+
+    // 最后尝试 web_reader MCP（如果其他都失败）
+    strategies.push({
+      name: 'web_reader',
+      description: 'Web Reader MCP',
+      execute: (u) => this.webReaderFetch(u)
     });
 
     return strategies;
