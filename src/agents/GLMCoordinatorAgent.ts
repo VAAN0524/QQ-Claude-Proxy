@@ -1465,13 +1465,13 @@ ${memoryContext}` : ''}`;
       type: 'function',
       function: {
         name: 'send_file',
-        description: '发送文件给用户：将工作区或存储区的文件发送到用户QQ',
+        description: '【重要】当用户请求发送文件时使用此工具。适用场景：用户说"把xxx发给我"、"发送文件xxx"、"把xxx传到qq"等。将工作区(workspace)或存储区(uploads)的文件发送到用户QQ。',
         parameters: {
           type: 'object',
           properties: {
             filePath: {
               type: 'string',
-              description: '要发送的文件路径，相对于工作区的路径，例如：output/result.png 或 uploads/document.pdf',
+              description: '要发送的文件路径。支持绝对路径或相对路径(相对于workspace)，例如：ai_news_summary.md 或 workspace/test.txt',
             },
           },
           required: ['filePath'],
