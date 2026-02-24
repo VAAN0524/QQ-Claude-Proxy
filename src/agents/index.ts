@@ -4,6 +4,15 @@
 
 // 基础接口
 export * from './base/Agent.js';
+export * from './base/PersonaAgent.js';
+
+// Agent 通信风格处理（方案3）
+export {
+  PersonaTagExtractor,
+  AgentMessageEnhancer,
+  AgentCollaborationStyleAdapter,
+  StyleConsistencyChecker,
+} from './AgentCommunication.js';
 
 // 核心组件
 export { AgentRegistry } from './AgentRegistry.js';
@@ -77,6 +86,14 @@ export * from './tools/index.js';
 // Agent 人格设定
 export { AGENT_PERSONAS, getAgentPersona, getAllAgentPersonas, getPersonasByCapability } from './personas.js';
 export type { AgentPersona } from './personas.js';
+
+// 人格设定 Prompt 构建器
+export {
+  buildPersonaPrompt,
+  buildResponseStyleGuide,
+  buildFullPersonaPrompt,
+  buildTeamCollaborationPrompt,
+} from './PersonaPromptBuilder.js';
 
 // MCP 客户端
 export { ZaiMcpClient } from './ZaiMcpClient.js';

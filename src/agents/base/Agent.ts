@@ -4,6 +4,9 @@
  * 所有内置 Agent 必须实现此接口
  */
 
+// 导入人格设定类型
+import type { AgentPersona } from '../personas.js';
+
 /**
  * Agent 能力标签
  */
@@ -59,6 +62,17 @@ export interface AgentMessage {
   timestamp: Date;
   /** 原始数据 */
   rawData?: unknown;
+
+  /** ========== 方案3：通信人格风格 ========== */
+  /** 发送者的 Agent ID（Agent 间通信时使用） */
+  fromAgentId?: string;
+  /** 发送者的人格标签 */
+  senderPersonaTags?: string[];
+  /** 期望的响应风格 */
+  expectedStyle?: {
+    tone?: 'professional' | 'friendly' | 'casual' | 'neutral';
+    verbosity?: 'concise' | 'normal' | 'detailed';
+  };
 }
 
 /**
@@ -95,6 +109,15 @@ export interface AgentResponse {
   groupId?: string;
   /** 消息 ID (兼容现有 AgentResponse) */
   msgId?: string;
+
+  /** ========== 方案3：响应人格风格 ========== */
+  /** 响应者的人格标签 */
+  responderPersonaTags?: string[];
+  /** 实际应用的响应风格 */
+  appliedStyle?: {
+    tone?: 'professional' | 'friendly' | 'casual' | 'neutral';
+    verbosity?: 'concise' | 'normal' | 'detailed';
+  };
 }
 
 /**
@@ -117,6 +140,27 @@ export interface IAgent {
 
   /** Agent 配置 */
   readonly config: AgentConfig;
+
+  /** ========== 方案2：人格设定属性 ========== */
+  /** Agent 人格设定（可选） */
+  readonly persona?: AgentPersona;
+
+  /**
+   * 获取 Agent 人格设定
+   * 如果没有预设人格，返回默认人格
+   */
+  getPersona?(): AgentPersona;
+
+  /**
+   * 根据人格设定调整响应风格
+   * @param content 原始响应内容
+   * @param styleOptions 风格选项
+   * @returns 调整后的内容
+   */
+  applyPersonaStyle?(
+    content: string,
+    styleOptions?: { tone?: string; verbosity?: 'concise' | 'normal' | 'detailed' }
+  ): string;
 
   /**
    * 处理消息

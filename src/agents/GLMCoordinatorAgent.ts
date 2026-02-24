@@ -28,6 +28,10 @@ import path from 'path';
 import { glm, type LLMProvider as LLMProviderType, type ChatCompletionParams, type ChatCompletionResponse as LLMChatCompletionResponse } from '../llm/providers.js';
 import { getAllAgentTools, getAllFileTools, getAllLearningTools, type ToolContext, type FileToolContext, type LearningToolContext } from './tools/index.js';
 
+// 人格设定
+import { getAgentPersona, AGENT_PERSONAS } from './personas.js';
+import { buildFullPersonaPrompt, buildTeamCollaborationPrompt } from './PersonaPromptBuilder.js';
+
 // 类型别名避免冲突
 type LLMProvider = LLMProviderType;
 
@@ -1089,7 +1093,22 @@ export class GLMCoordinatorAgent implements IAgent {
       memoryContext = await this.ragService.buildSystemContext(userId, groupId, message.content);
     }
 
-    // 基础提示词
+    // ========== 方案1：注入人格设定到 System Prompt ==========
+    // 获取当前 Agent 的人格设定
+    const myPersona = getAgentPersona('glm-coordinator');
+    let personaPrompt = '';
+    if (myPersona) {
+      personaPrompt = buildFullPersonaPrompt(myPersona);
+
+      // 如果有其他 Agent，添加团队协作提示
+      const teammateIds = Object.keys(AGENT_PERSONAS).filter(id => id !== 'glm-coordinator');
+      if (teammateIds.length > 0) {
+        const teammates = teammateIds.map(id => AGENT_PERSONAS[id]).filter(Boolean);
+        personaPrompt += '\n\n' + buildTeamCollaborationPrompt(myPersona, teammates);
+      }
+    }
+
+    // 基础提示词（整合人格设定）
     let systemPrompt = `# 角色定义
 
 你是一个高级任务协调助手，具备强大的分析、推理和问题解决能力。你可以调用专门的子 Agent 来协助完成任务。
@@ -1132,6 +1151,14 @@ ${enabledAgents.map(name => `- ${name}`).join('\n')}
 
 **重要**: 如果结果不理想，返回 Think 阶段重新分析，尝试替代方案。
 `;
+
+    // ========== 注入人格设定 ==========
+    if (personaPrompt) {
+      systemPrompt += `
+
+${personaPrompt}
+`;
+    }
 
     // 如果有技能系统，使用技能元数据增强提示词（渐进式加载第1层）
     if (this.skillLoader) {
