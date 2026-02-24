@@ -45,7 +45,7 @@
 ```
 /mode team
 ```
-基于 GLM-4.7 的智能协调器，自动分析任务并分配给专业 Agent：
+基于 GLM-4.7 的智能协调器，自动分析任务并分配给 **8 个专业 Agent**：
 
 | Agent | 功能 |
 |-------|------|
@@ -55,6 +55,8 @@
 | **WebSearch Agent** | 网络搜索 |
 | **Data Agent** | 数据分析 |
 | **Vision Agent** | 图像理解 |
+| **Refactor Agent** | 代码重构 |
+| **SkillManager Agent** | 技能管理 |
 
 ---
 
