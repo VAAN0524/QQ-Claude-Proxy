@@ -2,6 +2,7 @@
  * Browser Agent - 网页自动化操作
  *
  * 使用 fetch 和 MCP 工具进行网页访问、内容提取
+ * 增强版：支持智能重试、镜像访问、中国大陆网络适配
  */
 
 import { logger } from '../utils/logger.js';
@@ -13,6 +14,8 @@ import type {
   AgentResponse,
 } from './base/Agent.js';
 import { AgentCapability } from './base/Agent.js';
+import { quickFetch, type SmartFetchResult } from './tools/network_tool.js';
+import { diagnoseNetworkError } from '../utils/network-helper.js';
 
 /**
  * Browser Agent 配置选项
@@ -165,7 +168,7 @@ export class BrowserAgent implements IAgent {
   }
 
   /**
-   * 抓取网页内容
+   * 抓取网页内容（智能重试版）
    */
   private async fetchWebContent(url: string): Promise<WebContent> {
     // 验证 URL 格式
@@ -175,22 +178,16 @@ export class BrowserAgent implements IAgent {
       throw new Error('无效的 URL 格式');
     }
 
-    // 使用 fetch 获取网页内容
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'User-Agent': this.userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      },
-      signal: AbortSignal.timeout(this.pageTimeout),
-    });
+    logger.info(`[BrowserAgent] 开始智能抓取: ${url}`);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // 使用智能网络工具
+    const result: SmartFetchResult = await this.smartFetchWithRetry(url);
+
+    if (!result.success || !result.content) {
+      throw new Error(result.error || '获取失败');
     }
 
-    const html = await response.text();
+    const html = result.content;
 
     // 提取标题
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -275,6 +272,148 @@ export class BrowserAgent implements IAgent {
       .replace(/&#39;/gi, "'")
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  /**
+   * 智能抓取（带重试和镜像）
+   */
+  private async smartFetchWithRetry(url: string, maxRetries: number = 3): Promise<SmartFetchResult> {
+    let lastError: Error | null = null;
+
+    // 策略列表
+    const strategies = [
+      {
+        name: 'direct',
+        description: '直接访问',
+        fetch: async () => this.fetchWithTimeout(url)
+      },
+      {
+        name: 'jsdelivr',
+        description: 'jsDelivr 镜像',
+        fetch: async () => this.fetchViaJsDelivr(url)
+      },
+      {
+        name: 'ghproxy',
+        description: 'ghproxy 代理',
+        fetch: async () => this.fetchViaGhproxy(url)
+      }
+    ];
+
+    for (const strategy of strategies) {
+      for (let retry = 0; retry < maxRetries; retry++) {
+        try {
+          logger.info(`[BrowserAgent] [${strategy.name}] 尝试 ${retry + 1}/${maxRetries}...`);
+
+          const content = await strategy.fetch();
+
+          if (content) {
+            logger.info(`[BrowserAgent] ✅ 成功: ${strategy.name}`);
+            return {
+              success: true,
+              content,
+              strategy: strategy.name,
+              finalUrl: url,
+              attempts: retry + 1,
+              duration: 0
+            };
+          }
+        } catch (error) {
+          lastError = error as Error;
+          const diagnosis = diagnoseNetworkError(lastError, url);
+          logger.warn(`[BrowserAgent] ❌ ${strategy.name}: ${diagnosis.type}`);
+
+          // 如果不应该重试，跳出重试循环
+          if (!diagnosis.shouldRetry) {
+            break;
+          }
+        }
+      }
+    }
+
+    // 所有策略都失败
+    return {
+      success: false,
+      error: lastError?.message || '所有策略均失败',
+      attempts: maxRetries * strategies.length,
+      duration: 0
+    };
+  }
+
+  /**
+   * 带超时的 fetch
+   */
+  private async fetchWithTimeout(url: string): Promise<string> {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': this.userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+      signal: AbortSignal.timeout(this.pageTimeout),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.text();
+  }
+
+  /**
+   * 通过 jsDelivr 镜像获取
+   */
+  private async fetchViaJsDelivr(url: string): Promise<string> {
+    const mirrorUrl = this.toJsDelivrUrl(url);
+    if (!mirrorUrl) {
+      throw new Error('无法转换为 jsDelivr URL');
+    }
+
+    return this.fetchWithTimeout(mirrorUrl);
+  }
+
+  /**
+   * 通过 ghproxy 代理获取
+   */
+  private async fetchViaGhproxy(url: string): Promise<string> {
+    const mirrorUrl = `https://ghproxy.com/${url}`;
+    return this.fetchWithTimeout(mirrorUrl);
+  }
+
+  /**
+   * 转换为 jsDelivr URL
+   */
+  private toJsDelivrUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+
+      // 只处理 GitHub 域名
+      if (!urlObj.hostname.endsWith('github.com')) {
+        return null;
+      }
+
+      const pathParts = urlObj.pathname.split('/').filter(Boolean);
+
+      // GitHub 文件: /owner/repo/blob/branch/path
+      if (pathParts[2] === 'blob' && pathParts.length >= 4) {
+        const owner = pathParts[0];
+        const repo = pathParts[1];
+        const branch = pathParts[3];
+        const path = pathParts.slice(4).join('/');
+        return `https://fastly.jsdelivr.net/gh/${owner}/${repo}@${branch}/${path}`;
+      }
+
+      // GitHub 仓库主页: 返回 README
+      if (pathParts.length === 2) {
+        const owner = pathParts[0];
+        const repo = pathParts[1];
+        return `https://fastly.jsdelivr.net/gh/${owner}/${repo}@main/README.md`;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**

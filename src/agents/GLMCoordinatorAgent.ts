@@ -11,6 +11,8 @@ import { MemoryService, MemoryType, RAGService, HierarchicalMemoryService, Memor
 import { LearningModule } from './learning/index.js';
 import { SkillLoader } from './SkillLoader.js';
 import type { Scheduler } from '../scheduler/index.js';
+import { smartFetch } from './tools/network_tool.js';
+import { diagnoseNetworkError } from '../utils/network-helper.js';
 import type {
   IAgent,
   AgentConfig,
@@ -1461,6 +1463,25 @@ ${personaPrompt}
       },
     });
 
+    // Smart Fetch Tool - 智能网络访问（自动处理中国大陆网络问题）
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'smart_fetch',
+        description: '智能网络访问工具：自动检测网络环境，智能选择访问策略（直连/镜像），支持 GitHub、普通网页等多种访问场景。适用于访问 GitHub、API 文档、技术博客等。',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: '要访问的 URL',
+            },
+          },
+          required: ['url'],
+        },
+      },
+    });
+
     // Data Analysis Agent
     if (this.subAgents.has('data')) {
       tools.push({
@@ -2881,6 +2902,107 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
           results.push({
             toolCallId: toolCall.id,
             result: `搜索失败: ${error instanceof Error ? error.message : String(error)}`,
+            agentId: 'glm-coordinator',
+          });
+        }
+        continue;
+      }
+
+      // 处理 smart_fetch 工具（智能网络访问）
+      if (toolCall.function.name === 'smart_fetch') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const url = args.url as string;
+
+          if (!url) {
+            results.push({
+              toolCallId: toolCall.id,
+              result: `错误：缺少必需参数 url`,
+              agentId: 'glm-coordinator',
+            });
+            continue;
+          }
+
+          logger.info(`[GLMCoordinatorAgent] 执行智能获取: ${url}`);
+
+          // 使用智能网络工具
+          const fetchResult = await smartFetch(url, {
+            maxRetries: 3,
+            timeout: 15000,
+            verbose: true
+          });
+
+          if (fetchResult.success && fetchResult.content) {
+            // 提取网页标题
+            let title = '';
+            let content = fetchResult.content;
+
+            const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
+            if (titleMatch) {
+              title = titleMatch[1].trim();
+            }
+
+            // 清理 HTML 标签
+            content = content
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            // 限制内容长度
+            const maxLength = 2000;
+            if (content.length > maxLength) {
+              content = content.substring(0, maxLength) + '...';
+            }
+
+            let responseText = `✅ [智能访问成功]\n\n`;
+            responseText += `📍 URL: ${url}\n`;
+            responseText += `🔄 策略: ${fetchResult.strategy || 'unknown'}\n`;
+            responseText += `⏱️ 耗时: ${fetchResult.duration}ms\n`;
+            responseText += `🔁 尝试: ${fetchResult.attempts} 次\n\n`;
+
+            if (title) {
+              responseText += `**标题**: ${title}\n\n`;
+            }
+
+            responseText += `**内容**:\n\n${content}`;
+
+            results.push({
+              toolCallId: toolCall.id,
+              result: responseText,
+              agentId: 'glm-coordinator',
+            });
+
+            logger.info(`[GLMCoordinatorAgent] 智能获取成功: ${fetchResult.strategy} (${fetchResult.attempts} 次尝试)`);
+          } else {
+            const errorDetail = fetchResult.error || '未知错误';
+            const diagnosis = diagnoseNetworkError(new Error(errorDetail), url);
+
+            results.push({
+              toolCallId: toolCall.id,
+              result: `❌ [智能访问失败]\n\n` +
+                `📍 URL: ${url}\n` +
+                `🔁 尝试: ${fetchResult.attempts} 次\n` +
+                `⏱️ 耗时: ${fetchResult.duration}ms\n\n` +
+                `**错误类型**: ${diagnosis.type}\n` +
+                `**错误详情**: ${errorDetail}\n\n` +
+                `💡 **建议**:\n` +
+                (diagnosis.suggestedMirror
+                  ? `- 可以尝试访问镜像: ${diagnosis.suggestedMirror}\n`
+                  : `- 请检查 URL 是否正确\n`) +
+                `- 如果是 GitHub 链接，系统已自动尝试镜像访问\n` +
+                `- 如果仍然失败，可能是网站暂时不可用`,
+              agentId: 'glm-coordinator',
+            });
+
+            logger.error(`[GLMCoordinatorAgent] 智能获取失败: ${errorDetail}`);
+          }
+        } catch (error) {
+          logger.error(`[GLMCoordinatorAgent] smart_fetch 工具执行失败: ${error}`);
+          results.push({
+            toolCallId: toolCall.id,
+            result: `智能访问失败: ${error instanceof Error ? error.message : String(error)}`,
             agentId: 'glm-coordinator',
           });
         }
