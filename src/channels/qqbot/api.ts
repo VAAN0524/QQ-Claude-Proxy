@@ -354,7 +354,7 @@ export class QQBotAPI {
   /**
    * 内部方法: 上传文件到指定路径
    * 参考 QQ Bot 官方文档: https://bot.q.qq.com/wiki/develop/api/openapi/file/upload_files.html
-   * 使用 FormData multipart 方式
+   * 使用 JSON + Base64 方式（QQ Bot 推荐）
    * @param path 完整的API路径
    * @param fileData 文件数据 (Buffer)
    * @param fileType 文件类型
@@ -370,36 +370,31 @@ export class QQBotAPI {
     srvSendMsg: boolean,
     fileName?: string
   ): Promise<UploadFileResponse> {
-    // 确保 fileData 是 Buffer
-    const buffer = typeof fileData === 'string' ? Buffer.from(fileData, 'base64') : fileData;
+    // 将 Buffer 转换为 Base64 字符串
+    const base64Data = typeof fileData === 'string' ? fileData : fileData.toString('base64');
 
     const url = `${this.baseUrl}${path}`;
-    logger.info(`[API] POST ${url} (FormData multipart upload)`);
-    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, file_size=${buffer.length}`);
+    logger.info(`[API] POST ${url} (JSON + Base64 upload)`);
+    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, base64_length=${base64Data.length}`);
 
-    // 使用 FormData multipart 方式上传
-    // 创建 FormData
-    const formData = new FormData();
-    formData.append('file_type', String(fileType));
-    formData.append('file_type_data', fileTypeData);
-    formData.append('srv_send_msg', srvSendMsg ? '1' : '0');
-
-    // 创建 Blob 并添加到 FormData
-    const uint8Array = new Uint8Array(buffer);
-    const blob = new Blob([uint8Array], { type: this.getContentType(fileTypeData) });
-    formData.append('file', blob, fileName || `file.${fileTypeData}`);
+    // 使用 JSON + Base64 方式上传（QQ Bot 推荐方式）
+    const body: Record<string, unknown> = {
+      file_type: fileType,
+      file_type_data: fileTypeData,
+      srv_send_msg: srvSendMsg ? 1 : 0,
+      file_data: base64Data,
+    };
 
     const token = await this.getAccessToken();
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `QQBot ${token}`,
-        // 不设置 Content-Type，让浏览器自动设置并添加 boundary
+        'Content-Type': 'application/json',
         'X-Union-Appid': this.config.appId,
       },
-      body: formData,
-      duplex: 'half',
-    } as RequestInit);
+      body: JSON.stringify(body),
+    });
 
     const data = await this.safeParseJson(response);
     logger.info(`[API] Upload Response status: ${response.status}`);
