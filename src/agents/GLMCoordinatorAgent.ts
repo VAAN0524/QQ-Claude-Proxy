@@ -1254,9 +1254,17 @@ ${content}
     }
 
     // 基础提示词（精简版）
+    // 获取当前日期
+    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 格式
+    const formattedDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+
     let systemPrompt = `# 任务协调助手
 
 你是高级任务协调助手，可以调用子 Agent 和工具完成用户请求。
+
+## 📅 当前日期
+**今天是**: ${formattedDate} (ISO: ${currentDate})
+**重要**: 回答日期相关问题时，请使用上述当前日期，不要使用训练数据中的过期日期。
 
 ## 工作环境
 - 工作目录: ${context.workspacePath}
