@@ -673,8 +673,29 @@ export class GLMCoordinatorAgent implements IAgent {
 
     } catch (error) {
       logger.error(`[GLMCoordinatorAgent] 处理失败: ${error}`);
+
+      // 即使处理失败，如果有待发送文件，仍然返回文件列表
+      const errorMessage = `❌ [GLM Coordinator Agent] 处理失败: ${error instanceof Error ? error.message : String(error)}`;
+
+      // 检查是否是 GLM API 网络错误
+      const isNetworkError = error instanceof Error && (
+        error.message.includes('500') ||
+        error.message.includes('Internal network failure') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ETIMEDOUT')
+      );
+
+      if (isNetworkError && this.pendingFiles.length > 0) {
+        logger.info(`[GLMCoordinatorAgent] GLM API 网络错误，但有待发送文件: ${this.pendingFiles.length} 个`);
+        return {
+          content: `${errorMessage}\n\n💡 但已找到 ${this.pendingFiles.length} 个文件，稍后将发送给您...`,
+          agentId: this.id,
+          filesToSend: [...this.pendingFiles],
+        };
+      }
+
       return {
-        content: `❌ [GLM Coordinator Agent] 处理失败: ${error instanceof Error ? error.message : String(error)}`,
+        content: errorMessage,
         agentId: this.id,
       };
     }
@@ -1910,7 +1931,7 @@ ${memoryContext}` : ''}`;
           if (!filePath) {
             results.push({
               toolCallId: toolCall.id,
-              result: `错误：缺少必需参数 filePath`,
+              result: 'Error: Missing required parameter filePath',
               agentId: 'glm-coordinator',
             });
             continue;
@@ -1931,18 +1952,20 @@ ${memoryContext}` : ''}`;
           // 检查文件是否存在
           try {
             await fs.access(fullPath);
+            const fileName = path.basename(fullPath);
             // 添加到待发送文件列表
             this.pendingFiles.push(fullPath);
             logger.info(`[GLMCoordinatorAgent] 添加文件到发送队列: ${fullPath}`);
+            // 使用简洁的英文响应，避免 GLM API 解析问题
             results.push({
               toolCallId: toolCall.id,
-              result: `文件已添加到发送队列: ${path.basename(fullPath)}`,
+              result: `OK: ${fileName}`,
               agentId: 'glm-coordinator',
             });
           } catch {
             results.push({
               toolCallId: toolCall.id,
-              result: `错误：文件不存在 - ${filePath}`,
+              result: `Error: File not found - ${filePath}`,
               agentId: 'glm-coordinator',
             });
           }
@@ -1950,7 +1973,7 @@ ${memoryContext}` : ''}`;
           logger.error(`[GLMCoordinatorAgent] send_file 工具执行失败: ${error}`);
           results.push({
             toolCallId: toolCall.id,
-            result: `执行失败: ${error instanceof Error ? error.message : String(error)}`,
+            result: `Error: ${error instanceof Error ? error.message : String(error)}`,
             agentId: 'glm-coordinator',
           });
         }
