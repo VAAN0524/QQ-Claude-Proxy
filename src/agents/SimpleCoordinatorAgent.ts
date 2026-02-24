@@ -295,8 +295,8 @@ export class SimpleCoordinatorAgent implements IAgent {
     const lowerContent = content.toLowerCase();
 
     const skillChecks: Array<{ skill: string; keywords: string[] }> = [
-      { skill: 'search', keywords: ['搜索', 'search', '查找', 'find', '资讯', '新闻', '消息'] },
-      { skill: 'code', keywords: ['代码', '编程', 'code', '函数', '类', '脚本', '算法'] },
+      { skill: 'smart-search', keywords: ['搜索', 'search', '查找', 'find', '资讯', '新闻', '消息'] },
+      { skill: 'smart-code', keywords: ['代码', '编程', 'code', '函数', '类', '脚本', '算法'] },
       { skill: 'file', keywords: ['文件', '发送', 'file', '下载', '保存'] },
       { skill: 'browser', keywords: ['网页', '浏览器', 'browser', '访问', '打开', 'url'] },
       { skill: 'data', keywords: ['数据', '分析', 'data', '统计', '图表'] },
@@ -1015,40 +1015,137 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
         }
       }
 
-      // 添加可用工具信息到系统提示
+      // 构建工具定义（GLM-4.7 Function Calling 格式）
+      const tools: Array<{ type: string; function: { name: string; description: string; parameters: any } }> = [];
+      const availableToolNames: string[] = [];
+
       if (this.currentSkill?.availableTools && this.currentSkill.availableTools.length > 0) {
         systemPrompt += '\n\n## 可用工具\n\n';
         for (const toolName of this.currentSkill.availableTools) {
           const tool = this.toolManager.get(toolName);
           if (tool) {
             systemPrompt += `- \`${tool.name}\`: ${tool.description}\n`;
+            availableToolNames.push(tool.name);
+
+            // 添加到 Function Calling tools
+            if (tool.name === 'smart_search' || tool.name === 'tavily_search') {
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '搜索关键词',
+                      },
+                      maxResults: {
+                        type: 'number',
+                        description: '最大结果数量（可选）',
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
+            }
           }
         }
       }
 
-      logger.info(`[SimpleCoordinator] 使用 GLM-4.7 文本模型`);
+      logger.info(`[SimpleCoordinator] 使用 GLM-4.7 文本模型 (工具: ${availableToolNames.join(', ') || '无'})`);
 
-      const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
-        model: 'glm-4.7',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: content,
-          },
-        ],
-        max_tokens: 4096,
-        temperature: 0.7,
-      }, {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
+      // 第一轮调用
+      let messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string; name?: string }> = [
+        {
+          role: 'system',
+          content: systemPrompt,
         },
-      });
+        {
+          role: 'user',
+          content: content,
+        },
+      ];
 
-      return response.data.choices?.[0]?.message?.content || '抱歉，我没有生成回复。';
+      const maxIterations = 3; // 最多3轮工具调用
+      let finalResponse = '';
+
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
+        const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
+          model: 'glm-4.7',
+          messages,
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: tools.length > 0 ? 'auto' : undefined,
+          max_tokens: 4096,
+          temperature: 0.7,
+        }, {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        });
+
+        const choice = response.data.choices?.[0];
+        if (!choice) {
+          finalResponse = '抱歉，我没有生成回复。';
+          break;
+        }
+
+        // 检查是否有工具调用
+        if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+          logger.info(`[SimpleCoordinator] LLM 请求调用 ${choice.message.tool_calls.length} 个工具`);
+
+          // 添加助手响应（包含 tool_calls）
+          messages.push({
+            role: 'assistant',
+            content: choice.message.content || null,
+            tool_calls: choice.message.tool_calls,
+          });
+
+          // 执行每个工具调用
+          for (const toolCall of choice.message.tool_calls) {
+            const toolName = toolCall.function.name;
+            const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+            logger.info(`[SimpleCoordinator] 执行工具: ${toolName}, 参数: ${JSON.stringify(toolArgs)}`);
+
+            try {
+              let toolResult = '';
+              const tool = this.toolManager.get(toolName);
+              if (tool) {
+                toolResult = await tool.execute(toolArgs);
+              } else {
+                toolResult = `工具 ${toolName} 不存在`;
+              }
+
+              // 添加工具结果
+              messages.push({
+                role: 'tool',
+                content: toolResult,
+                tool_call_id: toolCall.id,
+                name: toolName,
+              });
+
+              logger.info(`[SimpleCoordinator] 工具执行完成，结果长度: ${toolResult.length}`);
+            } catch (error) {
+              logger.error(`[SimpleCoordinator] 工具执行失败: ${error}`);
+              messages.push({
+                role: 'tool',
+                content: `工具执行失败: ${error}`,
+                tool_call_id: toolCall.id,
+                name: toolName,
+              });
+            }
+          }
+        } else {
+          // 没有工具调用，直接返回结果
+          finalResponse = choice.message.content || '抱歉，我没有生成回复。';
+          break;
+        }
+      }
+
+      return finalResponse || '抱歉，处理超时或出错。';
     } catch (error) {
       logger.error(`[SimpleCoordinator] LLM 调用失败: ${error}`);
       return `❌ LLM 调用失败: ${error instanceof Error ? error.message : String(error)}`;
