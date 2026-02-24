@@ -121,27 +121,35 @@ export class SmartNetworkTool {
   }
 
   /**
-   * Axios 获取（使用 axios 而非原生 fetch）
-   * 在 Windows 环境下 axios 通常比原生 fetch 更可靠
+   * DuckSearch 获取（使用 ducksearch 包的 fetchContent）
+   * 延迟加载避免模块级别的 program.parse() 副作用
    */
-  private async axiosFetch(url: string, timeout: number = 10000): Promise<string | null> {
-    try {
-      logger.debug(`[SmartNetworkTool] 使用 axios 获取: ${url}`);
+  private static duckSearchFetchContent: ((url: string) => Promise<string>) | null = null;
 
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        maxRedirects: 5,
-        timeout,
-        responseType: 'text'
-      });
-
-      return response.data;
-    } catch (error) {
-      logger.debug(`[SmartNetworkTool] axiosFetch 失败: ${error}`);
-      throw error;
+  private async ensureDuckSearchLoaded() {
+    if (SmartNetworkTool.duckSearchFetchContent) {
+      return;
     }
+
+    try {
+      // 动态导入，避免模块级别的副作用
+      const ducksearch = await import('ducksearch');
+      SmartNetworkTool.duckSearchFetchContent = ducksearch.fetchContent;
+      logger.info('[SmartNetworkTool] ducksearch fetchContent 已加载');
+    } catch (error) {
+      logger.debug(`[SmartNetworkTool] 加载 ducksearch 失败: ${error}`);
+      throw new Error('ducksearch 包加载失败');
+    }
+  }
+
+  private async duckSearchFetch(url: string): Promise<string | null> {
+    await this.ensureDuckSearchLoaded();
+    if (!SmartNetworkTool.duckSearchFetchContent) {
+      throw new Error('duckSearch fetchContent 未初始化');
+    }
+
+    logger.debug(`[SmartNetworkTool] 使用 ducksearch fetchContent: ${url}`);
+    return SmartNetworkTool.duckSearchFetchContent(url);
   }
 
   /**
@@ -258,11 +266,11 @@ export class SmartNetworkTool {
       execute: (u) => this.directFetch(u, options.timeout)
     });
 
-    // 尝试 axios（在 Windows 下可能比原生 fetch 更可靠）
+    // 尝试 ducksearch（使用 axios，配置更优）
     strategies.push({
-      name: 'axios',
-      description: 'Axios HTTP 客户端',
-      execute: (u) => this.axiosFetch(u, options.timeout)
+      name: 'ducksearch',
+      description: 'DuckSearch fetchContent',
+      execute: (u) => this.duckSearchFetch(u)
     });
 
     // 最后尝试 web_reader MCP（如果其他都失败）
