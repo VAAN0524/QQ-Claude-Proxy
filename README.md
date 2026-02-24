@@ -60,16 +60,14 @@
 
 | 分类 | 文件数 | 代码行数 |
 |------|-------|---------|
-| **后端** (TypeScript) | 92 | **~28,800** |
-| **前端** (HTML/CSS/JS) | 15 | 8,900 |
-| **配置** (JSON) | 16 | 7,800 |
-| **总计** | **123** | **~45,500** |
+| **后端** (TypeScript) | 83 | **~26,000** |
+| **前端** (HTML/CSS/JS) | 15 | ~4,000 |
+| **总计** | **98** | **~30,000** |
 
 **核心模块**:
 - LLM Provider 统一接口 (OpenAI/Anthropic/GLM)
 - SimpleCoordinatorAgent (极简协调 Agent)
 - Z.ai MCP 集成 (官方视觉理解服务)
-- 10+ 专业 Agents (Browser/Shell/Search/Vision/Data...)
 - 分层记忆系统 (OpenViking 风格 L0/L1/L2)
 - 技能管理系统 (30+ 内置技能)
 - 定时任务调度器
