@@ -32,7 +32,7 @@ export type {
 } from './SkillInstaller.js';
 
 // 记忆服务
-export { MemoryService, RAGService, HierarchicalMemoryService } from './memory/index.js';
+export { MemoryService, RAGService, HierarchicalMemoryService, KnowledgeCache } from './memory/index.js';
 export type {
   MemoryEntry,
   MemoryRetrieveOptions,
@@ -48,6 +48,7 @@ export type {
   SharedMemoryConfig,
   HierarchicalMemoryOptions,
   AbstractIndex,
+  KnowledgeCacheOptions,
 } from './memory/index.js';
 
 // 学习模块

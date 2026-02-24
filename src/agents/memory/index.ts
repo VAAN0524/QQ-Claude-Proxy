@@ -17,3 +17,7 @@ export {
   type HierarchicalMemoryOptions,
   type AbstractIndex,
 } from './HierarchicalMemoryService.js';
+
+// 知识缓存服务
+export { KnowledgeCache, KNOWLEDGE_TTL } from './KnowledgeCache.js';
+export type { KnowledgeCacheOptions } from './KnowledgeCache.js';

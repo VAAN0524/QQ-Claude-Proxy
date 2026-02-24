@@ -33,8 +33,11 @@ import {
   CodeRefactorAgent,
   SkillManagerAgent,
   SharedContext,
+  SharedContextPersistence,
+  SessionManager,
   MemoryService,
   RAGService,
+  KnowledgeCache,
   type IAgent,
   type AgentMessage,
   type AgentContext,
@@ -726,6 +729,50 @@ async function main(): Promise<void> {
     }
   }
 
+  // ========== 会话持久化系统 ==========
+  // 初始化会话管理器（支持跨会话记忆和状态恢复）
+  const sessionManager = new SessionManager({
+    storagePath: path.join(process.cwd(), 'data', 'sessions'),
+    autoSaveInterval: 30000, // 30秒自动保存
+    saveImmediately: true, // 每次修改后立即保存
+    maxHistoryMessages: 100, // 每个会话保留最多100条消息
+  });
+  logger.info('[会话系统] SessionManager 已初始化');
+
+  // 会话缓存（同步访问）
+  const sessionCache = new Map<string, SharedContextPersistence>();
+
+  // 辅助函数：获取或创建用户会话（异步）
+  async function getUserSession(userId: string, groupId?: string): Promise<SharedContextPersistence> {
+    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
+    return await sessionManager.getOrCreateSession(sessionId);
+  }
+
+  // 辅助函数：同步获取会话的 SharedContext（用于 GLMCoordinatorAgent）
+  function getSessionSharedContext(userId: string, groupId?: string): SharedContext {
+    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
+    let session = sessionCache.get(sessionId);
+
+    if (!session) {
+      // 会话尚未加载，返回默认的 sharedContext
+      // 注意：这会在首次访问时返回空会话，消息处理完成后会异步加载完整会话
+      logger.debug(`[会话系统] 会话 ${sessionId} 尚未加载，使用默认上下文`);
+      return sharedContext;
+    }
+
+    return session.getContext();
+  }
+
+  // 预热会话：异步加载并缓存
+  async function warmupSession(userId: string, groupId?: string): Promise<void> {
+    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
+    if (!sessionCache.has(sessionId)) {
+      const session = await sessionManager.getOrCreateSession(sessionId);
+      sessionCache.set(sessionId, session);
+      logger.debug(`[会话系统] 会话 ${sessionId} 已预热`);
+    }
+  }
+
   // 初始化 Coordinator Agent 或 Agent Dispatcher
   let coordinatorAgent: CoordinatorAgent | GLMCoordinatorAgent | null = null;
   let agentDispatcher: AgentDispatcher | null = null;
@@ -789,6 +836,18 @@ async function main(): Promise<void> {
           defaultMinScore: 0.3,
         });
 
+        // 初始化知识缓存服务
+        const knowledgeCache = new KnowledgeCache({
+          storagePath: path.join(process.cwd(), 'data', 'knowledge-cache'),
+          defaultTTL: 60 * 60 * 1000, // 1 小时
+          maxEntries: 1000,
+          persist: true,
+        });
+        await knowledgeCache.initialize();
+        // 启动定期清理（每小时）
+        knowledgeCache.startPeriodicCleanup(60 * 60 * 1000);
+        logger.info('[Agent 系统] 知识缓存服务已初始化');
+
         // 获取 WebSearchAgent（如果有的话）
         const webSearchAgent = agentRegistry.get('websearch');
 
@@ -829,17 +888,20 @@ async function main(): Promise<void> {
           logger.warn(`[Agent 系统] 分层记忆服务初始化失败: ${error}`);
         }
 
+        // 使用会话持久化：传入获取 SharedContext 的函数
         coordinatorAgent = new GLMCoordinatorAgent({
           apiKey: apiKeys.glm,
           baseUrl: apiKeys.glmBaseUrl,
           model: 'glm-4.7', // Z.AI Coding Plan 模型名
           maxTokens: config.agents.coordinator.maxTokens,
-          sharedContext,
+          // 传入同步函数以支持会话持久化：每个用户/群组有独立的 SharedContext
+          sharedContext: (userId: string, groupId?: string) => getSessionSharedContext(userId, groupId),
           subAgents: subAgentMap,
           memoryService,
           ragService,
           learningModule,
           hierarchicalMemoryService, // 添加分层记忆服务
+          knowledgeCache, // 添加知识缓存服务
           enableMemory: true,
           enableLearning: true,
           scheduler: scheduler || undefined,
@@ -1012,6 +1074,11 @@ async function main(): Promise<void> {
         // 转换消息格式
         const qqData = data as any;
         const content = qqData.content;
+
+        // 预热会话：异步加载会话数据（不阻塞消息处理）
+        warmupSession(qqData.userId, qqData.groupId).catch(err => {
+          logger.warn(`[会话系统] 会话预热失败: ${err}`);
+        });
 
         // 检查模式切换命令
         const modeResponse = await modeManager.handleModeCommand(content, qqData.userId, qqData.groupId);

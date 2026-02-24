@@ -7,7 +7,7 @@
 
 import { logger } from '../utils/logger.js';
 import { SharedContext } from './SharedContext.js';
-import { MemoryService, MemoryType, RAGService, HierarchicalMemoryService, MemoryLayer } from './memory/index.js';
+import { MemoryService, MemoryType, RAGService, HierarchicalMemoryService, MemoryLayer, KnowledgeCache } from './memory/index.js';
 import { LearningModule } from './learning/index.js';
 import { SkillLoader } from './SkillLoader.js';
 import type { Scheduler } from '../scheduler/index.js';
@@ -148,8 +148,8 @@ export interface GLMCoordinatorAgentOptions {
   model?: string;
   /** 最大 tokens */
   maxTokens?: number;
-  /** 共享上下文 */
-  sharedContext: SharedContext;
+  /** 共享上下文（支持函数形式动态获取会话上下文） */
+  sharedContext: SharedContext | ((userId: string, groupId?: string) => SharedContext);
   /** 子 Agent 注册表 */
   subAgents: Map<string, IAgent>;
   /** 记忆服务（可选） */
@@ -160,6 +160,8 @@ export interface GLMCoordinatorAgentOptions {
   ragService?: RAGService;
   /** 学习模块（可选） */
   learningModule?: LearningModule;
+  /** 知识缓存服务（可选） */
+  knowledgeCache?: KnowledgeCache;
   /** 是否启用记忆存储 */
   enableMemory?: boolean;
   /** 是否启用自主学习 */
@@ -414,13 +416,14 @@ export class GLMCoordinatorAgent implements IAgent {
   private baseUrl: string;
   private model: string;
   private maxTokens: number;
-  private sharedContext: SharedContext;
+  private sharedContext: SharedContext | ((userId: string, groupId?: string) => SharedContext);
   private subAgents: Map<string, IAgent>;
   private imageStorage: ImageStorage;
   private memoryService?: MemoryService;
   private hierarchicalMemoryService?: HierarchicalMemoryService;
   private ragService?: RAGService;
   private learningModule?: LearningModule;
+  private knowledgeCache?: KnowledgeCache;
   private skillLoader?: SkillLoader;
   private enableMemory: boolean;
   private enableLearning: boolean;
@@ -456,6 +459,7 @@ export class GLMCoordinatorAgent implements IAgent {
     this.hierarchicalMemoryService = options.hierarchicalMemoryService;
     this.ragService = options.ragService;
     this.learningModule = options.learningModule;
+    this.knowledgeCache = options.knowledgeCache;
     this.enableMemory = options.enableMemory ?? true;
     this.enableLearning = options.enableLearning ?? true;
     this.enableHierarchicalMemory = !!options.hierarchicalMemoryService;
@@ -497,6 +501,16 @@ export class GLMCoordinatorAgent implements IAgent {
     logger.info(`[GLMCoordinatorAgent] 分层记忆: ${this.enableHierarchicalMemory && this.hierarchicalMemoryService ? '已启用 (OpenViking 风格)' : '未启用'}`);
     logger.info(`[GLMCoordinatorAgent] 自主学习: ${this.enableLearning && this.learningModule ? '已启用' : '未启用'}`);
     logger.info(`[GLMCoordinatorAgent] 定时任务调度器: ${this.scheduler ? '已启用' : '未启用'}`);
+  }
+
+  /**
+   * 获取 SharedContext（支持动态会话）
+   */
+  private getSharedContext(userId?: string, groupId?: string): SharedContext {
+    if (typeof this.sharedContext === 'function') {
+      return this.sharedContext(userId || 'unknown', groupId);
+    }
+    return this.sharedContext;
   }
 
   /**
@@ -595,7 +609,7 @@ export class GLMCoordinatorAgent implements IAgent {
       }
 
       // 添加用户消息到共享上下文
-      this.sharedContext.addConversation('user', content);
+      this.getSharedContext(message.userId, message.groupId).addConversation('user', content);
 
       // 如果有图片且 Vision Agent 可用，直接委托给 Vision Agent
       if (allImages.length > 0 && this.subAgents.has('vision')) {
@@ -625,7 +639,7 @@ export class GLMCoordinatorAgent implements IAgent {
         const visionResponse = await visionAgent.process(subMessage, context);
 
         // 添加助手响应到共享上下文
-        this.sharedContext.addConversation('assistant', visionResponse.content, this.id);
+        this.getSharedContext(message.userId, message.groupId).addConversation('assistant', visionResponse.content, this.id);
 
         // 保存对话记忆
         if (this.enableMemory && this.memoryService) {
@@ -682,7 +696,7 @@ export class GLMCoordinatorAgent implements IAgent {
       }
 
       // 添加助手响应到共享上下文
-      this.sharedContext.addConversation('assistant', finalResponse, this.id);
+      this.getSharedContext(message.userId, message.groupId).addConversation('assistant', finalResponse, this.id);
 
       // 保存对话记忆
       if (this.enableMemory && this.memoryService) {
@@ -1185,9 +1199,10 @@ export class GLMCoordinatorAgent implements IAgent {
 ## 工作流程
 
 对于每个请求：
-1. **理解需求** - 分析用户想要什么
-2. **选择工具** - 根据需求选择合适的 Agent 或工具
-3. **执行验证** - 确保任务完成，不要半途而废
+1. **检查记忆** - 首先检查历史记忆中是否已有相关答案
+2. **理解需求** - 分析用户想要什么
+3. **选择工具** - 根据需求选择合适的 Agent 或工具
+4. **执行验证** - 确保任务完成，不要半途而废
 
 ## ⚠️ 重要规则
 
@@ -1195,6 +1210,23 @@ export class GLMCoordinatorAgent implements IAgent {
 - 列出文件不算发送文件，必须调用发送工具！
 - 代码相关任务优先调用 Claude Code Agent
 - 搜索相关任务优先调用 Web Search Agent
+
+## 🧠 记忆利用（重要！）
+
+系统会提供"记忆上下文"，包含历史对话和相关答案。**必须优先使用记忆中的答案**：
+
+### 记忆利用示例
+用户: "今天武汉的天气怎么样？"
+助手: [检查记忆] 发现历史记录中有今天武汉天气的回答
+助手: "根据之前的搜索，今天武汉天气为多云转晴，气温15-22°C。" ✅ 直接使用记忆
+
+用户: "帮我写一个Python脚本"
+助手: [检查记忆] 无相关记录
+助手: [调用 run_claude_code_agent] ✅ 执行搜索
+
+### 禁止行为
+用户: "今天武汉的天气怎么样？"
+助手: [忽略记忆直接搜索] ❌ 浪费资源！
 
 ## Few-Shot 示例（参考这些对话模式）
 
@@ -1250,7 +1282,7 @@ ${personaPrompt}
     const content = contentOverride !== undefined ? contentOverride : message.content;
 
     // 从共享上下文获取历史消息
-    const historyMessages = this.sharedContext.getAnthropicMessages();
+    const historyMessages = this.getSharedContext(message.userId, message.groupId).getAnthropicMessages();
 
     // 如果历史消息为空，使用当前消息
     if (historyMessages.length === 0) {
@@ -2442,7 +2474,7 @@ ${personaPrompt}
           });
 
           // 保存计划到共享上下文
-          this.sharedContext.addConversation('system', `[当前执行计划]\n${plan}`, this.id);
+          this.getSharedContext(message.userId, message.groupId).addConversation('system', `[当前执行计划]\n${plan}`, this.id);
 
           logger.info(`[GLMCoordinatorAgent] 计划已生成并保存`);
         } catch (error) {
@@ -2487,7 +2519,7 @@ ${personaPrompt}
           });
 
           // 保存反思结果到共享上下文
-          this.sharedContext.addConversation('system', `[自我反思]\n${reflection}`, this.id);
+          this.getSharedContext(message.userId, message.groupId).addConversation('system', `[自我反思]\n${reflection}`, this.id);
 
           logger.info(`[GLMCoordinatorAgent] 自我反思完成`);
         } catch (error) {
@@ -2532,7 +2564,7 @@ ${personaPrompt}
           });
 
           // 保存策略调整到共享上下文
-          this.sharedContext.addConversation('system', `[策略调整]\n${adjustment}`, this.id);
+          this.getSharedContext(message.userId, message.groupId).addConversation('system', `[策略调整]\n${adjustment}`, this.id);
 
           logger.info(`[GLMCoordinatorAgent] 策略调整完成`);
         } catch (error) {
@@ -2810,18 +2842,39 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
             continue;
           }
 
-          logger.info(`[GLMCoordinatorAgent] 执行网络搜索: "${query}"`);
+          // 检查知识缓存
+          let searchResult: string;
+          let fromCache = false;
 
-          // 直接调用 Zhipu API 进行网络搜索
-          const searchResult = await this.performWebSearch(query);
+          if (this.knowledgeCache) {
+            const cached = this.knowledgeCache.get(query);
+            if (cached) {
+              searchResult = cached;
+              fromCache = true;
+              logger.info(`[GLMCoordinatorAgent] 缓存命中: ${query.substring(0, 30)}...`);
+            }
+          }
+
+          if (!fromCache) {
+            logger.info(`[GLMCoordinatorAgent] 执行网络搜索: "${query}"`);
+            // 直接调用 Zhipu API 进行网络搜索
+            searchResult = await this.performWebSearch(query);
+
+            // 缓存搜索结果
+            if (this.knowledgeCache) {
+              this.knowledgeCache.set(query, searchResult);
+            }
+          }
 
           results.push({
             toolCallId: toolCall.id,
-            result: `[网络搜索结果]\n\n${searchResult}`,
+            result: fromCache
+              ? `[缓存答案]\n\n${searchResult}\n\n*(此答案来自历史搜索缓存)*`
+              : `[网络搜索结果]\n\n${searchResult}`,
             agentId: 'glm-coordinator',
           });
 
-          logger.info(`[GLMCoordinatorAgent] 网络搜索完成`);
+          logger.info(`[GLMCoordinatorAgent] ${fromCache ? '缓存命中' : '网络搜索完成'}`);
 
         } catch (error) {
           logger.error(`[GLMCoordinatorAgent] web_search 工具执行失败: ${error}`);
@@ -2849,18 +2902,39 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
             continue;
           }
 
-          logger.info(`[GLMCoordinatorAgent] 执行网络搜索 (run_websearch_agent): "${query}"`);
+          // 检查知识缓存
+          let searchResult: string;
+          let fromCache = false;
 
-          // 直接调用 Zhipu API 进行网络搜索
-          const searchResult = await this.performWebSearch(query);
+          if (this.knowledgeCache) {
+            const cached = this.knowledgeCache.get(query);
+            if (cached) {
+              searchResult = cached;
+              fromCache = true;
+              logger.info(`[GLMCoordinatorAgent] 缓存命中: ${query.substring(0, 30)}...`);
+            }
+          }
+
+          if (!fromCache) {
+            logger.info(`[GLMCoordinatorAgent] 执行网络搜索 (run_websearch_agent): "${query}"`);
+            // 直接调用 Zhipu API 进行网络搜索
+            searchResult = await this.performWebSearch(query);
+
+            // 缓存搜索结果
+            if (this.knowledgeCache) {
+              this.knowledgeCache.set(query, searchResult);
+            }
+          }
 
           results.push({
             toolCallId: toolCall.id,
-            result: `[网络搜索结果]\n\n${searchResult}`,
+            result: fromCache
+              ? `[缓存答案]\n\n${searchResult}\n\n*(此答案来自历史搜索缓存)*`
+              : `[网络搜索结果]\n\n${searchResult}`,
             agentId: 'websearch',
           });
 
-          logger.info(`[GLMCoordinatorAgent] 网络搜索完成`);
+          logger.info(`[GLMCoordinatorAgent] ${fromCache ? '缓存命中' : '网络搜索完成'}`);
 
         } catch (error) {
           logger.error(`[GLMCoordinatorAgent] run_websearch_agent 工具执行失败: ${error}`);
@@ -2928,7 +3002,7 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
         const subResponse = await agent.process(subMessage, context);
 
         // 保存工作状态到共享上下文
-        this.sharedContext.setWorkState(agentId, subResponse.content);
+        this.getSharedContext(message.userId, message.groupId).setWorkState(agentId, subResponse.content);
 
         results.push({
           toolCallId: toolCall.id,
