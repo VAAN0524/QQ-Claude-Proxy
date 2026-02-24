@@ -20,7 +20,7 @@ import type {
 } from './base/Agent.js';
 import { AgentCapability } from './base/Agent.js';
 import { createHmac, randomBytes, createSign } from 'crypto';
-import { promises as fs, existsSync, mkdirSync } from 'fs';
+import { promises as fs, existsSync, mkdirSync, readdir } from 'fs';
 import * as crypto from 'crypto';
 import path from 'path';
 
@@ -1462,12 +1462,32 @@ ${memoryContext}` : ''}`;
       });
     }
 
+    // Batch File Send Tool - 批量发送文件给用户
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'send_multiple_files',
+        description: '【批量文件传输】当用户请求发送多个文件时使用。触发词："把这些文件都发给我"、"发送所有test文件"、"批量发送文件"。参数 filePatterns 是文件名模式列表，如：["test.txt", "test.md", "test.json"]。注意：必须调用此工具才能发送文件，不能只列出文件名。',
+        parameters: {
+          type: 'object',
+          properties: {
+            filePatterns: {
+              type: 'array',
+              items: { type: 'string' } as any,
+              description: '文件名模式列表。例如：["test.txt", "test.md", "test.json"]',
+            } as any,
+          } as any,
+          required: ['filePatterns'],
+        } as any,
+      },
+    } as any);
+
     // File Send Tool - 发送文件给用户
     tools.push({
       type: 'function',
       function: {
         name: 'send_file',
-        description: '【文件传输】当用户请求把文件发送到QQ时使用。触发词："把xxx发给我"、"发送文件xxx"、"传文件给我"、"我要xxx文件"、"下载xxx"。注意：此工具用于文件传输，不是读取内容。执行后文件会发送到用户的QQ。',
+        description: '【文件传输】当用户请求把单个文件发送到QQ时使用。触发词："把xxx发给我"、"发送文件xxx"、"传文件给我"、"我要xxx文件"、"下载xxx"。注意：此工具用于文件传输，不是读取内容。执行后文件会发送到用户的QQ。',
         parameters: {
           type: 'object',
           properties: {
@@ -1973,6 +1993,79 @@ ${memoryContext}` : ''}`;
           }
         } catch (error) {
           logger.error(`[GLMCoordinatorAgent] send_file 工具执行失败: ${error}`);
+          results.push({
+            toolCallId: toolCall.id,
+            result: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            agentId: 'glm-coordinator',
+          });
+        }
+        continue;
+      }
+
+      // 处理 send_multiple_files 工具（批量文件发送）
+      if (toolCall.function.name === 'send_multiple_files') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const filePatterns = args.filePatterns as string[];
+
+          // 参数验证
+          if (!filePatterns || filePatterns.length === 0) {
+            results.push({
+              toolCallId: toolCall.id,
+              result: 'Error: Missing required parameter filePatterns',
+              agentId: 'glm-coordinator',
+            });
+            continue;
+          }
+
+          // 简化实现：直接使用文件名列表，不支持通配符
+          const matchedFiles: string[] = [];
+          for (const pattern of filePatterns) {
+            // 如果包含通配符，返回提示
+            if (pattern.includes('*') || pattern.includes('?')) {
+              results.push({
+                toolCallId: toolCall.id,
+                result: `Error: 通配符暂不支持，请使用完整文件名。例如：["test.txt", "test.md", "test.json"]`,
+                agentId: 'glm-coordinator',
+              });
+              continue;
+            }
+
+            // 检查文件是否存在
+            const fullPath = path.join(context.workspacePath, pattern);
+            try {
+              await fs.access(fullPath);
+              matchedFiles.push(fullPath);
+            } catch {
+              // 文件不存在，跳过
+            }
+          }
+
+          // 去重
+          const uniqueFiles = [...new Set(matchedFiles)];
+
+          if (uniqueFiles.length === 0) {
+            results.push({
+              toolCallId: toolCall.id,
+              result: `Error: No files found. 请检查文件名是否正确`,
+              agentId: 'glm-coordinator',
+            });
+            continue;
+          }
+
+          // 添加所有匹配的文件到待发送列表
+          for (const filePath of uniqueFiles) {
+            this.pendingFiles.push(filePath);
+            logger.info(`[GLMCoordinatorAgent] 添加文件到发送队列: ${filePath}`);
+          }
+
+          results.push({
+            toolCallId: toolCall.id,
+            result: `已将 ${uniqueFiles.length} 个文件添加到发送队列: ${uniqueFiles.map(f => path.basename(f)).join(', ')}`,
+            agentId: 'glm-coordinator',
+          });
+        } catch (error) {
+          logger.error(`[GLMCoordinatorAgent] send_multiple_files 工具执行失败: ${error}`);
           results.push({
             toolCallId: toolCall.id,
             result: `Error: ${error instanceof Error ? error.message : String(error)}`,
