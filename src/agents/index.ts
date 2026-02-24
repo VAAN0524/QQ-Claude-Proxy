@@ -1,18 +1,13 @@
 /**
  * Agent 系统导出
+ *
+ * 简化架构：
+ * - Simple 模式：使用 SimpleCoordinatorAgent（万金油 agent，支持 SKILL.md）
+ * - CLI 模式：直接调用本地 Claude Code CLI
  */
 
 // 基础接口
 export * from './base/Agent.js';
-export * from './base/PersonaAgent.js';
-
-// Agent 通信风格处理（方案3）
-export {
-  PersonaTagExtractor,
-  AgentMessageEnhancer,
-  AgentCollaborationStyleAdapter,
-  StyleConsistencyChecker,
-} from './AgentCommunication.js';
 
 // 核心组件
 export { AgentRegistry } from './AgentRegistry.js';
@@ -21,7 +16,7 @@ export { SharedContext } from './SharedContext.js';
 export { SharedContextPersistence, SessionManager } from './SharedContextPersistence.js';
 export { modeManager, AgentMode } from './ModeManager.js';
 
-// 技能系统
+// 技能系统（Simple 模式使用）
 export { SkillLoader } from './SkillLoader.js';
 export type { SkillMetadata, SkillDefinition } from './SkillLoader.js';
 export { SkillInstaller, SkillSource } from './SkillInstaller.js';
@@ -31,7 +26,7 @@ export type {
   SkillInstallResult,
 } from './SkillInstaller.js';
 
-// 记忆服务
+// 记忆服务（CLI 模式使用）
 export { MemoryService, RAGService, HierarchicalMemoryService, KnowledgeCache } from './memory/index.js';
 export type {
   MemoryEntry,
@@ -54,7 +49,7 @@ export type {
 // 学习模块
 export { LearningModule } from './learning/index.js';
 
-// 内置 Agents
+// 内置 Agents（保留用于 CLI 模式的特殊任务）
 export { CodeAgent } from './CodeAgent.js';
 export { BrowserAgent } from './BrowserAgent.js';
 export { ShellAgent } from './ShellAgent.js';
@@ -66,42 +61,18 @@ export { SkillManagerAgent } from './SkillManagerAgent.js';
 export { TavilySearchAgent } from './TavilySearchAgent.js';
 export { DuckSearchAgent } from './DuckSearchAgent.js';
 
-// 主协调 Agent
-export { CoordinatorAgent } from './CoordinatorAgent.js';
-export type { CoordinatorAgentOptions } from './CoordinatorAgent.js';
+// 简化协调 Agent（Simple 模式的核心）
+export { SimpleCoordinatorAgent } from './SimpleCoordinatorAgent.js';
+export type { SimpleCoordinatorConfig } from './SimpleCoordinatorAgent.js';
 
-// GLM 协调 Agent
-export { GLMCoordinatorAgent } from './GLMCoordinatorAgent.js';
-export type { GLMCoordinatorAgentOptions } from './GLMCoordinatorAgent.js';
-
-// 真正的团队协调器
-export { TeamCoordinator } from './TeamCoordinator.js';
-export type { SubAgentConfig, TeamTask, TeamCoordinatorOptions } from './TeamCoordinator.js';
+// 工具定义
+export * from './tools/index.js';
 
 // 技能管理器
 export { SkillManager } from '../skills/SkillManager.js';
 export type { SkillMetadata as SkillManagerMetadata } from '../skills/SkillManager.js';
 
-// 工具定义（简化 API）
-export * from './tools/index.js';
-
-// Agent 人格设定
-export { AGENT_PERSONAS, getAgentPersona, getAllAgentPersonas, getPersonasByCapability } from './personas.js';
-export type { AgentPersona } from './personas.js';
-
-// 人格设定 Prompt 构建器
-export {
-  buildPersonaPrompt,
-  buildResponseStyleGuide,
-  buildFullPersonaPrompt,
-  buildTeamCollaborationPrompt,
-} from './PersonaPromptBuilder.js';
-
-// MCP 客户端
-export { ZaiMcpClient } from './ZaiMcpClient.js';
-export type { ZaiMcpClientOptions, McpTool } from './ZaiMcpClient.js';
-
-// Agent 注册中心（带人格设定）
+// Agent 注册中心
 export {
   REGISTERED_AGENTS,
   getAgentMetadata,

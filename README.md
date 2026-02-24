@@ -2,10 +2,10 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
-![Code](https://img.shields.io/badge/code-47k%20lines-orange.svg)
+![Code](https://img.shields.io/badge/code-43k%20lines-orange.svg)
 
 ---
 
@@ -41,22 +41,18 @@
 ```
 直接调用本地安装的 Claude Code CLI，使用你配置的所有 Skills 和 MCP 插件。
 
-#### 团队模式
+#### Simple 模式 🆕
 ```
-/mode team
+/mode simple
 ```
-基于 GLM-4.7 的智能协调器，自动分析任务并分配给 **8 个专业 Agent**：
+极简协调 Agent + SKILL.md 驱动，快速响应日常任务：
 
-| Agent | 功能 |
-|-------|------|
-| **Code Agent** | 代码分析、生成、调试 |
-| **Browser Agent** | 网页操作、截图 |
-| **Shell Agent** | 命令执行 |
-| **WebSearch Agent** | 网络搜索 |
-| **Data Agent** | 数据分析 |
-| **Vision Agent** | 图像理解 |
-| **Refactor Agent** | 代码重构 |
-| **SkillManager Agent** | 技能管理 |
+| 特性 | 说明 |
+|------|------|
+| **单一协调者** | 一个 Agent 处理所有任务 |
+| **动态技能加载** | 通过 SKILL.md 切换身份和技能 |
+| **直接工具调用** | 不经过 ReAct，直接执行 |
+| **专业 Agents** | 按需调用 Browser/Shell/Search 等专业 Agents |
 
 ---
 
@@ -64,18 +60,18 @@
 
 | 分类 | 文件数 | 代码行数 |
 |------|-------|---------|
-| **后端** (TypeScript) | 73 | **31,500+** |
+| **后端** (TypeScript) | 70+ | **~30,000** |
 | **前端** (HTML/CSS/JS) | 15 | 8,900 |
 | **配置** (JSON) | 16 | 7,800 |
-| **总计** | **104** | **~48,200** |
+| **总计** | **100+** | **~46,700** |
 
 **核心模块**:
 - LLM Provider 统一接口 (OpenAI/Anthropic/GLM)
-- 8 个专业 Agents
-- 分层记忆系统 (L0/L1/L2)
-- 知识缓存服务
-- 会话持久化
-- 定时任务调度
+- SimpleCoordinatorAgent (极简协调 Agent)
+- 10+ 专业 Agents (Browser/Shell/Search/Vision/Data...)
+- 分层记忆系统 (OpenViking 风格 L0/L1/L2)
+- 技能管理系统 (30+ 内置技能)
+- 定时任务调度器
 - Web Dashboard
 
 ---
@@ -123,10 +119,10 @@ quick-start.bat  # Windows 快捷启动
 
 ### 模式切换
 ```
-/mode cli      # 切换到 CLI 模式
-/mode team     # 切换到团队模式
-/模式 cli      # 中文命令
-/模式 团队     # 中文命令
+/mode cli       # 切换到 CLI 模式
+/mode simple    # 切换到 Simple 模式 🆕
+/模式 cli       # 中文命令
+/模式 简单      # 中文命令
 ```
 
 ### QQ 常用命令
@@ -135,7 +131,7 @@ quick-start.bat  # Windows 快捷启动
 把 xxx.md 发给我      # 发送文件到 QQ
 清空历史              # 重置对话
 新任务                # 开始新任务
-列出任务              # 查看定时任务 (团队模式)
+列出任务              # 查看定时任务
 ```
 
 ### Dashboard 功能
@@ -161,7 +157,7 @@ quick-start.bat  # Windows 快捷启动
 - 指定具体日期和时间
 - 执行完成后自动标记为完成
 
-**QQ 对话管理** (团队模式):
+**QQ 对话管理**:
 - "列出任务" - 查看所有定时任务
 - "创建任务" - 创建新的周期/定时任务
 - "删除任务A" - 删除指定任务
@@ -184,7 +180,7 @@ quick-start.bat  # Windows 快捷启动
 │        ↓                                                         │
 │  ④ Agent 处理:                                                    │
 │      - CLI 模式 → 调用本地 Claude Code CLI                       │
-│      - 团队模式 → GLM-4.7 协调器分配给专业 Agent                   │
+│      - Simple 模式 → SimpleCoordinatorAgent + 专业 Agents        │
 │        ↓                                                         │
 │  ⑤ 执行完成，返回响应                                              │
 │      - 文件自动发送                                               │
@@ -201,37 +197,49 @@ quick-start.bat  # Windows 快捷启动
 QQ-Claude-Proxy/
 ├── src/
 │   ├── agents/                 # 🤖 多 Agent 系统
-│   │   ├── memory/            # 🧠 记忆系统 (分层记忆 + 知识缓存)
+│   │   ├── base/              # Agent 基础接口 (IAgent, PersonaAgent)
+│   │   ├── memory/            # 🧠 分层记忆 (OpenViking L0/L1/L2)
 │   │   ├── learning/          # 📚 自主学习模块
-│   │   └── tools/             # 🔧 Agent 工具
-│   ├── gateway/              # 🔶 WebSocket 消息网关
-│   ├── channels/             # 🔵 QQ Bot Channel
-│   ├── llm/                  # 🔷 LLM Provider
-│   ├── terminal/             # 🟠 终端监控
-│   └── scheduler/            # 🟡 定时任务调度器
-├── public/dashboard/         # 🌐 Web Dashboard
-├── skills/                   # 📚 技能目录
-├── workspace/                # 📁 工作目录
-└── uploads/                  # 📎 上传文件存储
+│   │   ├── tools/             # 🔧 Agent 工具
+│   │   └── *.ts               # 各个 Agent 实现
+│   ├── agent/                 # Claude Code CLI 适配器
+│   ├── gateway/               # 🔶 WebSocket 消息网关
+│   ├── channels/              # 🔵 QQ Bot Channel
+│   ├── llm/                   # 🔷 LLM Provider 统一接口
+│   ├── scheduler/             # 🟡 定时任务调度器
+│   └── utils/                 # 🛠️ 工具函数
+├── public/dashboard/          # 🌐 Web Dashboard
+├── skills/                    # 📚 技能目录 (30+ 技能)
+├── workspace/                 # 📁 Claude Code 工作目录
+└── uploads/                   # 📎 上传文件存储
 ```
 
 ---
 
-## 🔥 最新更新 (v1.3.0)
+## 🔥 最新更新 (v1.4.0)
 
-### ✨ 新增功能
+### ✨ 架构重构
 
-- **🧠 知识缓存服务** - 智能缓存搜索结果，避免重复搜索
-  - 天气信息：30 分钟缓存
-  - 新闻摘要：6 小时缓存
-  - 定义/概念：7 天缓存
-  - API 文档：30 天缓存
+- **🎯 Simple 模式** - 全新极简协调 Agent
+  - 单一协调者设计，减少复杂度
+  - SKILL.md 驱动，动态切换身份
+  - 直接工具调用，提升响应速度
 
-- **💾 会话持久化** - 每个用户/群组独立会话
-  - 服务重启后自动恢复对话历史
-  - 支持 `user_{userId}` 和 `group_{groupId}` 隔离
+- **🧠 OpenViking 风格记忆系统** - 分层记忆优化
+  - L0: ~100 tokens 快速索引
+  - L1: ~2000 tokens 内容导航
+  - L2: 无限完整数据存储
 
-- **🎯 记忆利用优化** - LLM 优先使用历史记忆中的答案
+- **📦 代码精简** - 删除 ~5,000 行冗余代码
+  - 移除复杂的 GLMCoordinatorAgent
+  - 简化 Agent 调度逻辑
+  - 优化项目结构
+
+### 🐛 Bug 修复
+
+- 修复网络重试导致的内存溢出问题
+- 修复 Agent 接口类型定义
+- 修复会话持久化边界情况
 
 ---
 
@@ -249,11 +257,13 @@ QQ-Claude-Proxy/
 ### Q: 和云端 AI 平台有什么区别？
 **A:** 本项目运行的是**你本地安装的 Claude Code CLI**，使用你自己的配置、Skills 和 MCP 插件，代码完全本地执行，不需要上传到云端。
 
+### Q: CLI 模式和 Simple 模式有什么区别？
+**A:**
+- **CLI 模式**: 直接调用本地 Claude Code CLI，拥有完整的代码分析能力
+- **Simple 模式**: 极简协调 Agent，快速响应日常任务，按需调用专业 Agents
+
 ### Q: 支持群聊吗？
 **A:** 支持！机器人可以在私聊和群聊中使用。
-
-### Q: 搜索结果会缓存吗？
-**A:** 是的！智能缓存系统会根据查询类型自动设置有效期，避免重复搜索。
 
 ### Q: 服务重启后会丢失对话历史吗？
 **A:** 不会！会话持久化系统会自动保存和恢复对话历史。
@@ -280,7 +290,7 @@ MIT License
 
 <div align="center">
 
-**Made with [Heart] by VAAN**
+**Made with ❤️ by VAAN**
 
 [GitHub](https://github.com/VAAN0524) | [Issues](https://github.com/VAAN0524/QQ-Claude-Proxy/issues) | [Star ⭐](https://github.com/VAAN0524/QQ-Claude-Proxy)
 

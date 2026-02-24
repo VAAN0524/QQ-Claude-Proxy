@@ -10,6 +10,7 @@
 
 import { logger } from '../../utils/logger.js';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import {
   getNetworkHelper,
   shouldUseMirror,
@@ -121,35 +122,47 @@ export class SmartNetworkTool {
   }
 
   /**
-   * DuckSearch 获取（使用 ducksearch 包的 fetchContent）
-   * 延迟加载避免模块级别的 program.parse() 副作用
+   * Axios 内容获取（替代 ducksearch，避免副作用）
+   * 直接实现网页内容提取功能
    */
-  private static duckSearchFetchContent: ((url: string) => Promise<string>) | null = null;
-
-  private async ensureDuckSearchLoaded() {
-    if (SmartNetworkTool.duckSearchFetchContent) {
-      return;
-    }
+  private async axiosContentFetch(url: string, timeout: number = 30000): Promise<string | null> {
+    logger.debug(`[SmartNetworkTool] 使用 axios 获取内容: ${url}, timeout: ${timeout}ms`);
 
     try {
-      // 动态导入，避免模块级别的副作用
-      const ducksearch = await import('ducksearch');
-      SmartNetworkTool.duckSearchFetchContent = ducksearch.fetchContent;
-      logger.info('[SmartNetworkTool] ducksearch fetchContent 已加载');
+      const https = await import('https');
+
+      // 创建 HTTPS Agent（禁用证书验证以解决 SSL 问题）
+      const httpsAgent = new https.Agent({
+        rejectUnauthorized: false, // 开发环境禁用证书验证
+      });
+
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        maxRedirects: 5,
+        timeout,
+        responseType: 'text',
+        httpsAgent,
+      });
+
+      // 使用 cheerio 提取文本内容
+      const $ = cheerio.load(response.data);
+
+      // 移除不需要的元素
+      $('script, style, nav, header, footer, iframe, noscript').remove();
+
+      // 提取主要文本内容
+      let text = $('body').text() || $.text();
+
+      // 清理文本
+      text = text.replace(/\s+/g, ' ').trim();
+
+      return text;
     } catch (error) {
-      logger.debug(`[SmartNetworkTool] 加载 ducksearch 失败: ${error}`);
-      throw new Error('ducksearch 包加载失败');
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`axios 内容获取失败: ${message}`);
     }
-  }
-
-  private async duckSearchFetch(url: string): Promise<string | null> {
-    await this.ensureDuckSearchLoaded();
-    if (!SmartNetworkTool.duckSearchFetchContent) {
-      throw new Error('duckSearch fetchContent 未初始化');
-    }
-
-    logger.debug(`[SmartNetworkTool] 使用 ducksearch fetchContent: ${url}`);
-    return SmartNetworkTool.duckSearchFetchContent(url);
   }
 
   /**
@@ -266,11 +279,11 @@ export class SmartNetworkTool {
       execute: (u) => this.directFetch(u, options.timeout)
     });
 
-    // 尝试 ducksearch（使用 axios，配置更优）
+    // 尝试 axios 内容获取（配置更优，可处理重定向和编码）
     strategies.push({
-      name: 'ducksearch',
-      description: 'DuckSearch fetchContent',
-      execute: (u) => this.duckSearchFetch(u)
+      name: 'axios',
+      description: 'Axios 内容获取',
+      execute: (u) => this.axiosContentFetch(u, options.timeout ?? 30000)
     });
 
     return strategies;

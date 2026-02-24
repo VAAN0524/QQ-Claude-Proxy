@@ -28,16 +28,12 @@ import {
   CodeAgent,
   BrowserAgent,
   ShellAgent,
-  CoordinatorAgent,
-  GLMCoordinatorAgent,
+  SimpleCoordinatorAgent, // Simple 模式的万金油 Agent
   CodeRefactorAgent,
   SkillManagerAgent,
   SharedContext,
   SharedContextPersistence,
   SessionManager,
-  MemoryService,
-  RAGService,
-  KnowledgeCache,
   type IAgent,
   type AgentMessage,
   type AgentContext,
@@ -693,42 +689,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Team Coordinator (真正的多进程团队协调器) - 可选功能
-  if ((process.env.ENABLE_TEAM_COORDINATOR === '1') || (config as any).agents?.enableTeam) {
-    try {
-      const { TeamCoordinator } = await import('./agents/TeamCoordinator.js');
-
-      // 定义子 Agent 配置
-      const subAgents: any[] = [];
-
-      // 如果 Code Agent 可用，添加为子 Agent
-      if (agentRegistry.get('code')) {
-        subAgents.push({
-          id: 'code-worker-1',
-          name: 'Code Worker 1',
-          command: process.execPath,
-          args: [path.join(process.cwd(), 'dist', 'workers', 'code-worker.js')],
-          cwd: process.cwd(),
-          restartPolicy: 'on-failure',
-        });
-      }
-
-      if (subAgents.length > 0) {
-        const teamCoordinator = new TeamCoordinator({
-          agents: subAgents,
-          maxConcurrentTasks: 3,
-          autoRestart: true,
-        });
-
-        await teamCoordinator.initialize();
-        agentRegistry.register(teamCoordinator);
-        logger.info('[Agent 系统] Team Coordinator 已启用 (多进程模式)');
-      }
-    } catch (error) {
-      logger.warn(`[Agent 系统] Team Coordinator 初始化失败: ${error}`);
-    }
-  }
-
   // ========== 会话持久化系统 ==========
   // 初始化会话管理器（支持跨会话记忆和状态恢复）
   const sessionManager = new SessionManager({
@@ -748,21 +708,6 @@ async function main(): Promise<void> {
     return await sessionManager.getOrCreateSession(sessionId);
   }
 
-  // 辅助函数：同步获取会话的 SharedContext（用于 GLMCoordinatorAgent）
-  function getSessionSharedContext(userId: string, groupId?: string): SharedContext {
-    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
-    let session = sessionCache.get(sessionId);
-
-    if (!session) {
-      // 会话尚未加载，返回默认的 sharedContext
-      // 注意：这会在首次访问时返回空会话，消息处理完成后会异步加载完整会话
-      logger.debug(`[会话系统] 会话 ${sessionId} 尚未加载，使用默认上下文`);
-      return sharedContext;
-    }
-
-    return session.getContext();
-  }
-
   // 预热会话：异步加载并缓存
   async function warmupSession(userId: string, groupId?: string): Promise<void> {
     const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
@@ -773,203 +718,55 @@ async function main(): Promise<void> {
     }
   }
 
-  // 初始化 Coordinator Agent 或 Agent Dispatcher
-  let coordinatorAgent: CoordinatorAgent | GLMCoordinatorAgent | null = null;
+  // 初始化 Agent 系统
   let agentDispatcher: AgentDispatcher | null = null;
-
-  if (config.agents.useCoordinator && config.agents.coordinator.enabled) {
-    // 使用协作式 Coordinator Agent
-    logger.info('[Agent 系统] 尝试初始化 Coordinator Agent...');
-    logger.info(`[Agent 系统] useCoordinator = ${config.agents.useCoordinator}`);
-    logger.info(`[Agent 系统] coordinator.enabled = ${config.agents.coordinator.enabled}`);
-    logger.info(`[Agent 系统] GLM_API_KEY 存在 = ${!!apiKeys.glm}`);
-    logger.info(`[Agent 系统] ANTHROPIC_API_KEY 存在 = ${!!apiKeys.anthropic}`);
-
-    try {
-      const subAgentMap = new Map<string, IAgent>();
-
-      // 添加已启用的子 Agent
-      if (config.agents.coordinator.subAgents.code && agentRegistry.get('code')) {
-        subAgentMap.set('code', agentRegistry.get('code')!);
-        logger.info('[Agent 系统] 添加 Code Agent 到子 Agent 列表');
-      }
-      if (config.agents.coordinator.subAgents.browser && agentRegistry.get('browser')) {
-        subAgentMap.set('browser', agentRegistry.get('browser')!);
-        logger.info('[Agent 系统] 添加 Browser Agent 到子 Agent 列表');
-      }
-      if (config.agents.coordinator.subAgents.shell && agentRegistry.get('shell')) {
-        subAgentMap.set('shell', agentRegistry.get('shell')!);
-        logger.info('[Agent 系统] 添加 Shell Agent 到子 Agent 列表');
-      }
-      // 添加 Vision Agent（如果已注册）
-      if (agentRegistry.get('vision')) {
-        subAgentMap.set('vision', agentRegistry.get('vision')!);
-        logger.info('[Agent 系统] 添加 Vision Agent 到子 Agent 列表');
-      }
-      // 添加 Web Search Agent（如果配置启用且已注册）
-      if (config.agents.coordinator.subAgents.websearch && agentRegistry.get('websearch')) {
-        subAgentMap.set('websearch', agentRegistry.get('websearch')!);
-        logger.info('[Agent 系统] 添加 Web Search Agent 到子 Agent 列表');
-      }
-      // 添加 Data Analysis Agent（如果配置启用且已注册）
-      if (config.agents.coordinator.subAgents.data && agentRegistry.get('data')) {
-        subAgentMap.set('data', agentRegistry.get('data')!);
-        logger.info('[Agent 系统] 添加 Data Analysis Agent 到子 Agent 列表');
-      }
-
-      // 优先使用 GLM API Key，否则使用 Anthropic
-      if (apiKeys.glm) {
-        logger.info('[Agent 系统] 使用 GLM API Key 初始化 GLMCoordinatorAgent...');
-
-        // 初始化记忆服务
-        const memoryService = new MemoryService({
-          storagePath: path.join(process.cwd(), 'data', 'memory'),
-          autoCleanup: true,
-          retentionTime: 30 * 24 * 60 * 60 * 1000, // 30 天
-        });
-        await memoryService.initialize();
-
-        // 初始化 RAG 服务
-        const ragService = new RAGService({
-          memoryService,
-          defaultMaxResults: 10,
-          defaultMinScore: 0.3,
-        });
-
-        // 初始化知识缓存服务
-        const knowledgeCache = new KnowledgeCache({
-          storagePath: path.join(process.cwd(), 'data', 'knowledge-cache'),
-          defaultTTL: 60 * 60 * 1000, // 1 小时
-          maxEntries: 1000,
-          persist: true,
-        });
-        await knowledgeCache.initialize();
-        // 启动定期清理（每小时）
-        knowledgeCache.startPeriodicCleanup(60 * 60 * 1000);
-        logger.info('[Agent 系统] 知识缓存服务已初始化');
-
-        // 获取 WebSearchAgent（如果有的话）
-        const webSearchAgent = agentRegistry.get('websearch');
-
-        // 初始化学习模块
-        const { LearningModule } = await import('./agents/learning/index.js');
-        const learningModule = new LearningModule({
-          memoryService,
-          webSearchAgent,
-          maxResults: 5,
-          knowledgeRetentionTime: 90 * 24 * 60 * 60 * 1000, // 90 天
-        });
-
-        // ========== 初始化分层记忆服务（OpenViking 风格）==========
-        let hierarchicalMemoryService = null;
-        try {
-          const { HierarchicalMemoryService } = await import('./agents/memory/HierarchicalMemoryService.js');
-          const hierarchicalMemoryPath = path.join(process.cwd(), 'data', 'hierarchical-memory');
-          hierarchicalMemoryService = new HierarchicalMemoryService({
-            agentConfigs: [
-              {
-                agentId: 'glm-coordinator',
-                memoryPath: path.join(hierarchicalMemoryPath, 'agent'),
-                enableHierarchical: true,
-              }
-            ],
-            sharedConfig: {
-              enabled: true,
-              sharedPath: path.join(hierarchicalMemoryPath, 'shared'),
-              participatingAgents: ['glm-coordinator', 'code', 'browser', 'websearch', 'data'],
-              syncInterval: 60000, // 1 分钟
-            },
-            storagePath: hierarchicalMemoryPath,
-            autoCleanup: true,
-          });
-          await hierarchicalMemoryService.initialize();
-          logger.info('[Agent 系统] 分层记忆服务已初始化 (OpenViking 风格)');
-        } catch (error) {
-          logger.warn(`[Agent 系统] 分层记忆服务初始化失败: ${error}`);
-        }
-
-        // 使用会话持久化：传入获取 SharedContext 的函数
-        coordinatorAgent = new GLMCoordinatorAgent({
-          apiKey: apiKeys.glm,
-          baseUrl: apiKeys.glmBaseUrl,
-          model: 'glm-4.7', // Z.AI Coding Plan 模型名
-          maxTokens: config.agents.coordinator.maxTokens,
-          // 传入同步函数以支持会话持久化：每个用户/群组有独立的 SharedContext
-          sharedContext: (userId: string, groupId?: string) => getSessionSharedContext(userId, groupId),
-          subAgents: subAgentMap,
-          memoryService,
-          ragService,
-          learningModule,
-          hierarchicalMemoryService, // 添加分层记忆服务
-          knowledgeCache, // 添加知识缓存服务
-          enableMemory: true,
-          enableLearning: true,
-          scheduler: scheduler || undefined,
-        });
-
-        await coordinatorAgent.initialize?.();
-        logger.info('[Agent 系统] GLM Coordinator Agent 已启用 (协作模式 + 记忆服务 + 自主学习)');
-      } else if (apiKeys.anthropic) {
-        logger.info('[Agent 系统] 使用 Anthropic API Key 初始化 CoordinatorAgent...');
-        coordinatorAgent = new CoordinatorAgent({
-          apiKey: apiKeys.anthropic,
-          model: config.agents.coordinator.model,
-          maxTokens: config.agents.coordinator.maxTokens,
-          sharedContext,
-          subAgents: subAgentMap,
-        });
-
-        await coordinatorAgent.initialize?.();
-        logger.info('[Agent 系统] Anthropic Coordinator Agent 已启用 (协作模式)');
-      } else {
-        logger.warn('[Agent 系统] 未配置 API Key (GLM_API_KEY 或 ANTHROPIC_API_KEY)，无法启用 Coordinator Agent');
-      }
-
-      if (coordinatorAgent) {
-        logger.info(`[Agent 系统] 子 Agent 数量: ${subAgentMap.size}`);
-      }
-    } catch (error) {
-      logger.error(`[Agent 系统] Coordinator Agent 初始化失败: ${error}`);
-      logger.error(`[Agent 系统] 错误详情: ${error instanceof Error ? error.message : String(error)}`);
-      if (error instanceof Error && error.stack) {
-        logger.error(`[Agent 系统] 错误堆栈: ${error.stack}`);
-      }
-      logger.warn('[Agent 系统] 回退到 Dispatcher 模式');
-      coordinatorAgent = null;
-    }
-  } else {
-    logger.info('[Agent 系统] Coordinator 模式未启用，使用 Dispatcher 模式');
-  }
+  let simpleCoordinatorAgent: SimpleCoordinatorAgent | null = null;
 
   // 始终创建 Agent Dispatcher（CLI 模式需要使用）
   agentDispatcher = new AgentDispatcher(agentRegistry, agent);
   logger.info('[Agent 系统] Agent Dispatcher 已创建 (CLI 模式使用)');
+
+  // 初始化 SimpleCoordinatorAgent (Simple 模式的万金油 Agent)
+  try {
+    logger.info('[Agent 系统] 尝试初始化 SimpleCoordinatorAgent...');
+    const skillsPath = path.join(process.cwd(), 'skills/simple');
+    const memoryPath = path.join(process.cwd(), 'memory/simple');
+    const rulesPath = path.join(process.cwd(), 'rules/simple');
+
+    // 确保目录存在
+    await fsp.mkdir(skillsPath, { recursive: true });
+    await fsp.mkdir(memoryPath, { recursive: true });
+    await fsp.mkdir(rulesPath, { recursive: true });
+
+    simpleCoordinatorAgent = new SimpleCoordinatorAgent({
+      skillsPath,
+      memoryPath,
+      rulesPath,
+      sharedContext, // 传入共享上下文
+    });
+
+    await simpleCoordinatorAgent.initialize();
+    logger.info('[Agent 系统] SimpleCoordinatorAgent 已启用 (简化模式) 🆕');
+  } catch (error) {
+    logger.warn(`[Agent 系统] SimpleCoordinatorAgent 初始化失败: ${error}`);
+    simpleCoordinatorAgent = null;
+  }
 
   logger.info(`[Agent 系统] 已注册 ${agentRegistry.size} 个 Agent`);
   logger.info(`[Agent 系统] 默认 Agent: ${config.agents.default}`);
   // ===============================
 
   // ========== 扩展 Dashboard API ==========
-  // 获取或创建 SkillLoader
+  // 创建独立的 SkillLoader 实例
   let skillLoader: any = undefined;
-
-  // 首先尝试从 Coordinator Agent 获取
-  if (coordinatorAgent && 'getSkillLoader' in coordinatorAgent) {
-    skillLoader = (coordinatorAgent as any).getSkillLoader();
-    logger.info('[Dashboard] SkillLoader 已连接（来自 Coordinator Agent）');
-  }
-
-  // 如果没有，创建独立的 SkillLoader 实例
-  if (!skillLoader) {
-    try {
-      const { SkillLoader } = await import('./agents/SkillLoader.js');
-      const skillsDir = path.join(process.cwd(), 'skills');
-      skillLoader = new SkillLoader(skillsDir);
-      await skillLoader.scanSkillsMetadata();
-      logger.info('[Dashboard] 独立 SkillLoader 已创建');
-    } catch (error) {
-      logger.warn(`[Dashboard] SkillLoader 创建失败: ${error}`);
-    }
+  try {
+    const { SkillLoader } = await import('./agents/SkillLoader.js');
+    const skillsDir = path.join(process.cwd(), 'skills');
+    skillLoader = new SkillLoader(skillsDir);
+    await skillLoader.scanSkillsMetadata();
+    logger.info('[Dashboard] 独立 SkillLoader 已创建');
+  } catch (error) {
+    logger.warn(`[Dashboard] SkillLoader 创建失败: ${error}`);
   }
 
   // 日志文件路径
@@ -1130,18 +927,28 @@ async function main(): Promise<void> {
         const userMode = modeManager.getUserMode(qqData.userId, qqData.groupId);
         let response: AgentResponse | null = null;
 
-        logger.info(`[模式检查] 用户模式: ${userMode}, coordinatorAgent 存在: ${!!coordinatorAgent}`);
+        logger.info(`[模式检查] 用户模式: ${userMode}, simpleCoordinatorAgent 存在: ${!!simpleCoordinatorAgent}`);
 
-        if (userMode === AgentMode.TEAM && coordinatorAgent) {
-          // 团队模式：使用 GLM Coordinator
-          logger.info(`[模式] 使用团队模式 (GLM Coordinator)`);
-          response = await coordinatorAgent.process(agentMessage, agentContext);
+        if (userMode === AgentMode.SIMPLE && simpleCoordinatorAgent) {
+          // 简单模式：使用 Simple Coordinator（万金油 agent，支持 SKILL.md）
+          logger.info(`[模式] 使用简单模式 (Simple Coordinator)`);
+
+          // 获取用户会话并传递 SharedContext
+          const userSession = await getUserSession(qqData.userId, qqData.groupId);
+          const agentContextWithContext: AgentContext = {
+            ...agentContext,
+            sharedContext: userSession.getContext(),
+          };
+
+          response = await simpleCoordinatorAgent.process(agentMessage, agentContextWithContext);
         } else {
-          // CLI 模式：使用 Agent Dispatcher (默认路由到 Claude Code CLI)
-          if (userMode !== AgentMode.TEAM) {
-            logger.info(`[模式] 使用 CLI 模式 (用户未切换到团队模式，发送 /mode team 切换)`);
-          } else if (!coordinatorAgent) {
-            logger.warn(`[模式] 用户请求团队模式，但 coordinatorAgent 未初始化，回退到 CLI 模式`);
+          // CLI 模式：使用 Agent Dispatcher (直接调用本地 Claude Code CLI)
+          if (userMode === AgentMode.CLI) {
+            logger.info(`[模式] 使用 CLI 模式 (本地 Claude Code CLI)`);
+          } else if (userMode === AgentMode.SIMPLE && !simpleCoordinatorAgent) {
+            logger.warn(`[模式] 用户请求简单模式，但 simpleCoordinatorAgent 未初始化，回退到 CLI 模式`);
+          } else {
+            logger.info(`[模式] 使用 CLI 模式 (默认)`);
           }
           response = await agentDispatcher!.dispatch(agentMessage, agentContext);
         }

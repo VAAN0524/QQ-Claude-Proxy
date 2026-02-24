@@ -1,9 +1,9 @@
 /**
  * 模式管理器
  *
- * 管理两种 Agent 模式的切换：
+ * 管理两种 Agent 模式：
  * - CLI 模式：调用本地 Claude Code CLI
- * - Team 模式：GLM Coordinator + 专业 Agents
+ * - Simple 模式：极简协调 Agent + SKILL.md 驱动
  */
 
 import { logger } from '../utils/logger.js';
@@ -15,7 +15,7 @@ import path from 'path';
  */
 export enum AgentMode {
   CLI = 'cli',           // Claude Code CLI 模式
-  TEAM = 'team',         // GLM Coordinator + 专业 Agents 模式
+  SIMPLE = 'simple',     // 极简协调 Agent 模式（万金油）
 }
 
 /**
@@ -39,7 +39,7 @@ interface ModeStorage {
  * 模式管理器
  */
 export class ModeManager {
-  private currentMode: AgentMode = AgentMode.CLI;
+  private currentMode: AgentMode = AgentMode.SIMPLE; // 默认使用 Simple 模式
   private userModePreferences: Map<string, AgentMode> = new Map();
   private storagePath: string;
 
@@ -99,7 +99,7 @@ export class ModeManager {
    */
   async handleModeCommand(content: string, userId: string, groupId?: string): Promise<ModeSwitchResponse | null> {
     // 检查是否是模式切换命令
-    const modeMatch = content.match(/^\/(mode|模式)\s+(cli|team|cli模式|团队模式)/i);
+    const modeMatch = content.match(/^\/(mode|模式)\s+(cli|simple|cli模式|简单模式)/i);
     if (!modeMatch) {
       return null;
     }
@@ -112,31 +112,35 @@ export class ModeManager {
       case 'cli模式':
         newMode = AgentMode.CLI;
         break;
-      case 'team':
-      case '团队模式':
-        newMode = AgentMode.TEAM;
+      case 'simple':
+      case '简单模式':
+        newMode = AgentMode.SIMPLE;
         break;
       default:
         return {
           success: false,
           currentMode: this.getCurrentMode(),
-          message: '未知模式，请使用：cli 或 team',
+          message: '未知模式，请使用：cli 或 simple',
         };
     }
 
     // 设置用户偏好
     await this.setUserMode(userId, groupId, newMode);
 
-    const modeName = newMode === AgentMode.CLI ? 'CLI 模式' : '团队模式';
+    const modeNames = {
+      [AgentMode.CLI]: 'CLI 模式',
+      [AgentMode.SIMPLE]: '简单模式',
+    };
+
+    const modeFeatures = {
+      [AgentMode.CLI]: '- 使用本地 Claude Code CLI\n- 强大的代码分析和执行能力',
+      [AgentMode.SIMPLE]: '- 万金油 Agent\n- SKILL.md 驱动，快速响应\n- 直接执行，支持多种任务',
+    };
 
     return {
       success: true,
       currentMode: newMode,
-      message: `✅ 已切换到 **${modeName}**\n\n当前模式特点：\n${
-        newMode === AgentMode.CLI
-          ? '- 使用本地 Claude Code CLI\n- 强大的代码分析和执行能力'
-          : '- GLM-4.7 主协调 Agent\n- 5 个专业 Agent 协作（代码/网页/命令/搜索/数据）'
-      }`,
+      message: `✅ 已切换到 **${modeNames[newMode]}**\n\n当前模式特点：\n${modeFeatures[newMode]}`,
     };
   }
 
@@ -153,18 +157,15 @@ export class ModeManager {
 - 强大的代码分析和执行能力
 - 直接访问文件系统
 
-**2. 团队模式** (/mode team)
-- GLM-4.7 主协调 Agent
-- 5 个专业 Agent 协作：
-  • Code Agent - 代码编写与分析
-  • Browser Agent - 网页操作与截图
-  • Shell Agent - 命令执行
-  • WebSearch Agent - 网络搜索
-  • DataAgent - 数据分析
+**2. 简单模式** (/mode simple) 🆕
+- 万金油 Agent
+- SKILL.md 驱动，快速响应
+- 直接执行，支持多种任务
+- 适合日常任务
 
 **切换命令**：
 • /mode cli 或 /模式 cli - 切换到 CLI 模式
-• /mode team 或 /模式 team - 切换到团队模式`;
+• /mode simple 或 /模式 simple - 切换到简单模式`;
   }
 
   /**
@@ -178,7 +179,11 @@ export class ModeManager {
    * 获取模式名称
    */
   getModeName(mode: AgentMode): string {
-    return mode === AgentMode.CLI ? 'CLI 模式' : '团队模式';
+    const modeNames = {
+      [AgentMode.CLI]: 'CLI 模式',
+      [AgentMode.SIMPLE]: '简单模式',
+    };
+    return modeNames[mode] || '未知模式';
   }
 
   /**
@@ -230,7 +235,11 @@ export class ModeManager {
    */
   getModePrefix(userId: string, groupId?: string): string {
     const mode = this.getUserMode(userId, groupId);
-    return mode === AgentMode.TEAM ? '[Team]' : '[CLI]';
+    const prefixes = {
+      [AgentMode.CLI]: '[CLI]',
+      [AgentMode.SIMPLE]: '[Simple]',
+    };
+    return prefixes[mode] || '[Unknown]';
   }
 }
 

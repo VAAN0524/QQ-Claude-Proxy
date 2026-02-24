@@ -10,6 +10,31 @@
 
 import type { Tool } from './tool.js';
 import { logger } from '../utils/logger.js';
+import axios, { AxiosInstance } from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+
+/**
+ * 创建 axios 实例，支持代理
+ */
+function createAxiosInstance(baseURL: string, timeout: number): AxiosInstance {
+  const config: any = {
+    baseURL,
+    timeout,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  // 支持代理环境变量
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+  if (proxyUrl) {
+    logger.info(`[LLM Provider] 使用代理: ${proxyUrl}`);
+    config.httpsAgent = new HttpsProxyAgent(proxyUrl);
+    config.proxy = false; // 禁用 axios 默认代理
+  }
+
+  return axios.create(config);
+}
 
 /**
  * 聊天消息
@@ -157,45 +182,35 @@ export function openai(config: ProviderConfig): LLMProvider {
 
   logger.info(`[LLM Provider] OpenAI initialized with base URL: ${baseURL}`);
 
+  const axiosInstance = createAxiosInstance(baseURL, timeout);
+
   return {
     chat: {
       completions: {
         create: async (params) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-
           try {
-            const response = await fetch(`${baseURL}/chat/completions`, {
-              method: 'POST',
+            const response = await axiosInstance.post('/chat/completions', {
+              model: params.model,
+              messages: params.messages,
+              tools: params.tools,
+              max_tokens: params.max_tokens,
+              temperature: params.temperature,
+              top_p: params.top_p,
+              stream: false,
+            }, {
               headers: {
                 'Authorization': `Bearer ${config.apiKey}`,
-                'Content-Type': 'application/json',
                 ...config.headers,
               },
-              body: JSON.stringify({
-                model: params.model,
-                messages: params.messages,
-                tools: params.tools,
-                max_tokens: params.max_tokens,
-                temperature: params.temperature,
-                top_p: params.top_p,
-                stream: false,
-              }),
-              signal: controller.signal,
             });
 
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              const error = await response.text();
-              throw new Error(`OpenAI API error: ${response.status} ${error}`);
-            }
-
-            return await response.json();
+            return response.data;
           } catch (error: any) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
               throw new Error('OpenAI API request timeout');
+            }
+            if (error.response) {
+              throw new Error(`OpenAI API error: ${error.response.status} ${JSON.stringify(error.response.data)}`);
             }
             throw error;
           }
@@ -216,13 +231,12 @@ export function anthropic(config: ProviderConfig): LLMProvider {
 
   logger.info(`[LLM Provider] Anthropic initialized`);
 
+  const axiosInstance = createAxiosInstance(baseURL, timeout);
+
   return {
     chat: {
       completions: {
         create: async (params) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-
           try {
             // Anthropic API 使用不同的格式
             const systemMessage = params.messages.find(m => m.role === 'system');
@@ -235,44 +249,33 @@ export function anthropic(config: ProviderConfig): LLMProvider {
               input_schema: tool.function.parameters,
             }));
 
-            const response = await fetch(`${baseURL}/v1/messages`, {
-              method: 'POST',
+            const response = await axiosInstance.post('/v1/messages', {
+              model: params.model,
+              messages: messages.map(m => ({
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.content,
+              })),
+              system: systemMessage?.content,
+              tools: tools,
+              max_tokens: params.max_tokens || 4096,
+              temperature: params.temperature,
+              top_p: params.top_p,
+            }, {
               headers: {
                 'x-api-key': config.apiKey,
                 'anthropic-version': '2023-06-01',
-                'Content-Type': 'application/json',
                 ...config.headers,
               },
-              body: JSON.stringify({
-                model: params.model,
-                messages: messages.map(m => ({
-                  role: m.role === 'assistant' ? 'assistant' : 'user',
-                  content: m.content,
-                })),
-                system: systemMessage?.content,
-                tools: tools,
-                max_tokens: params.max_tokens || 4096,
-                temperature: params.temperature,
-                top_p: params.top_p,
-              }),
-              signal: controller.signal,
             });
 
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              const error = await response.text();
-              throw new Error(`Anthropic API error: ${response.status} ${error}`);
-            }
-
-            const anthropicResponse = await response.json();
-
             // 转换 Anthropic 响应为 OpenAI 格式
-            return convertAnthropicToOpenAI(anthropicResponse);
+            return convertAnthropicToOpenAI(response.data);
           } catch (error: any) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
               throw new Error('Anthropic API request timeout');
+            }
+            if (error.response) {
+              throw new Error(`Anthropic API error: ${error.response.status} ${JSON.stringify(error.response.data)}`);
             }
             throw error;
           }
@@ -290,7 +293,7 @@ export function anthropic(config: ProviderConfig): LLMProvider {
 export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: boolean }): LLMProvider {
   // Coding Plan 使用不同的默认 URL
   const defaultBaseUrl = config.isCodingPlan
-    ? 'https://open.bigmodel.cn/api/paas/v4/coding/'
+    ? 'https://open.bigmodel.cn/api/coding/paas/v4/'
     : 'https://open.bigmodel.cn/api/paas/v4/';
 
   const baseURL = config.baseURL || defaultBaseUrl;
@@ -300,17 +303,15 @@ export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: 
 
   logger.info(`[LLM Provider] GLM initialized with base URL: ${baseURL}, JWT: ${useJwt}, CodingPlan: ${config.isCodingPlan || false}`);
 
+  const axiosInstance = createAxiosInstance(baseURL, timeout);
+
   return {
     chat: {
       completions: {
         create: async (params) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-
           try {
             // 准备认证头
             const headers: Record<string, string> = {
-              'Content-Type': 'application/json',
               ...config.headers,
             };
 
@@ -327,32 +328,23 @@ export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: 
 
             // Coding Plan 请求格式可能略有不同
             const endpoint = config.isCodingPlan ? 'chat/completions' : 'chat/completions';
-            const url = baseURL.endsWith('/') ? baseURL + endpoint : baseURL + '/' + endpoint;
 
-            const response = await fetch(url, {
-              method: 'POST',
+            const response = await axiosInstance.post(endpoint, {
+              model: params.model,
+              messages: params.messages,
+              tools: params.tools,
+              max_tokens: params.max_tokens,
+            }, {
               headers,
-              body: JSON.stringify({
-                model: params.model,
-                messages: params.messages,
-                tools: params.tools,
-                max_tokens: params.max_tokens,
-              }),
-              signal: controller.signal,
             });
 
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              const error = await response.text();
-              throw new Error(`GLM API error: ${response.status} ${error}`);
-            }
-
-            return await response.json();
+            return response.data;
           } catch (error: any) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
+            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
               throw new Error('GLM API request timeout');
+            }
+            if (error.response) {
+              throw new Error(`GLM API error: ${error.response.status} ${JSON.stringify(error.response.data)}`);
             }
             throw error;
           }

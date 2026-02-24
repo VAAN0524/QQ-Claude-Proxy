@@ -18,6 +18,7 @@ export enum AgentCapability {
   Analyze = 'analyze',     // 代码分析
   Complex = 'complex',     // 复杂推理
   General = 'general',     // 通用对话
+  TASK_COORDINATION = 'task_coordination', // 任务协调 🆕
 }
 
 /**
@@ -85,6 +86,8 @@ export interface AgentContext {
   storagePath: string;
   /** 允许的用户列表 */
   allowedUsers: string[];
+  /** 共享上下文（可选，用于跨会话记忆） */
+  sharedContext?: import('../SharedContext.js').SharedContext;
   /** 元数据 */
   metadata?: Record<string, unknown>;
 }
