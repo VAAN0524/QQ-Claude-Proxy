@@ -23,7 +23,23 @@ export type {
 } from './SkillInstaller.js';
 
 // 记忆服务
-export { MemoryService, RAGService } from './memory/index.js';
+export { MemoryService, RAGService, HierarchicalMemoryService } from './memory/index.js';
+export type {
+  MemoryEntry,
+  MemoryRetrieveOptions,
+  MemoryServiceOptions,
+  MemoryType,
+  RetrievalResult,
+  RAGRetrieveOptions,
+  AugmentedContext,
+  RAGServiceOptions,
+  MemoryLayer,
+  HierarchicalMemoryEntry,
+  AgentMemoryConfig,
+  SharedMemoryConfig,
+  HierarchicalMemoryOptions,
+  AbstractIndex,
+} from './memory/index.js';
 
 // 学习模块
 export { LearningModule } from './learning/index.js';
@@ -57,3 +73,24 @@ export type { SkillMetadata as SkillManagerMetadata } from '../skills/SkillManag
 
 // 工具定义（简化 API）
 export * from './tools/index.js';
+
+// Agent 人格设定
+export { AGENT_PERSONAS, getAgentPersona, getAllAgentPersonas, getPersonasByCapability } from './personas.js';
+export type { AgentPersona } from './personas.js';
+
+// MCP 客户端
+export { ZaiMcpClient } from './ZaiMcpClient.js';
+export type { ZaiMcpClientOptions, McpTool } from './ZaiMcpClient.js';
+
+// Agent 注册中心（带人格设定）
+export {
+  REGISTERED_AGENTS,
+  getAgentMetadata,
+  getEnabledAgents,
+  getAgentsByIds,
+  getAgentsByCapability,
+  getDependencyTree,
+  validateAgentConfig,
+  printRegistrySummary,
+} from './AgentRegistryWithPersonas.js';
+export type { AgentMetadata } from './AgentRegistryWithPersonas.js';
