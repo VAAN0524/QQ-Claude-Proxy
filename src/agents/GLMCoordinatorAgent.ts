@@ -1353,51 +1353,26 @@ ${personaPrompt}
         });
       }
 
-      // Browser Agent
+      // Browser Agent - 只定义一次
       if (this.subAgents.has('browser')) {
         tools.push({
           type: 'function',
           function: {
             name: 'run_browser_agent',
-            description: '网页操作：访问网页、截图、提取信息、填充表单',
+            description: '【网页访问工具】访问指定 URL 并提取内容，支持自动重试和镜像访问。⚠️ 重要：如果用户消息中包含 URL（http/https开头），必须将 url 参数设置为该 URL！',
             parameters: {
               type: 'object',
               properties: {
-                task: {
-                  type: 'string',
-                  description: '具体的网页操作任务，例如：访问 https://github.com 并截图',
-                },
                 url: {
                   type: 'string',
-                  description: '可选的 URL，如果是纯访问任务',
+                  description: '要访问的网页 URL（必需！如果用户提供了 URL）。例如：https://github.com/xxx/xxx',
                 },
-              },
-              required: ['task'],
-            },
-          },
-        });
-      }
-
-      // Browser Agent
-      if (this.subAgents.has('browser')) {
-        tools.push({
-          type: 'function',
-          function: {
-            name: 'run_browser_agent',
-            description: '网页操作：访问网页、截图、提取信息、填充表单',
-            parameters: {
-              type: 'object',
-              properties: {
                 task: {
                   type: 'string',
-                  description: '具体的网页操作任务，例如：访问 https://github.com 并截图',
-                },
-                url: {
-                  type: 'string',
-                  description: '可选的 URL，如果是纯访问任务',
+                  description: '任务描述（如果 url 存在则可选）。例如：分析这个项目的内容',
                 },
               },
-              required: ['task'],
+              required: [],
             },
           },
         });
@@ -3157,10 +3132,23 @@ ${type === 'periodic' ? `执行间隔: ${Math.round(interval! / 60000)} 分钟` 
         return args.task as string;
 
       case 'run_browser_agent':
+        // Browser Agent 优先使用 url 参数
         if (args.url) {
-          return `访问 ${args.url}：${args.task}`;
+          const url = args.url as string;
+          const task = args.task as string;
+          // 如果 task 存在且不是简单的访问描述
+          if (task && !task.includes('访问') && !task.includes('看看')) {
+            return `${url} ${task}`;
+          }
+          return url;
         }
-        return args.task as string;
+        // 如果没有 url 参数，尝试从 task 中提取 URL
+        const task = args.task as string || '';
+        const urlMatch = task.match(/(https?:\/\/[^\s]+)/);
+        if (urlMatch) {
+          return task; // 保持原样，让 Browser Agent 自己提取
+        }
+        return task;
 
       case 'run_shell_agent':
         return `执行命令: ${args.command}`;

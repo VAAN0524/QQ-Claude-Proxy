@@ -101,15 +101,25 @@ export class BrowserAgent implements IAgent {
 
     try {
       // 参数验证
-      const content = typeof message.content === 'string' ? message.content : String(message.content || '');
+      let content = typeof message.content === 'string' ? message.content : String(message.content || '');
+
+      // 处理数组格式的内容（GLM 可能传递数组）
+      if (Array.isArray(message.content)) {
+        content = message.content
+          .filter((block: any) => block.type === 'text')
+          .map((block: any) => block.text)
+          .join(' ');
+      }
 
       logger.info(`[BrowserAgent] 处理消息: ${content.substring(0, 50)}...`);
 
-      // 提取 URL
-      const urlMatch = content.match(/https?:\/\/[^\s\u4e00-\u9fa5]+/i);
-      const url = urlMatch ? urlMatch[0] : null;
+      // 提取 URL - 改进的正则，支持更多格式
+      // 匹配 http:// 或 https:// 开头的 URL，直到遇到空格或中文字符
+      const urlMatch = content.match(/(https?:\/\/[^\s\u4e00-\u9fa5\)]+)/i);
+      const url = urlMatch ? urlMatch[1] : null;
 
       if (url) {
+        logger.info(`[BrowserAgent] 提取到 URL: ${url}`);
         return await this.handleUrlVisit(url, context);
       }
 
