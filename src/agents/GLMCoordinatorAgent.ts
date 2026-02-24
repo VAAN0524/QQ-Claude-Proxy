@@ -1205,9 +1205,10 @@ ${personaPrompt}
    - 用户说"创建文件"、"写入文件"、"修改配置"时使用
    - 参数：filePath（文件路径），content（内容），append（是否追加）
 
-4. **send_file** - 发送文件给用户
-   - 用户说"发给我"、"发送文件"时使用
-   - 参数：filePath（文件路径）
+4. **send_file** - 【文件传输】发送文件到用户的QQ
+   - 用户说"把xxx发给我"、"发送文件xxx"、"传文件给我"、"我要xxx文件"时使用
+   - 此工具用于文件传输，会将文件发送到用户的QQ，不是读取文件内容
+   - 参数：filePath（文件名，如：ai_news_summary.md）
 
 ## 定时任务工具（重要）
 
@@ -1232,6 +1233,7 @@ ${personaPrompt}
 - "列出workspace的文件" → 使用 list_directory 工具
 - "读取config.json的内容" → 使用 read_file 工具
 - "创建新的配置文件" → 使用 write_file 工具
+- "把 ai_news_summary.md 发给我" → 使用 send_file 工具（文件传输）
 
 ## 平台特定说明
 
