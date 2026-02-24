@@ -321,6 +321,7 @@ export class SimpleCoordinatorAgent implements IAgent {
    * 2. skills/skill-name.md (旧格式)
    */
   private async loadSkill(skillName: string): Promise<void> {
+    logger.info(`[SimpleCoordinator] 开始加载技能: ${skillName}`);
     // 尝试多种路径
     const possiblePaths = [
       path.join(this.skillsPath, skillName, 'SKILL.md'),  // 标准格式
@@ -334,7 +335,7 @@ export class SimpleCoordinatorAgent implements IAgent {
       try {
         content = await fs.readFile(skillFile, 'utf-8');
         loaded = true;
-        logger.debug(`[SimpleCoordinator] 从 ${skillFile} 加载技能`);
+        logger.info(`[SimpleCoordinator] 从 ${skillFile} 加载技能内容，长度: ${content.length}`);
         break;
       } catch {
         // 继续尝试下一个路径
@@ -343,7 +344,7 @@ export class SimpleCoordinatorAgent implements IAgent {
 
     if (loaded) {
       this.currentSkill = this.parseSkill(content);
-      logger.info(`[SimpleCoordinator] 技能已加载: ${skillName}`);
+      logger.info(`[SimpleCoordinator] 技能已加载: ${skillName}, 工具: ${this.currentSkill.availableTools.join(', ')}`);
     } else {
       logger.warn(`[SimpleCoordinator] 技能加载失败: ${skillName}, 使用默认技能`);
       await this.loadDefaultSkill();
@@ -455,15 +456,50 @@ export class SimpleCoordinatorAgent implements IAgent {
         const match = yamlContent.match(/description:\s*(.+)/);
         if (match) description = match[1].trim();
       }
-      // availableTools 会在后续解析
+
+      // 解析 availableTools (支持两种格式)
+      // 格式1: - tool_name 或 - tool_name: description
+      // 格式2: tool_name: description (无连字符)
+      if (yamlContent.includes('availableTools:')) {
+        const toolsSection = yamlContent.split('availableTools:')[1].split('\n')[0];
+        const yamlLines = yamlContent.split('\n');
+        let inToolsSection = false;
+        for (const yamlLine of yamlLines) {
+          if (yamlLine.trim() === 'availableTools:') {
+            inToolsSection = true;
+            continue;
+          }
+          if (inToolsSection) {
+            const trimmed = yamlLine.trim();
+            // 跳过空行或缩进过小的行（不是列表项）
+            if (!trimmed || !trimmed.startsWith('-')) {
+              // 可能是其他字段或结束
+              if (trimmed && !trimmed.startsWith('-')) {
+                break;
+              }
+              continue;
+            }
+            // 提取工具名: "- tool_name" 或 "- tool_name: description"
+            const toolMatch = trimmed.match(/^-\s*([\w_]+)(?::|\s|$)/);
+            if (toolMatch) {
+              availableTools.push(toolMatch[1]);
+            }
+          }
+        }
+      }
     }
 
     // 解析 Markdown 内容
     for (; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
 
-      if (line.startsWith('# ')) {
-        currentSection = line.substring(2).trim().toLowerCase();
+      // 处理任何级别的标题 (#, ##, ###, 等)
+      if (line.startsWith('#')) {
+        const match = line.match(/^#+\s+(.+)/);
+        if (match) {
+          currentSection = match[1].trim().toLowerCase();
+          logger.debug(`[SimpleCoordinator] 标题: "${currentSection}"`);
+        }
         continue;
       }
 
@@ -472,6 +508,7 @@ export class SimpleCoordinatorAgent implements IAgent {
         if (line.includes('- ') && line.includes('`')) {
           const match = line.match(/`([^`]+)`/);
           if (match) {
+            logger.debug(`[SimpleCoordinator] 找到工具: ${match[1]}`);
             availableTools.push(match[1]);
           }
         }
@@ -497,6 +534,8 @@ export class SimpleCoordinatorAgent implements IAgent {
         }
       }
     }
+
+    logger.debug(`[SimpleCoordinator] 解析技能: ${name}, 可用工具: ${availableTools.join(', ')}`);
 
     return {
       name,

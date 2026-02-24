@@ -154,15 +154,16 @@ export async function tavilySearch(query: string, maxResults: number = 5): Promi
 
 /**
  * 智能搜索 - 自动选择最佳搜索方式
+ * 优先使用 Tavily（如果配置了 API Key），失败则回退到 DuckDuckGo
  */
 export async function smartSearch(query: string, options: { maxResults?: number; preferTavily?: boolean } = {}): Promise<{
   results: SearchResult[];
   answer?: string;
   source: 'duckduckgo' | 'tavily';
 }> {
-  const { maxResults = 5, preferTavily = false } = options;
+  const { maxResults = 5, preferTavily = true } = options;  // 默认优先使用 Tavily
 
-  // 如果配置了 Tavily 且优先使用，或者没有其他选择
+  // 如果配置了 Tavily，优先使用
   if (preferTavily && process.env.TAVILY_API_KEY) {
     try {
       const tavilyResult = await tavilySearch(query, maxResults);
@@ -172,11 +173,12 @@ export async function smartSearch(query: string, options: { maxResults?: number;
         source: 'tavily',
       };
     } catch (error) {
-      logger.warn(`[搜索工具] Tavily 失败，回退到 DuckDuckGo`);
+      logger.warn(`[搜索工具] Tavily 失败，回退到 DuckDuckGo: ${error}`);
     }
   }
 
-  // 默认使用 DuckDuckGo
+  // 回退到 DuckDuckGo
+  logger.info(`[搜索工具] 使用 DuckDuckGo 搜索: ${query}`);
   const results = await duckDuckGoSearch(query, maxResults);
   return {
     results,

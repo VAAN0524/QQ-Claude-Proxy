@@ -1,11 +1,6 @@
 ---
 name: smart_search
 description: 智能搜索技能。使用 DuckDuckGo 或 Tavily 进行网络搜索，获取实时信息、查找资料、提取网页内容。
-availableTools:
-  - smart_search: 智能搜索，自动选择 DuckDuckGo 或 Tavily
-  - tavily_search: Tavily 深度搜索（需要 API Key）
-  - duckduckgo_search: DuckDuckGo 搜索
-  - fetch_web: 网页内容提取
 ---
 
 # 智能搜索技能
