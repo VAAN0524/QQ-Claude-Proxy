@@ -1149,9 +1149,12 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
         const choice = response.data.choices?.[0];
         if (!choice) {
+          logger.warn(`[SimpleCoordinator] LLM 返回空的 choices，响应: ${JSON.stringify(response.data)}`);
           finalResponse = '抱歉，我没有生成回复。';
           break;
         }
+
+        logger.debug(`[SimpleCoordinator] LLM 响应: content=${choice.message.content?.substring(0, 100)}, tool_calls=${choice.message.tool_calls?.length}`);
 
         // 检查是否有工具调用
         if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
@@ -1202,9 +1205,12 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
         } else {
           // 没有工具调用，直接返回结果
           finalResponse = choice.message.content || '抱歉，我没有生成回复。';
+          logger.debug(`[SimpleCoordinator] 无工具调用，直接返回响应，长度: ${finalResponse.length}`);
           break;
         }
       }
+
+      logger.debug(`[SimpleCoordinator] Function Calling 完成，最终响应长度: ${finalResponse?.length || 0}`);
 
       return finalResponse || '抱歉，处理超时或出错。';
     } catch (error) {
