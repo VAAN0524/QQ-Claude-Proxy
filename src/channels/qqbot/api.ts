@@ -354,7 +354,7 @@ export class QQBotAPI {
   /**
    * 内部方法: 上传文件到指定路径
    * 参考 QQ Bot 官方文档: https://bot.q.qq.com/wiki/develop/api/openapi/file/upload_files.html
-   * 使用 JSON + Base64 方式（QQ Bot 推荐）
+   * 使用 multipart/form-data 方式
    * @param path 完整的API路径
    * @param fileData 文件数据 (Buffer)
    * @param fileType 文件类型
@@ -370,30 +370,58 @@ export class QQBotAPI {
     srvSendMsg: boolean,
     fileName?: string
   ): Promise<UploadFileResponse> {
-    // 将 Buffer 转换为 Base64 字符串
-    const base64Data = typeof fileData === 'string' ? fileData : fileData.toString('base64');
+    // 确保 fileData 是 Buffer
+    const buffer = typeof fileData === 'string' ? Buffer.from(fileData, 'base64') : fileData;
 
     const url = `${this.baseUrl}${path}`;
-    logger.info(`[API] POST ${url} (JSON + Base64 upload)`);
-    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, base64_length=${base64Data.length}`);
+    logger.info(`[API] POST ${url} (multipart/form-data upload)`);
+    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, file_size=${buffer.length}`);
 
-    // 使用 JSON + Base64 方式上传（QQ Bot 推荐方式）
-    const body: Record<string, unknown> = {
-      file_type: fileType,
-      file_type_data: fileTypeData,
-      srv_send_msg: srvSendMsg ? 1 : 0,
-      file_data: base64Data,
-    };
+    // 构建符合 QQ Bot API 规范的 multipart/form-data 请求
+    const boundary = `----QQBotBoundary${Date.now()}`;
+
+    // 构建 multipart 请求体
+    const chunks: Buffer[] = [];
+
+    // 添加 file_type 字段
+    chunks.push(Buffer.from(`--${boundary}\r\n`));
+    chunks.push(Buffer.from(`Content-Disposition: form-data; name="file_type"\r\n\r\n`));
+    chunks.push(Buffer.from(`${fileType}\r\n`));
+
+    // 添加 file_type_data 字段
+    chunks.push(Buffer.from(`--${boundary}\r\n`));
+    chunks.push(Buffer.from(`Content-Disposition: form-data; name="file_type_data"\r\n\r\n`));
+    chunks.push(Buffer.from(`${fileTypeData}\r\n`));
+
+    // 添加 srv_send_msg 字段
+    chunks.push(Buffer.from(`--${boundary}\r\n`));
+    chunks.push(Buffer.from(`Content-Disposition: form-data; name="srv_send_msg"\r\n\r\n`));
+    chunks.push(Buffer.from(`${srvSendMsg ? '1' : '0'}\r\n`));
+
+    // 添加文件数据
+    chunks.push(Buffer.from(`--${boundary}\r\n`));
+    const contentType = this.getContentType(fileTypeData);
+    const finalFileName = fileName || `file.${fileTypeData}`;
+    chunks.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${finalFileName}"\r\n`));
+    chunks.push(Buffer.from(`Content-Type: ${contentType}\r\n\r\n`));
+    chunks.push(buffer);
+    chunks.push(Buffer.from(`\r\n`));
+
+    // 结束边界
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+
+    // 合并所有部分
+    const body = Buffer.concat(chunks);
 
     const token = await this.getAccessToken();
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `QQBot ${token}`,
-        'Content-Type': 'application/json',
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
         'X-Union-Appid': this.config.appId,
       },
-      body: JSON.stringify(body),
+      body,
     });
 
     const data = await this.safeParseJson(response);
