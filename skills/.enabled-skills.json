@@ -11,5 +11,22 @@
   "run_vision_agent": true,
   "skill-creator": true,
   "skill-manager": true,
-  "web-search": true
+  "web-search": true,
+  "code": true,
+  "code-share": true,
+  "code-stats": true,
+  "docker-compose": true,
+  "docker-essentials": true,
+  "git-essentials": true,
+  "git-workflows": true,
+  "node-transfer": true,
+  "nodejs": true,
+  "pm2": true,
+  "run_data_analysis_agent": true,
+  "run_refactor_agent": true,
+  "run_shell_agent": true,
+  "run_websearch_agent": true,
+  "tavily-search": true,
+  "test-case-generator": true,
+  "test-runner": true
 }
