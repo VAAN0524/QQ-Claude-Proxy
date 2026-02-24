@@ -1118,27 +1118,68 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
       logger.info(`[SimpleCoordinator] 使用 GLM-4.7 文本模型 (工具: ${availableToolNames.join(', ') || '无'}, FC工具: ${tools.map(t => t.function.name).join(', ') || '无'})`);
 
-      // 第一轮调用
+      // 构建消息数组：system prompt + 历史对话 + 当前消息
       let messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string; name?: string }> = [
         {
           role: 'system',
           content: systemPrompt,
         },
-        {
-          role: 'user',
-          content: content,
-        },
       ];
 
-      const maxIterations = 3; // 最多3轮工具调用
+      // 加载历史对话（从 SharedContext）
+      let lastMessageIsCurrent = false;
+      if (this.sharedContext) {
+        const history = this.sharedContext.getAllMessages();
+        // 过滤掉system消息，避免重复
+        const conversationMessages = history.filter(m => m.role !== 'system');
+
+        // 检查最后一条消息是否是当前用户消息（避免重复）
+        if (conversationMessages.length > 0) {
+          const lastMsg = conversationMessages[conversationMessages.length - 1];
+          if (lastMsg.role === 'user' && lastMsg.content === content) {
+            lastMessageIsCurrent = true;
+          }
+        }
+
+        // 只保留最近的N条历史消息，避免上下文过长
+        // 如果最后一条是当前消息，则少取一条
+        const recentHistory = lastMessageIsCurrent
+          ? conversationMessages.slice(-11, -1)  // 排除最后一条（当前消息）
+          : conversationMessages.slice(-10);
+
+        for (const msg of recentHistory) {
+          messages.push({
+            role: msg.role,
+            content: msg.content,
+          });
+          logger.debug(`[SimpleCoordinator] 加载历史消息: ${msg.role}, 长度=${msg.content.length}`);
+        }
+
+        logger.info(`[SimpleCoordinator] 已加载 ${recentHistory.length} 条历史对话（当前消息已在历史中: ${lastMessageIsCurrent}）`);
+      }
+
+      // 添加当前用户消息（如果不在历史中）
+      if (!lastMessageIsCurrent) {
+        messages.push({
+          role: 'user',
+          content: content,
+        });
+      }
+
+      const maxIterations = 5; // 增加到5轮工具调用
       let finalResponse = '';
+      let hasToolCalls = false;
 
       for (let iteration = 0; iteration < maxIterations; iteration++) {
+        logger.debug(`[SimpleCoordinator] Function Calling 第 ${iteration + 1}/${maxIterations} 轮`);
+
+        // 最后一次迭代时不传递tools，强制LLM生成最终回复
+        const isLastIteration = iteration === maxIterations - 1;
         const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
           model: 'glm-4.7',
           messages,
-          tools: tools.length > 0 ? tools : undefined,
-          tool_choice: tools.length > 0 ? 'auto' : undefined,
+          tools: isLastIteration ? undefined : (tools.length > 0 ? tools : undefined),
+          tool_choice: isLastIteration ? undefined : (tools.length > 0 ? 'auto' : undefined),
           max_tokens: 4096,
           temperature: 0.7,
         }, {
@@ -1154,21 +1195,25 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           break;
         }
 
-        logger.debug(`[SimpleCoordinator] LLM 响应: content=${choice.message.content?.substring(0, 100)}, tool_calls=${choice.message.tool_calls?.length}`);
+        const content = choice.message.content || '';
+        const toolCalls = choice.message.tool_calls || [];
+
+        logger.debug(`[SimpleCoordinator] LLM 响应: content长度=${content.length}, tool_calls数量=${toolCalls.length}`);
 
         // 检查是否有工具调用
-        if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
-          logger.info(`[SimpleCoordinator] LLM 请求调用 ${choice.message.tool_calls.length} 个工具`);
+        if (toolCalls.length > 0) {
+          hasToolCalls = true;
+          logger.info(`[SimpleCoordinator] LLM 请求调用 ${toolCalls.length} 个工具`);
 
           // 添加助手响应（包含 tool_calls）
           messages.push({
             role: 'assistant',
-            content: choice.message.content || null,
-            tool_calls: choice.message.tool_calls,
+            content: content || null,
+            tool_calls: toolCalls,
           });
 
           // 执行每个工具调用
-          for (const toolCall of choice.message.tool_calls) {
+          for (const toolCall of toolCalls) {
             const toolName = toolCall.function.name;
             const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
 
@@ -1204,15 +1249,31 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           }
         } else {
           // 没有工具调用，直接返回结果
-          finalResponse = choice.message.content || '抱歉，我没有生成回复。';
+          finalResponse = content || '抱歉，我没有生成回复。';
           logger.debug(`[SimpleCoordinator] 无工具调用，直接返回响应，长度: ${finalResponse.length}`);
           break;
         }
       }
 
+      // 如果循环结束但没有最终响应，说明达到了maxIterations
+      if (!finalResponse) {
+        logger.warn(`[SimpleCoordinator] 达到最大迭代次数但无最终响应，hasToolCalls=${hasToolCalls}`);
+        if (hasToolCalls) {
+          // 有工具调用但没有最终回复，尝试基于工具结果生成简单总结
+          const toolMessages = messages.filter(m => m.role === 'tool');
+          if (toolMessages.length > 0) {
+            finalResponse = `已执行 ${toolMessages.length} 个工具，请查看工具结果获取详细信息。`;
+          } else {
+            finalResponse = '抱歉，处理超时或出错。';
+          }
+        } else {
+          finalResponse = '抱歉，我没有生成回复。';
+        }
+      }
+
       logger.debug(`[SimpleCoordinator] Function Calling 完成，最终响应长度: ${finalResponse?.length || 0}`);
 
-      return finalResponse || '抱歉，处理超时或出错。';
+      return finalResponse;
     } catch (error) {
       logger.error(`[SimpleCoordinator] LLM 调用失败: ${error}`);
       return `❌ LLM 调用失败: ${error instanceof Error ? error.message : String(error)}`;
