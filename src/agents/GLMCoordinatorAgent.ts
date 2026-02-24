@@ -492,6 +492,7 @@ export class GLMCoordinatorAgent implements IAgent {
       baseURL: this.baseUrl,
       useJwt: this.useJwtAuth,
       isCodingPlan: isCodingPlan,
+      timeout: 180000, // 3 分钟超时（Browser Agent 可能需要多次重试）
     });
 
     logger.info(`[GLMCoordinatorAgent] 初始化完成 (模型: ${this.model})`);
