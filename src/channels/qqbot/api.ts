@@ -287,7 +287,7 @@ export class QQBotAPI {
     fileName?: string
   ): Promise<UploadFileResponse> {
     const path = `/v2/users/${openid}/files`;
-    return this.uploadFileToPath(path, fileData, fileType, fileTypeData, srvSendMsg, fileName);
+    return this.uploadFileToPathWithRetry(path, fileData, fileType, fileTypeData, srvSendMsg, fileName);
   }
 
   /**
@@ -308,19 +308,59 @@ export class QQBotAPI {
     fileName?: string
   ): Promise<UploadFileResponse> {
     const path = `/v2/groups/${groupOpenid}/files`;
-    return this.uploadFileToPath(path, fileData, fileType, fileTypeData, srvSendMsg, fileName);
+    return this.uploadFileToPathWithRetry(path, fileData, fileType, fileTypeData, srvSendMsg, fileName);
+  }
+
+  /**
+   * 带重试的文件上传
+   */
+  private async uploadFileToPathWithRetry(
+    path: string,
+    fileData: Buffer | string,
+    fileType: 1 | 2 | 3 | 4,
+    fileTypeData: string,
+    srvSendMsg: boolean,
+    fileName?: string,
+    maxRetries: number = 3
+  ): Promise<UploadFileResponse> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.uploadFileToPath(path, fileData, fileType, fileTypeData, srvSendMsg, fileName);
+      } catch (error) {
+        lastError = error as Error;
+
+        // 检查是否是可重试的错误
+        const isRetryable = lastError.message.includes('850012') ||
+                           lastError.message.includes('inner proxy error') ||
+                           lastError.message.includes('500') ||
+                           lastError.message.includes('timeout');
+
+        if (!isRetryable || attempt === maxRetries) {
+          throw lastError;
+        }
+
+        // 等待后重试 (指数退避)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        logger.warn(`[API] 文件上传失败，${delay}ms 后重试 (${attempt}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError || new Error('文件上传失败');
   }
 
   /**
    * 内部方法: 上传文件到指定路径
-   * 参考: https://github.com/sliverp/qqbot
-   * 使用 JSON + Base64 方式，而不是 FormData multipart
+   * 参考 QQ Bot 官方文档: https://bot.q.qq.com/wiki/develop/api/openapi/file/upload_files.html
+   * 使用 FormData multipart 方式
    * @param path 完整的API路径
-   * @param fileData 文件数据 (Buffer 或 base64)
+   * @param fileData 文件数据 (Buffer)
    * @param fileType 文件类型
    * @param fileTypeData 文件格式后缀
    * @param srvSendMsg 是否直接发送
-   * @param fileName 原始文件名 (可选，当前版本不使用)
+   * @param fileName 原始文件名
    */
   private async uploadFileToPath(
     path: string,
@@ -330,34 +370,36 @@ export class QQBotAPI {
     srvSendMsg: boolean,
     fileName?: string
   ): Promise<UploadFileResponse> {
-    // 将 Buffer 转换为 Base64 字符串
-    const base64Data = typeof fileData === 'string'
-      ? fileData
-      : fileData.toString('base64');
+    // 确保 fileData 是 Buffer
+    const buffer = typeof fileData === 'string' ? Buffer.from(fileData, 'base64') : fileData;
 
     const url = `${this.baseUrl}${path}`;
-    logger.info(`[API] POST ${url} (JSON + Base64 upload)`);
-    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, base64_length=${base64Data.length}`);
+    logger.info(`[API] POST ${url} (FormData multipart upload)`);
+    logger.info(`[API] Upload details: file_type=${fileType}, file_type_data=${fileTypeData}, srv_send_msg=${srvSendMsg ? '1' : '0'}, file_size=${buffer.length}`);
 
-    // 构建 JSON 请求体（参考 sliverp/qqbot 的实现）
-    const body: Record<string, unknown> = {
-      file_type: fileType,
-      file_type_data: fileTypeData,
-      srv_send_msg: srvSendMsg,
-      file_data: base64Data,
-    };
+    // 使用 FormData multipart 方式上传
+    // 创建 FormData
+    const formData = new FormData();
+    formData.append('file_type', String(fileType));
+    formData.append('file_type_data', fileTypeData);
+    formData.append('srv_send_msg', srvSendMsg ? '1' : '0');
 
-    // 使用现有的 request 方法发送 JSON 请求
+    // 创建 Blob 并添加到 FormData
+    const uint8Array = new Uint8Array(buffer);
+    const blob = new Blob([uint8Array], { type: this.getContentType(fileTypeData) });
+    formData.append('file', blob, fileName || `file.${fileTypeData}`);
+
     const token = await this.getAccessToken();
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `QQBot ${token}`,
-        'Content-Type': 'application/json',
+        // 不设置 Content-Type，让浏览器自动设置并添加 boundary
         'X-Union-Appid': this.config.appId,
       },
-      body: JSON.stringify(body),
-    });
+      body: formData,
+      duplex: 'half',
+    } as RequestInit);
 
     const data = await this.safeParseJson(response);
     logger.info(`[API] Upload Response status: ${response.status}`);

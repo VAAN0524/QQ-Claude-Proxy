@@ -269,18 +269,41 @@ export class QQBotChannel extends EventEmitter {
       const buffer = fs.readFileSync(filePath);
       const ext = filePath.split('.').pop() || 'bin';
 
-      // 根据文件扩展名确定文件类型
+      // 根据文件扩展名确定文件类型和大小限制
       // 1: 图片, 2: 视频, 3: 语音, 4: 文件
       const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
       const videoExts = ['mp4', 'mov', 'avi', 'mkv'];
       const audioExts = ['mp3', 'wav', 'ogg', 'flac'];
+
+      // 文件大小限制 (单位: 字节)
+      const sizeLimits = {
+        image: 20 * 1024 * 1024,   // 20MB
+        video: 100 * 1024 * 1024,  // 100MB
+        audio: 2 * 1024 * 1024,    // 2MB
+        file: 100 * 1024 * 1024,   // 100MB
+      };
+
       let fileType: 1 | 2 | 3 | 4 = 4;  // 默认为文件
+      let sizeLimit = sizeLimits.file;
+
       if (imageExts.includes(ext.toLowerCase())) {
         fileType = 1;
+        sizeLimit = sizeLimits.image;
       } else if (videoExts.includes(ext.toLowerCase())) {
         fileType = 2;
+        sizeLimit = sizeLimits.video;
       } else if (audioExts.includes(ext.toLowerCase())) {
         fileType = 3;
+        sizeLimit = sizeLimits.audio;
+      } else {
+        fileType = 4;
+        sizeLimit = sizeLimits.file;
+      }
+
+      // 检查文件大小是否超过限制
+      if (stats.size > sizeLimit) {
+        const sizeLimitMB = Math.round(sizeLimit / (1024 * 1024));
+        throw new Error(`文件过大 (${fileSizeKB} KB)，超过 QQ 限制 (${sizeLimitMB} MB)`);
       }
 
       logger.info(`[QQChannel.sendFile] File type: ${fileType} (1=image, 2=video, 3=audio, 4=file), ext: ${ext}`);
