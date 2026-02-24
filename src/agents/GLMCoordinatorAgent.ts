@@ -1956,10 +1956,10 @@ ${memoryContext}` : ''}`;
             // 添加到待发送文件列表
             this.pendingFiles.push(fullPath);
             logger.info(`[GLMCoordinatorAgent] 添加文件到发送队列: ${fullPath}`);
-            // 使用简洁的英文响应，避免 GLM API 解析问题
+            // 返回明确的成功消息，让 GLM API 知道文件将被发送
             results.push({
               toolCallId: toolCall.id,
-              result: `OK: ${fileName}`,
+              result: `文件 ${fileName} 已准备发送，将通过 QQ 传送给您`,
               agentId: 'glm-coordinator',
             });
           } catch {

@@ -1111,21 +1111,29 @@ async function main(): Promise<void> {
 
         // 处理文件发送（私聊和群聊都支持）
         if (legacyResponse.filesToSend && legacyResponse.filesToSend.length > 0) {
+          logger.info(`[文件发送] 检测到 ${legacyResponse.filesToSend.length} 个待发送文件`);
+
           const targetId = legacyResponse.groupId || legacyResponse.userId;
 
           // 确保 targetId 存在
           if (targetId) {
             const isGroup = !!legacyResponse.groupId;
+            logger.info(`[文件发送] 目标: ${targetId}, 是否群聊: ${isGroup}`);
 
             for (const filePath of legacyResponse.filesToSend) {
               try {
+                logger.info(`[文件发送] 开始发送: ${filePath}`);
                 await qqChannel.sendFile(targetId, filePath, isGroup);
-                logger.info(`自动发送文件: ${filePath} -> ${targetId}`);
+                logger.info(`[文件发送] 成功: ${filePath} -> ${targetId}`);
               } catch (error) {
-                logger.error(`自动发送文件失败: ${error}`);
+                logger.error(`[文件发送] 失败: ${filePath}, 错误: ${error}`);
               }
             }
+          } else {
+            logger.warn(`[文件发送] 无效的 targetId`);
           }
+        } else {
+          logger.debug(`[文件发送] 无待发送文件`);
         }
       } catch (error) {
         logger.error(`处理消息失败: ${error}`);
