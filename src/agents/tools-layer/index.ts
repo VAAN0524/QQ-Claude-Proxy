@@ -44,36 +44,32 @@ export class ToolManager {
    * 注册内置工具
    */
   private registerBuiltinTools(): void {
-    // 搜索工具
-    this.register({
-      name: 'duckduckgo_search',
-      description: '使用 DuckDuckGo 进行网络搜索。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
-      category: 'search',
-      execute: async (params: { query: string; maxResults?: number }) => {
-        const { duckDuckGoSearch, formatSearchResults } = await import('./search-tools.js');
-        const results = await duckDuckGoSearch(params.query, params.maxResults);
-        return formatSearchResults(results, undefined, 'duckduckgo');
-      },
-    });
-
+    // 搜索工具 - 使用智谱 AI 内置搜索和 Tavily
     this.register({
       name: 'tavily_search',
-      description: '使用 Tavily 进行深度搜索（需要 API Key）。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
+      description: '使用 Tavily 进行专业网络搜索（推荐）。需要配置 TAVILY_API_KEY。搜索时请在关键词中包含当前年份以获取最新资讯。',
       category: 'search',
       execute: async (params: { query: string; maxResults?: number }) => {
-        const { tavilySearch, formatSearchResults } = await import('./search-tools.js');
-        const result = await tavilySearch(params.query, params.maxResults);
-        return formatSearchResults(result.results, result.answer, 'tavily');
+        const { tavilySearch, formatSearchResults, TAVILY_API_GUIDE } = await import('./search-tools.js');
+        try {
+          const result = await tavilySearch(params.query, params.maxResults);
+          return formatSearchResults(result.results, result.answer, 'tavily');
+        } catch (error: any) {
+          return `❌ 搜索失败: ${error.message}\n\n${TAVILY_API_GUIDE}`;
+        }
       },
     });
 
     this.register({
       name: 'smart_search',
-      description: '智能搜索 - 自动选择最佳搜索方式。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
+      description: '智能搜索 - 优先使用 Tavily，未配置则提示申请。搜索时请在关键词中包含当前年份以获取最新资讯。',
       category: 'search',
-      execute: async (params: { query: string; maxResults?: number; preferTavily?: boolean }) => {
+      execute: async (params: { query: string; maxResults?: number }) => {
         const { smartSearch, formatSearchResults } = await import('./search-tools.js');
         const result = await smartSearch(params.query, params);
+        if (result.tip) {
+          return result.tip;
+        }
         return formatSearchResults(result.results, result.answer, result.source);
       },
     });

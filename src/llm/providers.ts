@@ -289,8 +289,13 @@ export function anthropic(config: ProviderConfig): LLMProvider {
  * GLM (智谱 AI) 提供商
  *
  * 支持 GLM-4 系列模型和 Coding Plan 端点
+ * 支持内置网络搜索功能 (web_search)
  */
-export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: boolean }): LLMProvider {
+export function glm(config: ProviderConfig & {
+  useJwt?: boolean;
+  isCodingPlan?: boolean;
+  enableWebSearch?: boolean;  // 启用智谱 AI 内置网络搜索
+}): LLMProvider {
   // Coding Plan 使用不同的默认 URL
   const defaultBaseUrl = config.isCodingPlan
     ? 'https://open.bigmodel.cn/api/coding/paas/v4/'
@@ -300,8 +305,10 @@ export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: 
   const timeout = config.timeout || 60000;
   // Coding Plan 使用直接 API Key 认证，不需要 JWT
   const useJwt = config.isCodingPlan ? false : (config.useJwt !== false);
+  // 默认启用网络搜索（如果用户没有明确禁用）
+  const enableWebSearch = config.enableWebSearch !== false;
 
-  logger.info(`[LLM Provider] GLM initialized with base URL: ${baseURL}, JWT: ${useJwt}, CodingPlan: ${config.isCodingPlan || false}`);
+  logger.info(`[LLM Provider] GLM initialized with base URL: ${baseURL}, JWT: ${useJwt}, CodingPlan: ${config.isCodingPlan || false}, WebSearch: ${enableWebSearch}`);
 
   const axiosInstance = createAxiosInstance(baseURL, timeout);
 
@@ -329,12 +336,34 @@ export function glm(config: ProviderConfig & { useJwt?: boolean; isCodingPlan?: 
             // Coding Plan 请求格式可能略有不同
             const endpoint = config.isCodingPlan ? 'chat/completions' : 'chat/completions';
 
-            const response = await axiosInstance.post(endpoint, {
+            // 构建请求体，添加 web_search 支持
+            const requestBody: any = {
               model: params.model,
               messages: params.messages,
-              tools: params.tools,
               max_tokens: params.max_tokens,
-            }, {
+            };
+
+            // 构建工具列表
+            const toolsList: any[] = params.tools || [];
+
+            // 启用智谱 AI 内置网络搜索（使用正确的 tools 格式）
+            if (enableWebSearch) {
+              toolsList.push({
+                type: 'web_search',
+                web_search: {
+                  enable: 'True',
+                  search_engine: 'search_pro',
+                  search_result: 'True',
+                }
+              });
+              logger.debug('[LLM Provider] GLM web_search enabled via tools');
+            }
+
+            if (toolsList.length > 0) {
+              requestBody.tools = toolsList;
+            }
+
+            const response = await axiosInstance.post(endpoint, requestBody, {
               headers,
             });
 
@@ -395,6 +424,7 @@ export function providerFromConfig(config: {
   timeout?: number;
   useJwt?: boolean;
   isCodingPlan?: boolean;
+  enableWebSearch?: boolean;  // GLM 专用：启用网络搜索
 }): LLMProvider {
   if (config.provider === 'glm') {
     return glm({
@@ -403,6 +433,7 @@ export function providerFromConfig(config: {
       timeout: config.timeout,
       useJwt: config.useJwt,
       isCodingPlan: config.isCodingPlan,
+      enableWebSearch: config.enableWebSearch,
     });
   }
   return createProvider(config.provider, {

@@ -1105,6 +1105,17 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
 注意：请使用当前年份 (${currentDate}) 的最新 API 和语法。`;
 
+      // 智谱 AI 网络搜索工具（正确格式）
+      const webSearchTool = {
+        type: 'web_search',
+        web_search: {
+          enable: 'True',
+          search_engine: 'search_pro',
+          search_result: 'True',
+          count: '5',
+        }
+      };
+
       const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
         model: 'glm-4.7',
         messages: [
@@ -1117,6 +1128,7 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
             content: content,
           },
         ],
+        tools: [webSearchTool],  // 使用正确的 tools 参数格式
         max_tokens: 4096,
         temperature: 0.3,
       }, {
@@ -1739,14 +1751,35 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
         // 最后一次迭代时不传递tools，强制LLM生成最终回复
         const isLastIteration = iteration === maxIterations - 1;
-        const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
+
+        // 构建请求体
+        const requestBody: any = {
           model: 'glm-4.7',
           messages,
-          tools: isLastIteration ? undefined : (tools.length > 0 ? tools : undefined),
-          tool_choice: isLastIteration ? undefined : (tools.length > 0 ? 'auto' : undefined),
           max_tokens: 4096,
           temperature: 0.7,
-        }, {
+        };
+
+        // 添加 function calling 工具
+        if (!isLastIteration && tools.length > 0) {
+          requestBody.tools = tools;
+          requestBody.tool_choice = 'auto';
+        }
+
+        // 添加智谱 AI 内置网络搜索工具
+        if (!isLastIteration) {
+          requestBody.tools = requestBody.tools || [];
+          requestBody.tools.push({
+            type: 'web_search',
+            web_search: {
+              enable: 'True',
+              search_engine: 'search_pro',
+              search_result: 'True',
+            }
+          });
+        }
+
+        const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, requestBody, {
           headers: {
             'Authorization': `Bearer ${apiKey}`,
           },
