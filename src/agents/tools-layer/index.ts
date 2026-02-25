@@ -14,13 +14,19 @@ export * from './web-tools.js';
 // Shell 工具
 export * from './shell-tools.js';
 
+// 文件工具
+export * from './file-tools.js';
+
+// 进程工具
+export * from './process-tools.js';
+
 /**
  * 工具类型定义
  */
 export interface Tool {
   name: string;
   description: string;
-  category: 'search' | 'web' | 'shell' | 'code' | 'vision' | 'data';
+  category: 'search' | 'web' | 'shell' | 'code' | 'vision' | 'data' | 'file' | 'process';
   execute: (params: any) => Promise<any>;
 }
 
@@ -41,7 +47,7 @@ export class ToolManager {
     // 搜索工具
     this.register({
       name: 'duckduckgo_search',
-      description: '使用 DuckDuckGo 进行网络搜索',
+      description: '使用 DuckDuckGo 进行网络搜索。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
       category: 'search',
       execute: async (params: { query: string; maxResults?: number }) => {
         const { duckDuckGoSearch, formatSearchResults } = await import('./search-tools.js');
@@ -52,7 +58,7 @@ export class ToolManager {
 
     this.register({
       name: 'tavily_search',
-      description: '使用 Tavily 进行深度搜索（需要 API Key）',
+      description: '使用 Tavily 进行深度搜索（需要 API Key）。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
       category: 'search',
       execute: async (params: { query: string; maxResults?: number }) => {
         const { tavilySearch, formatSearchResults } = await import('./search-tools.js');
@@ -63,7 +69,7 @@ export class ToolManager {
 
     this.register({
       name: 'smart_search',
-      description: '智能搜索 - 自动选择最佳搜索方式',
+      description: '智能搜索 - 自动选择最佳搜索方式。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
       category: 'search',
       execute: async (params: { query: string; maxResults?: number; preferTavily?: boolean }) => {
         const { smartSearch, formatSearchResults } = await import('./search-tools.js');
@@ -90,9 +96,6 @@ export class ToolManager {
       },
     });
 
-    // GitHub 工具已移除 - 功能合并到 network_tool.ts
-    // 如需使用，请直接调用 src/agents/tools/network_tool.ts 中的函数
-
     // Shell 工具
     this.register({
       name: 'execute_command',
@@ -105,6 +108,93 @@ export class ToolManager {
           timeout: params.timeout || 30000,
         });
         return formatShellResult(result, params.command);
+      },
+    });
+
+    // 文件工具
+    this.register({
+      name: 'read_file',
+      description: '读取文件内容',
+      category: 'file',
+      execute: async (params: { path: string; maxLength?: number }) => {
+        const { readFile, formatFileResult } = await import('./file-tools.js');
+        const result = await readFile(params.path, { maxLength: params.maxLength });
+        return formatFileResult(result, 'read');
+      },
+    });
+
+    this.register({
+      name: 'write_file',
+      description: '写入文件内容',
+      category: 'file',
+      execute: async (params: { path: string; content: string; createDir?: boolean }) => {
+        const { writeFile, formatFileResult } = await import('./file-tools.js');
+        const result = await writeFile(params.path, params.content, { createDir: params.createDir });
+        return formatFileResult(result, 'write');
+      },
+    });
+
+    this.register({
+      name: 'edit_file',
+      description: '编辑文件（精确替换）',
+      category: 'file',
+      execute: async (params: { path: string; edits: Array<{ oldText: string; newText: string }> }) => {
+        const { editFile, formatFileResult } = await import('./file-tools.js');
+        const result = await editFile(params.path, params.edits);
+        return formatFileResult(result, 'edit');
+      },
+    });
+
+    this.register({
+      name: 'apply_patch',
+      description: '应用补丁（unified diff 格式）',
+      category: 'file',
+      execute: async (params: { patch: string; strip?: number }) => {
+        const { writeFile, formatFileResult } = await import('./file-tools.js');
+        // 简化实现：写入补丁到临时文件
+        const result = await writeFile('.temp.patch', params.patch, { createDir: true });
+        return formatFileResult(result, 'write');
+      },
+    });
+
+    // 进程工具
+    this.register({
+      name: 'spawn_process',
+      description: '启动后台进程',
+      category: 'process',
+      execute: async (params: { sessionId: string; command: string; args?: string[] }) => {
+        const { spawnProcess } = await import('./process-tools.js');
+        return await spawnProcess(params.sessionId, params.command, params.args);
+      },
+    });
+
+    this.register({
+      name: 'terminate_process',
+      description: '终止后台进程',
+      category: 'process',
+      execute: async (params: { sessionId: string }) => {
+        const { terminateProcess } = await import('./process-tools.js');
+        return await terminateProcess(params.sessionId);
+      },
+    });
+
+    this.register({
+      name: 'list_processes',
+      description: '列出后台进程',
+      category: 'process',
+      execute: async (params: { status?: 'running' | 'stopped' | 'failed' }) => {
+        const { listProcesses } = await import('./process-tools.js');
+        return await listProcesses(params);
+      },
+    });
+
+    this.register({
+      name: 'process_status',
+      description: '获取进程状态',
+      category: 'process',
+      execute: async (params: { sessionId: string }) => {
+        const { getProcessStatus } = await import('./process-tools.js');
+        return await getProcessStatus(params.sessionId);
       },
     });
   }

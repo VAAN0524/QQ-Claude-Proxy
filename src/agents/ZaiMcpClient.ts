@@ -26,6 +26,14 @@ export interface ZaiMcpClientOptions {
   mode?: 'ZHIPU' | 'ZAI';
   /** 请求超时时间（毫秒），默认 5 分钟 */
   requestTimeout?: number;
+  /** 是否启用自动重连，默认 true */
+  autoReconnect?: boolean;
+  /** 最大重连次数，默认 5 */
+  maxReconnectAttempts?: number;
+  /** 重连基础延迟（毫秒），默认 1000 */
+  reconnectBaseDelay?: number;
+  /** 心跳间隔（毫秒），默认 30000 (30秒) */
+  heartbeatInterval?: number;
 }
 
 /**
@@ -42,6 +50,11 @@ export interface McpTool {
 }
 
 /**
+ * 连接状态
+ */
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+
+/**
  * MCP 客户端类
  */
 export class ZaiMcpClient {
@@ -49,24 +62,48 @@ export class ZaiMcpClient {
   private transport: StdioClientTransport | null = null;
   private apiKey: string;
   private mode: string;
-  private isConnected: boolean = false;
+  private connectionState: ConnectionState = 'disconnected';
   private requestTimeout: number;
+  private autoReconnect: boolean;
+  private maxReconnectAttempts: number;
+  private reconnectBaseDelay: number;
+  private heartbeatInterval: number;
 
   // 可用工具缓存
   private availableTools: Map<string, McpTool> = new Map();
+
+  // 重连状态
+  private reconnectAttempts: number = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private lastHeartbeatTime: number = Date.now();
 
   constructor(options: ZaiMcpClientOptions) {
     this.apiKey = options.apiKey;
     this.mode = options.mode || 'ZHIPU';
     this.requestTimeout = options.requestTimeout || 300000; // 默认 5 分钟
+    this.autoReconnect = options.autoReconnect ?? true;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
+    this.reconnectBaseDelay = options.reconnectBaseDelay ?? 1000;
+    this.heartbeatInterval = options.heartbeatInterval ?? 30000; // 默认 30 秒
   }
 
   /**
    * 连接 MCP Server
    */
   async connect(): Promise<void> {
+    if (this.connectionState === 'connected' || this.connectionState === 'connecting') {
+      logger.debug('[ZaiMcpClient] 已连接或正在连接中，跳过');
+      return;
+    }
+
+    this.connectionState = 'connecting';
+
     try {
       logger.info('[ZaiMcpClient] 正在连接官方 MCP Server...');
+
+      // 清理旧连接
+      await this.cleanup();
 
       // 创建 stdio transport
       this.transport = new StdioClientTransport({
@@ -88,14 +125,26 @@ export class ZaiMcpClient {
 
       // 连接
       await this.client.connect(this.transport);
-      this.isConnected = true;
+      this.connectionState = 'connected';
+      this.reconnectAttempts = 0; // 重置重连计数
+      this.lastHeartbeatTime = Date.now();
 
       // 加载可用工具
       await this.loadTools();
 
+      // 启动心跳
+      this.startHeartbeat();
+
       logger.info('[ZaiMcpClient] 已连接到官方 MCP Server');
     } catch (error) {
+      this.connectionState = 'disconnected';
       logger.error(`[ZaiMcpClient] 连接失败: ${error}`);
+
+      // 尝试自动重连
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      }
+
       throw error;
     }
   }
@@ -128,8 +177,10 @@ export class ZaiMcpClient {
    * 调用工具
    */
   async callTool(toolName: string, args: Record<string, any>): Promise<any> {
-    if (!this.client || !this.isConnected) {
-      throw new Error('MCP 客户端未连接');
+    // 确保已连接
+    if (this.connectionState !== 'connected' || !this.client) {
+      logger.warn('[ZaiMcpClient] 客户端未连接，尝试重新连接...');
+      await this.connect();
     }
 
     const tool = this.availableTools.get(toolName);
@@ -156,10 +207,18 @@ export class ZaiMcpClient {
         timeoutPromise,
       ]) as any;
 
+      this.lastHeartbeatTime = Date.now(); // 更新心跳时间
       logger.info(`[ZaiMcpClient] 工具调用成功: ${toolName}`);
       return result;
     } catch (error) {
       logger.error(`[ZaiMcpClient] 工具调用失败: ${error}`);
+
+      // 连接错误，触发重连
+      if (this.autoReconnect && this.isConnectionError(error)) {
+        this.connectionState = 'disconnected';
+        this.scheduleReconnect();
+      }
+
       throw error;
     }
   }
@@ -299,17 +358,8 @@ export class ZaiMcpClient {
    * 断开连接
    */
   async disconnect(): Promise<void> {
-    if (this.client) {
-      await this.client.close();
-      this.client = null;
-    }
-    if (this.transport) {
-      // stdio transport 会自动关闭子进程
-      this.transport = null;
-    }
-    this.isConnected = false;
-    this.availableTools.clear();
-
+    this.connectionState = 'disconnected';
+    await this.cleanup();
     logger.info('[ZaiMcpClient] 已断开连接');
   }
 
@@ -317,7 +367,141 @@ export class ZaiMcpClient {
    * 检查连接状态
    */
   isClientConnected(): boolean {
-    return this.isConnected;
+    return this.connectionState === 'connected' && this.client !== null;
+  }
+
+  /**
+   * 获取连接状态
+   */
+  getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  /**
+   * 判断错误是否为连接错误
+   */
+  private isConnectionError(error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return (
+      errorMessage.includes('EPIPE') ||
+      errorMessage.includes('ECONNRESET') ||
+      errorMessage.includes('ETIMEDOUT') ||
+      errorMessage.includes('disconnect') ||
+      errorMessage.includes('closed')
+    );
+  }
+
+  /**
+   * 计算重连延迟（指数退避）
+   */
+  private calculateReconnectDelay(): number {
+    return this.reconnectBaseDelay * Math.pow(2, Math.min(this.reconnectAttempts, 5));
+  }
+
+  /**
+   * 安排重连
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      return; // 已有重连计划
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.error(`[ZaiMcpClient] 达到最大重连次数 (${this.maxReconnectAttempts})，停止重连`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.calculateReconnectDelay();
+
+    logger.info(
+      `[ZaiMcpClient] 计划在 ${delay}ms 后进行第 ${this.reconnectAttempts} 次重连 ` +
+      `(最大 ${this.maxReconnectAttempts} 次)`
+    );
+
+    this.connectionState = 'reconnecting';
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        await this.connect();
+      } catch (error) {
+        // connect 方法已经处理了重连逻辑
+      }
+    }, delay);
+  }
+
+  /**
+   * 启动心跳检测
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+
+    this.heartbeatTimer = setInterval(() => {
+      this.checkHeartbeat();
+    }, this.heartbeatInterval);
+
+    logger.debug(`[ZaiMcpClient] 心跳检测已启动 (间隔: ${this.heartbeatInterval}ms)`);
+  }
+
+  /**
+   * 停止心跳检测
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+      logger.debug('[ZaiMcpClient] 心跳检测已停止');
+    }
+  }
+
+  /**
+   * 检查心跳
+   */
+  private checkHeartbeat(): void {
+    const now = Date.now();
+    const timeSinceLastHeartbeat = now - this.lastHeartbeatTime;
+
+    // 如果距离上次心跳超过 2 倍心跳间隔，认为连接可能断开
+    if (timeSinceLastHeartbeat > this.heartbeatInterval * 2) {
+      logger.warn(
+        `[ZaiMcpClient] 心跳超时 (距离上次: ${timeSinceLastHeartbeat}ms)，` +
+        `尝试重新连接...`
+      );
+
+      this.connectionState = 'disconnected';
+      this.stopHeartbeat();
+
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      }
+    }
+  }
+
+  /**
+   * 清理资源
+   */
+  private async cleanup(): Promise<void> {
+    this.stopHeartbeat();
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.client) {
+      try {
+        await this.client.close();
+      } catch (error) {
+        logger.debug('[ZaiMcpClient] 关闭客户端时出错: ' + String(error));
+      }
+      this.client = null;
+    }
+
+    if (this.transport) {
+      this.transport = null;
+    }
+
+    this.availableTools.clear();
   }
 }
 

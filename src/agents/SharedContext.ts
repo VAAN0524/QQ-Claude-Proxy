@@ -37,6 +37,8 @@ export interface SharedContextOptions {
   maxMessages?: number;
   /** 消息最大保留时间（毫秒） */
   maxAge?: number;
+  /** 是否启用修剪日志 */
+  enablePruneLog?: boolean;
 }
 
 /**
@@ -49,11 +51,21 @@ export class SharedContext {
 
   private maxMessages: number;
   private maxAge: number;
+  private pruneLogEnabled: boolean;
+
+  // 修剪统计
+  private pruneStats = {
+    totalPrunedByAge: 0,
+    totalPrunedByCount: 0,
+    lastPruneTime: Date.now(),
+  };
 
   constructor(options: SharedContextOptions = {}) {
-    this.maxMessages = options.maxMessages || 100;
+    // 降低默认值以更激进的内存控制（原值 100）
+    this.maxMessages = options.maxMessages || 50;
     this.maxAge = options.maxAge || 60 * 60 * 1000; // 默认 1 小时
-    logger.info('[SharedContext] 初始化完成');
+    this.pruneLogEnabled = options.enablePruneLog ?? true;
+    logger.info('[SharedContext] 初始化完成 (maxMessages: ' + this.maxMessages + ', maxAge: ' + (this.maxAge / 60000) + '分钟)');
   }
 
   /**
@@ -210,19 +222,80 @@ export class SharedContext {
   }
 
   /**
+   * 获取修剪统计信息
+   */
+  getPruneStats(): {
+    totalPrunedByAge: number;
+    totalPrunedByCount: number;
+    lastPruneTime: number;
+  } {
+    return { ...this.pruneStats };
+  }
+
+  /**
+   * 手动触发清理（公共方法）
+   *
+   * @param force - 是否强制清理（即使未达到限制）
+   * @returns 清理的消息数量
+   */
+  prune(force: boolean = false): number {
+    const beforeCount = this.conversationHistory.length;
+
+    if (force) {
+      // 强制清理：移除超出限制的消息
+      while (this.conversationHistory.length > this.maxMessages) {
+        this.conversationHistory.shift();
+      }
+    } else {
+      // 正常清理
+      this.pruneOldMessages();
+    }
+
+    const afterCount = this.conversationHistory.length;
+    const pruned = beforeCount - afterCount;
+
+    if (this.pruneLogEnabled && pruned > 0) {
+      logger.info(`[SharedContext] 手动清理完成: -${pruned} 条消息 | 剩余: ${afterCount}`);
+    }
+
+    return pruned;
+  }
+
+  /**
    * 清理过期消息
    */
   private pruneOldMessages(): void {
     const now = Date.now();
+    const beforeCount = this.conversationHistory.length;
 
-    // 移除过期的消息
+    // 1. 移除过期的消息
+    const beforeAgeFilter = this.conversationHistory.length;
     this.conversationHistory = this.conversationHistory.filter(
       msg => now - msg.timestamp.getTime() < this.maxAge
     );
+    const prunedByAge = beforeAgeFilter - this.conversationHistory.length;
 
-    // 如果消息数量超过限制，移除最旧的消息
+    // 2. 如果消息数量超过限制，移除最旧的消息
+    let prunedByCount = 0;
     while (this.conversationHistory.length > this.maxMessages) {
       this.conversationHistory.shift();
+      prunedByCount++;
+    }
+
+    const afterCount = this.conversationHistory.length;
+    const totalPruned = beforeCount - afterCount;
+
+    // 更新统计
+    this.pruneStats.totalPrunedByAge += prunedByAge;
+    this.pruneStats.totalPrunedByCount += prunedByCount;
+    this.pruneStats.lastPruneTime = now;
+
+    // 记录日志（仅当有修剪时）
+    if (this.pruneLogEnabled && totalPruned > 0) {
+      logger.info(
+        `[SharedContext] 修剪消息: -${totalPruned} (过期: -${prunedByAge}, 超限: -${prunedByCount}) | ` +
+        `剩余: ${afterCount}/${this.maxMessages}`
+      );
     }
   }
 

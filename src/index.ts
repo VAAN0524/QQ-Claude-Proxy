@@ -30,6 +30,7 @@ import {
   SharedContext,
   SharedContextPersistence,
   SessionManager,
+  registerLazyAgent,
   type IAgent,
   type AgentMessage,
   type AgentContext,
@@ -583,14 +584,24 @@ async function main(): Promise<void> {
   // - 如需多 Agent 协作，请使用 CLI 模式
   // ============================================
 
-  // Skill Manager Agent (技能管理专家) - 无需配置，默认启用
+  // Skill Manager Agent (技能管理专家) - 使用延迟加载
   try {
-    const skillManagerAgent = new SkillManagerAgent();
-    await skillManagerAgent.initialize();
-    agentRegistry.register(skillManagerAgent);
-    logger.info('[Agent 系统] Skill Manager Agent 已启用');
+    // 注册延迟加载的 SkillManagerAgent
+    const skillManagerProxy = registerLazyAgent(
+      'skill-manager',
+      async () => {
+        const { SkillManagerAgent } = await import('./agents/SkillManagerAgent.js');
+        const agent = new SkillManagerAgent();
+        if (typeof agent.initialize === 'function') {
+          await agent.initialize();
+        }
+        return agent;
+      }
+    );
+    agentRegistry.register(skillManagerProxy);
+    logger.info('[Agent 系统] Skill Manager Agent 已注册 (延迟加载)');
   } catch (error) {
-    logger.warn(`[Agent 系统] Skill Manager Agent 初始化失败: ${error}`);
+    logger.warn(`[Agent 系统] Skill Manager Agent 注册失败: ${error}`);
   }
 
   // ========== 会话持久化系统 ==========
@@ -707,7 +718,23 @@ async function main(): Promise<void> {
   });
   // ===============================
 
-  // 设置文件发送回调
+  // 设置文件发送回调（Simple 模式）
+  if (simpleCoordinatorAgent) {
+    simpleCoordinatorAgent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
+      const fileName = path.basename(filePath);
+      const targetId = groupId || userId;
+      logger.info(`[SendFileCallback] Starting file send: ${filePath} -> ${targetId}`);
+      try {
+        await qqChannel.sendFile(targetId, filePath, !!groupId, fileName);
+        logger.info(`[SendFileCallback] File sent successfully: ${filePath}`);
+      } catch (error) {
+        logger.error(`[SendFileCallback] File send FAILED: ${error}`);
+        throw error;
+      }
+    });
+  }
+
+  // CLI 模式的文件发送回调（如果需要）
   agent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
     const fileName = path.basename(filePath);
     const targetId = groupId || userId;

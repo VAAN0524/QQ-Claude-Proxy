@@ -15,11 +15,35 @@ import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 
 import { resolve, join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { createHash } from 'crypto';
 
 const execAsync = promisify(exec);
 import type { Scheduler } from '../scheduler/index.js';
 import { ConfigWriter } from '../config/writer.js';
 import { ConfigValidator } from '../config/validator.js';
+
+/**
+ * 鉴权配置
+ */
+export interface AuthConfig {
+  /** API 密钥（可选，为空则不启用 API 密钥鉴权） */
+  apiKey?: string;
+  /** IP 白名单（可选，为空则不启用 IP 限制） */
+  ipWhitelist?: string[];
+  /** 允许的路径前缀（这些路径不需要鉴权） */
+  publicPaths?: string[];
+}
+
+/**
+ * 默认公开路径（无需鉴权）
+ */
+const DEFAULT_PUBLIC_PATHS = [
+  '/api/health',
+  '/dashboard/',  // Dashboard 静态页面
+  '/index.html',
+  '/favicon.ico',
+  '/assets/',
+];
 
 /**
  * Dashboard state for real-time updates
@@ -64,6 +88,8 @@ export interface ApiHandlerContext {
   dashboardState: DashboardState;
   restartCallback?: () => Promise<void>;
   scheduler?: Scheduler;
+  /** 鉴权配置（可选） */
+  auth?: AuthConfig;
 }
 
 /**
@@ -92,6 +118,171 @@ async function getBody(req: IncomingMessage): Promise<any> {
       }
     });
   });
+}
+
+/**
+ * 获取客户端 IP 地址
+ */
+function getClientIp(req: IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    // X-Forwarded-For 可能包含多个 IP，取第一个
+    return forwarded.split(',')[0].trim();
+  }
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string') {
+    return realIp;
+  }
+  // 回退到远程地址
+  const socket = (req as any).socket;
+  return socket?.remoteAddress || 'unknown';
+}
+
+/**
+ * 验证 API 密钥
+ */
+function validateApiKey(req: IncomingMessage, apiKey?: string): boolean {
+  if (!apiKey) {
+    // 未配置 API 密钥，跳过验证
+    return true;
+  }
+
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return false;
+  }
+
+  // 支持 Bearer token 格式
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return false;
+  }
+
+  const token = match[1];
+  return token === apiKey;
+}
+
+/**
+ * 验证 IP 白名单
+ */
+function validateIpWhitelist(req: IncomingMessage, ipWhitelist?: string[]): boolean {
+  if (!ipWhitelist || ipWhitelist.length === 0) {
+    // 未配置 IP 白名单，跳过验证
+    return true;
+  }
+
+  const clientIp = getClientIp(req);
+
+  // 支持通配符匹配
+  for (const allowedIp of ipWhitelist) {
+    if (allowedIp === '*') {
+      return true; // 允许所有 IP
+    }
+    if (allowedIp.includes('/')) {
+      // CIDR 格式（简化处理，只匹配精确前缀）
+      const [prefix] = allowedIp.split('/');
+      if (clientIp.startsWith(prefix)) {
+        return true;
+      }
+    } else if (clientIp === allowedIp) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 检查路径是否为公开路径
+ */
+function isPublicPath(pathname: string, publicPaths: string[]): boolean {
+  for (const publicPath of publicPaths) {
+    if (publicPath.endsWith('/')) {
+      if (pathname.startsWith(publicPath)) {
+        return true;
+      }
+    } else {
+      if (pathname === publicPath) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 鉴权检查结果
+ */
+interface AuthResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * 执行鉴权检查
+ */
+function checkAuth(req: IncomingMessage, pathname: string, auth?: AuthConfig): AuthResult {
+  if (!auth) {
+    // 未配置鉴权，允许所有请求
+    return { success: true };
+  }
+
+  const publicPaths = auth.publicPaths || DEFAULT_PUBLIC_PATHS;
+
+  // 检查是否为公开路径
+  if (isPublicPath(pathname, publicPaths)) {
+    return { success: true };
+  }
+
+  // 验证 API 密钥
+  if (!validateApiKey(req, auth.apiKey)) {
+    return {
+      success: false,
+      error: 'Invalid or missing API key',
+    };
+  }
+
+  // 验证 IP 白名单
+  if (!validateIpWhitelist(req, auth.ipWhitelist)) {
+    return {
+      success: false,
+      error: 'IP address not in whitelist',
+    };
+  }
+
+  return { success: true };
+}
+
+/**
+ * 发送鉴权错误响应
+ */
+function sendAuthError(res: ServerResponse, error: string): void {
+  res.writeHead(401, {
+    'Content-Type': 'application/json',
+    'WWW-Authenticate': 'Bearer realm="Dashboard API"',
+  });
+  res.end(JSON.stringify({
+    error: 'Unauthorized',
+    message: error,
+  }));
+}
+
+/**
+ * 包装处理器以添加鉴权
+ */
+function withAuth(
+  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
+  auth?: AuthConfig,
+  pathname: string = ''
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (req, res) => {
+    const authResult = checkAuth(req, pathname, auth);
+    if (!authResult.success) {
+      sendAuthError(res, authResult.error || 'Authentication failed');
+      return;
+    }
+    return handler(req, res);
+  };
 }
 
 /**
@@ -822,7 +1013,15 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
     sendJson(res, { stats });
   });
 
-  return handlers;
+  // 应用鉴权包装器
+  const authHandlers = new Map();
+  for (const [key, handler] of handlers.entries()) {
+    const [method, pathname] = key.split(':') as [string, string];
+    const fullPath = pathname;
+    authHandlers.set(key, withAuth(handler, context.auth, fullPath));
+  }
+
+  return authHandlers;
 }
 
 /**
@@ -1914,5 +2113,13 @@ export function createExtendedApiHandlers(context: ExtendedApiHandlerContext): M
     }
   });
 
-  return handlers;
+  // 应用鉴权包装器
+  const authHandlers = new Map();
+  for (const [key, handler] of handlers.entries()) {
+    const [method, pathname] = key.split(':') as [string, string];
+    const fullPath = pathname;
+    authHandlers.set(key, withAuth(handler, context.auth, fullPath));
+  }
+
+  return authHandlers;
 }

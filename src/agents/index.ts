@@ -50,6 +50,21 @@ export type {
 export { LearningModule } from './learning/index.js';
 
 // ============================================
+// 优化组件（轻量化与智能化）
+// ============================================
+export { AgentLoader, registerAgent, getAgent, unloadAgent } from './AgentLoader.js';
+export type { AgentFactory, AgentLoadStatus } from './AgentLoader.js';
+
+export { LazyAgentProxy, createLazyAgent, registerLazyAgent } from './LazyAgentProxy.js';
+export type { ProxyFactoryOptions } from './LazyAgentProxy.js';
+
+export { ContextCompressor } from './ContextCompressor.js';
+export type { Message, MessageRole, CompressionOptions, CompressionStats } from './ContextCompressor.js';
+
+export { ResourceMonitor } from './ResourceMonitor.js';
+export type { MemoryUsageInfo, SystemInfo, ProcessSnapshot, ResourceTrend } from './ResourceMonitor.js';
+
+// ============================================
 // 工具层（新架构）
 // ============================================
 export * from './tools-layer/index.js';

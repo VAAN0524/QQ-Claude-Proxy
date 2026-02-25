@@ -21,3 +21,22 @@ export {
 // 知识缓存服务
 export { KnowledgeCache, KNOWLEDGE_TTL } from './KnowledgeCache.js';
 export type { KnowledgeCacheOptions } from './KnowledgeCache.js';
+
+// 搜索引擎
+export { BM25SearchEngine, type SearchResult } from './SearchEngine.js';
+export {
+  HybridSearchEngine,
+  type VectorSearchResult,
+  type HybridSearchResult,
+  type EmbeddingFn,
+  type HybridSearchEngineOptions,
+} from './HybridSearchEngine.js';
+
+// 文档分块器
+export { DocumentChunker, type Chunk, type ChunkerOptions } from './DocumentChunker.js';
+
+// Embedding 缓存
+export { EmbeddingCache, type CachedEmbedding, type EmbeddingCacheOptions } from './EmbeddingCache.js';
+
+// 文件监听器
+export { MemoryWatcher, createMemoryWatcher, type FileChangeEvent, type FileChangeType, type MemoryWatcherOptions } from './MemoryWatcher.js';

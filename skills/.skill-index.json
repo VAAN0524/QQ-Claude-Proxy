@@ -1,0 +1,270 @@
+{
+  "version": "1.0",
+  "lastUpdated": 1771994023903,
+  "skills": {
+    "agent-coordination": {
+      "name": "agent-coordination",
+      "path": "C:\\Test\\bot\\skills\\agent-coordination",
+      "trigger": "agent_coordination",
+      "description": "Agent 协调模式技能。使用此技能当需要设计多 Agent 系统或协调多个子 Agent 时。",
+      "mtime": 1771802644576.8884,
+      "size": 6271
+    },
+    "agent-debugging": {
+      "name": "agent-debugging",
+      "path": "C:\\Test\\bot\\skills\\agent-debugging",
+      "trigger": "agent_debugging",
+      "description": "Agent 系统调试技能。使用此技能当 Agent 出现错误、行为异常或需要排查问题时。",
+      "mtime": 1771802599379.7312,
+      "size": 1946
+    },
+    "agent-memory": {
+      "name": "agent-memory",
+      "path": "C:\\Test\\bot\\skills\\agent-memory",
+      "trigger": "agent_memory",
+      "description": "Agent 记忆管理技能。使用此技能当需要处理会话持久化、上下文管理或知识存储时。",
+      "mtime": 1771802617302.8975,
+      "size": 3443
+    },
+    "auto-error-resolver": {
+      "name": "auto-error-resolver",
+      "path": "C:\\Test\\bot\\skills\\auto-error-resolver",
+      "trigger": "auto_error_resolver",
+      "description": "自动错误解决技能。使用此技能当遇到 TypeScript 编译错误、测试失败、运行时错误或需要系统化调试时。自动分析错误、定位根因、应用修复、验证结果。",
+      "mtime": 1771803638703.1763,
+      "size": 3777
+    },
+    "code": {
+      "name": "code",
+      "path": "C:\\Test\\bot\\skills\\code",
+      "trigger": "Code",
+      "description": "Coding workflow with planning, implementation, verification, and testing for clean software development.",
+      "mtime": 1771860703524.696,
+      "size": 3205
+    },
+    "code-share": {
+      "name": "code-share",
+      "path": "C:\\Test\\bot\\skills\\code-share",
+      "trigger": "code-share",
+      "description": "Share code via GitHub Gist instead of inline chat blocks. Use when code output exceeds 10 lines, when the user asks for copy-friendly code sharing in Discord/chat, or when preserving formatting is important.",
+      "mtime": 1771860809653.7595,
+      "size": 2948
+    },
+    "code-stats": {
+      "name": "code-stats",
+      "path": "C:\\Test\\bot\\skills\\code-stats",
+      "trigger": "code-stats",
+      "description": "Visualizes repository complexity by counting files, lines of code, and grouping by extension. Use to assess project size or growth.",
+      "mtime": 1771860789125.0251,
+      "size": 511
+    },
+    "default-skill": {
+      "name": "default-skill",
+      "path": "C:\\Test\\bot\\skills\\default-skill",
+      "trigger": "default",
+      "description": "默认通用技能。处理各种通用问题，提供帮助和建议。",
+      "mtime": 1771932708435.4717,
+      "size": 898
+    },
+    "docker-compose": {
+      "name": "docker-compose",
+      "path": "C:\\Test\\bot\\skills\\docker-compose",
+      "trigger": "Docker Compose",
+      "description": "Define multi-container applications with proper dependency handling, networking, and volume management.",
+      "mtime": 1771860841041.9954,
+      "size": 2680
+    },
+    "docker-essentials": {
+      "name": "docker-essentials",
+      "path": "C:\\Test\\bot\\skills\\docker-essentials",
+      "trigger": "docker-essentials",
+      "description": "Essential Docker commands and workflows for container management, image operations, and debugging.",
+      "mtime": 1771860831272.668,
+      "size": 6281
+    },
+    "git-essentials": {
+      "name": "git-essentials",
+      "path": "C:\\Test\\bot\\skills\\git-essentials",
+      "trigger": "git-essentials",
+      "description": "Essential Git commands and workflows for version control, branching, and collaboration.",
+      "mtime": 1771860756439.7654,
+      "size": 7074
+    },
+    "git-workflows": {
+      "name": "git-workflows",
+      "path": "C:\\Test\\bot\\skills\\git-workflows",
+      "trigger": "git-workflows",
+      "description": "Advanced git operations beyond add/commit/push. Use when rebasing, bisecting bugs, using worktrees for parallel development, recovering with reflog, managing subtrees/submodules, resolving merge conflicts, cherry-picking across branches, or working with monorepos.",
+      "mtime": 1771860767243.1194,
+      "size": 13371
+    },
+    "glm-vision": {
+      "name": "glm-vision",
+      "path": "C:\\Test\\bot\\skills\\glm-vision",
+      "trigger": "glm_vision",
+      "description": "GLM 视觉理解技能。使用此技能当需要分析图片、截图、OCR 文字提取、理解技术图表或诊断错误截图时。使用智谱 AI GLM-4V 的视觉理解能力。",
+      "mtime": 1771803291119.8435,
+      "size": 5665
+    },
+    "network-solutions": {
+      "name": "network-solutions",
+      "path": "C:\\Test\\bot\\skills\\network-solutions",
+      "trigger": "network_solutions",
+      "description": "网络问题解决方案技能。使用此技能当遇到 GitHub 下载失败、npm 安装超时、API 调用被限制、git clone 失败等网络问题时。提供 CDN 镜像、代理配置、DNS 优化等多种解决方案。",
+      "mtime": 1771803696594.4602,
+      "size": 5939
+    },
+    "node-transfer": {
+      "name": "node-transfer",
+      "path": "C:\\Test\\bot\\skills\\node-transfer",
+      "trigger": "node-transfer",
+      "description": "高速、内存高效的 OpenClaw 节点间文件传输，使用原生 Node.js 流。",
+      "mtime": 1771946634616.3901,
+      "size": 13269
+    },
+    "nodejs": {
+      "name": "nodejs",
+      "path": "C:\\Test\\bot\\skills\\nodejs",
+      "trigger": "NodeJS",
+      "description": "Write reliable Node.js avoiding event loop blocking, async pitfalls, ESM gotchas, and memory leaks.",
+      "mtime": 1771889778862.8652,
+      "size": 1537
+    },
+    "parallel-agents": {
+      "name": "parallel-agents",
+      "path": "C:\\Test\\bot\\skills\\parallel-agents",
+      "trigger": "parallel_agents",
+      "description": "并行 Agent 调度技能。使用此技能当有多个独立任务需要同时处理、多个子问题需要并行解决、或需要同时调用多个 Agent 协作时。",
+      "mtime": 1771803664868.9844,
+      "size": 3982
+    },
+    "pm2": {
+      "name": "pm2",
+      "path": "C:\\Test\\bot\\skills\\pm2",
+      "trigger": "pm2",
+      "description": "Manage Node.js applications with PM2 process manager. Use for deploying, monitoring, and auto-restarting Node apps in production. Covers starting apps, viewing logs, setting up auto-start on boot, and managing multiple processes.",
+      "mtime": 1771889797056.7012,
+      "size": 2168
+    },
+    "run_browser_agent": {
+      "name": "run_browser_agent",
+      "path": "C:\\Test\\bot\\skills\\run_browser_agent",
+      "trigger": "run_browser_agent",
+      "description": "网页操作专家。使用此技能当用户需要访问网页、截图、提取信息或填充表单时。",
+      "mtime": 1771807332319.386,
+      "size": 1106
+    },
+    "run_code_agent": {
+      "name": "run_code_agent",
+      "path": "C:\\Test\\bot\\skills\\run_code_agent",
+      "trigger": "run_code_agent",
+      "description": "执行代码相关任务的专业助手。使用此技能当用户需要编写、分析、调试或优化代码时。",
+      "mtime": 1771807321816.2632,
+      "size": 1156
+    },
+    "run_data_analysis_agent": {
+      "name": "run_data_analysis_agent",
+      "path": "C:\\Test\\bot\\skills\\run_data_analysis_agent",
+      "trigger": "run_data_analysis_agent",
+      "description": "数据分析专业助手。使用此技能当用户需要分析文件、统计数据或生成报告时。",
+      "mtime": 1771833860256.1245,
+      "size": 1398
+    },
+    "run_refactor_agent": {
+      "name": "run_refactor_agent",
+      "path": "C:\\Test\\bot\\skills\\run_refactor_agent",
+      "trigger": "run_refactor_agent",
+      "description": "代码重构专家助手。使用此技能当用户需要分析代码结构、重构代码、优化文件组织时。",
+      "mtime": 1771834921610.5808,
+      "size": 2718
+    },
+    "run_shell_agent": {
+      "name": "run_shell_agent",
+      "path": "C:\\Test\\bot\\skills\\run_shell_agent",
+      "trigger": "run_shell_agent",
+      "description": "执行系统命令的专业助手。使用此技能当用户需要运行 shell 命令、操作文件系统或执行脚本时。",
+      "mtime": 1771833813283.5093,
+      "size": 1633
+    },
+    "run_vision_agent": {
+      "name": "run_vision_agent",
+      "path": "C:\\Test\\bot\\skills\\run_vision_agent",
+      "trigger": "run_vision_agent",
+      "description": "图片分析专家。使用此技能当用户需要分析图片、提取文字、识别截图内容、诊断错误或理解图表时。",
+      "mtime": 1771807342186.746,
+      "size": 1739
+    },
+    "run_websearch_agent": {
+      "name": "run_websearch_agent",
+      "path": "C:\\Test\\bot\\skills\\run_websearch_agent",
+      "trigger": "run_websearch_agent",
+      "description": "网络搜索专业助手。使用此技能当用户需要查找最新信息、搜索资料或收集数据时。",
+      "mtime": 1771833859065.917,
+      "size": 1047
+    },
+    "skill-creator": {
+      "name": "skill-creator",
+      "path": "C:\\Test\\bot\\skills\\skill-creator",
+      "trigger": "skill_creator",
+      "description": "创建新技能的指南。使用此技能当需要创建新技能、更新现有技能或扩展 Agent 能力时。技能让 Agent 从通用助手转变为具备专业领域知识的专家。",
+      "mtime": 1771803230755.0515,
+      "size": 4232
+    },
+    "skill-manager": {
+      "name": "skill-manager",
+      "path": "C:\\Test\\bot\\skills\\skill-manager",
+      "trigger": "skill-manager",
+      "description": "技能管理专家。使用此技能当用户需要安装、搜索、列出或卸载技能时。",
+      "mtime": 1771807477426.7434,
+      "size": 2013
+    },
+    "smart-code": {
+      "name": "smart-code",
+      "path": "C:\\Test\\bot\\skills\\smart-code",
+      "trigger": "smart_code",
+      "description": "智能代码技能。帮助用户编写、分析和优化代码，支持多种编程语言和框架。",
+      "mtime": 1771932703557.9785,
+      "size": 3494
+    },
+    "smart-search": {
+      "name": "smart-search",
+      "path": "C:\\Test\\bot\\skills\\smart-search",
+      "trigger": "smart_search",
+      "description": "智能搜索技能。使用 DuckDuckGo 或 Tavily 进行网络搜索，获取实时信息、查找资料、提取网页内容。",
+      "mtime": 1771946577858.6467,
+      "size": 2098
+    },
+    "tavily-search": {
+      "name": "tavily-search",
+      "path": "C:\\Test\\bot\\skills\\tavily-search",
+      "trigger": "tavily-search",
+      "description": "使用 Tavily AI 搜索 API 进行实时网络搜索，需要 API Key。",
+      "mtime": 1771946586694.5774,
+      "size": 456
+    },
+    "test-case-generator": {
+      "name": "test-case-generator",
+      "path": "C:\\Test\\bot\\skills\\test-case-generator",
+      "trigger": "test-case-generator",
+      "description": "根据代码自动生成单元测试用例，支持 Jest、Mocha、Pytest 等框架。",
+      "mtime": 1771946608577.1719,
+      "size": 797
+    },
+    "test-runner": {
+      "name": "test-runner",
+      "path": "C:\\Test\\bot\\skills\\test-runner",
+      "trigger": "test-runner",
+      "description": "编写和运行测试，支持多种语言和框架。",
+      "mtime": 1771946601932.1506,
+      "size": 5186
+    },
+    "web-search": {
+      "name": "web-search",
+      "path": "C:\\Test\\bot\\skills\\web-search",
+      "trigger": "web_search",
+      "description": "网页搜索技能。使用此技能当需要搜索网络信息、查找资料、获取最新文档或解决方案时。支持实时信息检索和网页内容提取。",
+      "mtime": 1771803260120.4495,
+      "size": 4313
+    }
+  }
+}

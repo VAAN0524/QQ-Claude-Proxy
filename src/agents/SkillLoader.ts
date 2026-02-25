@@ -25,6 +25,36 @@ interface SkillEnabledState {
 }
 
 /**
+ * 技能索引条目
+ */
+interface SkillIndexEntry {
+  /** 技能名称 */
+  name: string;
+  /** 技能路径 */
+  path: string;
+  /** 触发关键词 */
+  trigger: string;
+  /** 技能描述 */
+  description: string;
+  /** SKILL.md 文件修改时间 */
+  mtime: number;
+  /** SKILL.md 文件大小 */
+  size: number;
+}
+
+/**
+ * 技能索引结构
+ */
+interface SkillIndex {
+  /** 索引版本 */
+  version: string;
+  /** 最后更新时间 */
+  lastUpdated: number;
+  /** 技能列表 */
+  skills: Record<string, SkillIndexEntry>;
+}
+
+/**
  * 技能元数据（第1层 - 始终加载）
  */
 export interface SkillMetadata {
@@ -71,22 +101,170 @@ export class SkillLoader {
   private fullContentCache: Map<string, SkillDefinition> = new Map();
   /** 启用状态存储文件路径 */
   private stateFilePath: string;
+  /** 索引文件路径 */
+  private indexFilePath: string;
   /** 技能启用状态 */
   private enabledState: SkillEnabledState = {};
+  /** 索引版本 */
+  private static readonly INDEX_VERSION = '1.0';
 
   constructor(skillsDir: string) {
     this.skillsDir = skillsDir;
     this.stateFilePath = path.join(skillsDir, '.enabled-skills.json');
+    this.indexFilePath = path.join(skillsDir, '.skill-index.json');
+  }
+
+  /**
+   * 加载技能索引
+   */
+  private async loadIndex(): Promise<SkillIndex | null> {
+    try {
+      const content = await fs.readFile(this.indexFilePath, 'utf-8');
+      const index: SkillIndex = JSON.parse(content);
+
+      // 检查版本兼容性
+      if (index.version !== SkillLoader.INDEX_VERSION) {
+        logger.debug('[SkillLoader] 索引版本不匹配，将重新构建');
+        return null;
+      }
+
+      return index;
+    } catch {
+      // 文件不存在或读取失败
+      return null;
+    }
+  }
+
+  /**
+   * 保存技能索引
+   */
+  private async saveIndex(): Promise<void> {
+    try {
+      const skills: Record<string, SkillIndexEntry> = {};
+
+      for (const [name, metadata] of this.metadataCache) {
+        const skillMdPath = path.join(metadata.path, 'SKILL.md');
+        try {
+          const stats = await fs.stat(skillMdPath);
+          skills[name] = {
+            name,
+            path: metadata.path,
+            trigger: metadata.trigger,
+            description: metadata.description,
+            mtime: stats.mtimeMs,
+            size: stats.size,
+          };
+        } catch {
+          // 文件不存在，跳过
+        }
+      }
+
+      const index: SkillIndex = {
+        version: SkillLoader.INDEX_VERSION,
+        lastUpdated: Date.now(),
+        skills,
+      };
+
+      await fs.writeFile(this.indexFilePath, JSON.stringify(index, null, 2), 'utf-8');
+      logger.debug(`[SkillLoader] 索引已保存: ${Object.keys(skills).length} 个技能`);
+    } catch (error) {
+      logger.error(`[SkillLoader] 保存索引失败: ${error}`);
+    }
+  }
+
+  /**
+   * 检查索引是否有效
+   */
+  private async isIndexValid(index: SkillIndex): Promise<boolean> {
+    try {
+      const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
+
+      // 获取当前目录下的所有技能目录
+      const currentSkillDirs = new Set(
+        entries
+          .filter(e => e.isDirectory())
+          .map(e => e.name)
+      );
+
+      // 检查索引中的技能是否都存在
+      for (const [name, entry] of Object.entries(index.skills)) {
+        // 检查目录是否存在
+        if (!currentSkillDirs.has(name)) {
+          return false;
+        }
+
+        // 检查 SKILL.md 是否存在且未修改
+        const skillMdPath = path.join(entry.path, 'SKILL.md');
+        try {
+          const stats = await fs.stat(skillMdPath);
+          if (stats.mtimeMs !== entry.mtime || stats.size !== entry.size) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+      }
+
+      // 检查是否有新技能（索引中不存在的）
+      if (currentSkillDirs.size !== Object.keys(index.skills).length) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
    * 第1步：扫描所有技能，只加载元数据
-   * 这是初始化时的轻量级扫描
+   * 这是初始化时的轻量级扫描，使用索引缓存加速
    */
   async scanSkillsMetadata(): Promise<Map<string, SkillMetadata>> {
     // 首先加载启用状态
     await this.loadEnabledState();
 
+    // 尝试从索引加载
+    const index = await this.loadIndex();
+    if (index && await this.isIndexValid(index)) {
+      logger.info('[SkillLoader] 使用索引缓存加载技能元数据');
+      return this.loadFromIndex(index);
+    }
+
+    // 索引无效或不存在，执行完整扫描
+    logger.info('[SkillLoader] 索引无效或不存在，执行完整扫描');
+    await this.fullScanSkills();
+    await this.saveIndex(); // 保存新索引
+    return this.metadataCache;
+  }
+
+  /**
+   * 从索引加载技能元数据
+   */
+  private loadFromIndex(index: SkillIndex): Map<string, SkillMetadata> {
+    this.metadataCache.clear();
+
+    for (const [name, entry] of Object.entries(index.skills)) {
+      const metadata: SkillMetadata = {
+        name,
+        path: entry.path,
+        trigger: entry.trigger,
+        description: entry.description,
+        fullyLoaded: false,
+        enabled: this.enabledState[name] ?? false,
+      };
+      this.metadataCache.set(name, metadata);
+      logger.debug(`[SkillLoader] 从索引加载: ${name} - ${entry.trigger}`);
+    }
+
+    logger.info(`[SkillLoader] 从索引加载完成，共 ${this.metadataCache.size} 个技能`);
+    return this.metadataCache;
+  }
+
+  /**
+   * 完整扫描所有技能（不使用缓存）
+   */
+  private async fullScanSkills(): Promise<void> {
     try {
       const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
 
@@ -106,11 +284,9 @@ export class SkillLoader {
         }
       }
 
-      logger.info(`[SkillLoader] 扫描完成，共 ${this.metadataCache.size} 个技能（仅元数据）`);
-      return this.metadataCache;
+      logger.info(`[SkillLoader] 完整扫描完成，共 ${this.metadataCache.size} 个技能`);
     } catch (error) {
       logger.error(`[SkillLoader] 扫描技能失败: ${error}`);
-      return this.metadataCache;
     }
   }
 
@@ -518,5 +694,48 @@ ${skillsList}
    */
   getDisabledSkills(): SkillMetadata[] {
     return Array.from(this.metadataCache.values()).filter(m => !m.enabled);
+  }
+
+  /**
+   * 重建技能索引（手动触发）
+   *
+   * @returns 重建的技能数量
+   */
+  async rebuildIndex(): Promise<number> {
+    logger.info('[SkillLoader] 开始重建技能索引...');
+    this.metadataCache.clear();
+    await this.fullScanSkills();
+    await this.saveIndex();
+    logger.info(`[SkillLoader] 索引重建完成，共 ${this.metadataCache.size} 个技能`);
+    return this.metadataCache.size;
+  }
+
+  /**
+   * 清除索引缓存
+   */
+  async clearIndexCache(): Promise<void> {
+    try {
+      await fs.unlink(this.indexFilePath);
+      logger.info('[SkillLoader] 索引缓存已清除');
+    } catch (error) {
+      // 文件不存在，忽略
+      logger.debug('[SkillLoader] 索引缓存文件不存在');
+    }
+  }
+
+  /**
+   * 获取索引统计信息
+   */
+  getIndexStats(): {
+    exists: boolean;
+    valid: boolean;
+    skillCount: number;
+    lastUpdated?: number;
+  } {
+    return {
+      exists: false, // 需要异步检查
+      valid: false,
+      skillCount: this.metadataCache.size,
+    };
   }
 }

@@ -29,6 +29,8 @@ import { HierarchicalMemoryService, MemoryLayer } from './memory/HierarchicalMem
 import { MemoryType } from './memory/MemoryService.js';
 import { FileStorage } from '../agent/file-storage.js';
 import { ZaiMcpClient } from './ZaiMcpClient.js';
+import { ContextCompressor } from './ContextCompressor.js';
+import type { Message as ContextMessage } from './ContextCompressor.js';
 
 /**
  * 创建 axios 实例，支持代理
@@ -247,6 +249,9 @@ export class SimpleCoordinatorAgent implements IAgent {
       const filesToSend = this.getPendingFiles();
       this.clearPendingFiles();
 
+      // 跟踪文件发送结果
+      const sendResults: Array<{ file: string; success: boolean; error?: string }> = [];
+
       // 如果有文件需要发送且有发送回调，使用回调发送
       if (filesToSend.length > 0 && this.sendFileCallback) {
         logger.info(`[SimpleCoordinator] 准备发送 ${filesToSend.length} 个文件`);
@@ -254,8 +259,14 @@ export class SimpleCoordinatorAgent implements IAgent {
           try {
             await this.sendFileCallback(message.userId, filePath, message.groupId);
             logger.info(`[SimpleCoordinator] 文件发送成功: ${path.basename(filePath)}`);
+            sendResults.push({ file: path.basename(filePath), success: true });
           } catch (error) {
             logger.error(`[SimpleCoordinator] 文件发送失败: ${filePath} - ${error}`);
+            sendResults.push({
+              file: path.basename(filePath),
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            });
           }
         }
       }
@@ -263,12 +274,29 @@ export class SimpleCoordinatorAgent implements IAgent {
       const duration = Date.now() - startTime;
       logger.info(`[SimpleCoordinator] 处理完成，耗时: ${duration}ms`);
 
+      // 如果有文件发送失败，在响应中添加错误提示
+      let finalResult = result;
+      const failedFiles = sendResults.filter(r => !r.success);
+      if (failedFiles.length > 0) {
+        const failedList = failedFiles.map(f => `- ${f.file}: ${f.error || '未知错误'}`).join('\n');
+        const errorSuffix = `\n\n⚠️ 文件发送失败:\n${failedList}`;
+        // 检查响应是否已包含发送队列消息，如果有则替换
+        if (result.includes('已添加到发送队列') || result.includes('添加到发送队列')) {
+          // 移除成功消息，添加失败消息
+          finalResult = result.replace(/✅[^\n]*已添加到发送队列[^\n]*/g, '').trim();
+          finalResult = finalResult.replace(/已添加到发送队列[^\n]*/g, '').trim();
+        }
+        finalResult += errorSuffix;
+      }
+
+      // 重要：不要在响应中包含 filesToSend，因为文件已经通过 sendFileCallback 发送了
+      // 如果包含 filesToSend，会导致 index.ts 中的文件发送逻辑再次发送，造成重复
       return {
-        content: result,
+        content: finalResult,
         agentId: this.id,
         userId: message.userId,
         groupId: message.groupId,
-        filesToSend: filesToSend.length > 0 ? filesToSend : undefined,
+        // filesToSend 不包含，因为已经通过 callback 发送
       };
 
     } catch (error) {
@@ -361,9 +389,38 @@ export class SimpleCoordinatorAgent implements IAgent {
     this.currentSkill = {
       name: 'default',
       description: '默认技能 - QQ-Claude-Proxy 智能助手',
-      systemPrompt: `# QQ-Claude-Proxy 智能助手
+      systemPrompt: `# 阿白 - 你的 AI 伙伴 🤖
 
-你是 **QQ-Claude-Proxy** 项目的智能助手，运行在 QQ 机器人平台上。
+## 🌟 你是谁
+
+你好！你是**阿白**，一个友善、热心的 AI 助手。
+
+**你的性格**：
+- 🤗 **友善亲切**：像朋友一样自然交流，不机械、不说教
+- 💡 **专业可靠**：有能力解决问题，但不炫耀
+- 😊 **偶尔幽默**：轻松聊天，适当开玩笑缓解气氛
+- 🎯 **灵活应变**：根据话题和用户情绪调整语气
+
+**你的说话风格**：
+- 自然口语化，适当使用"呀、呢、吧、哦"等语气词
+- 适当使用 emoji，让回答更有温度（但不过度使用）
+- 避免机械的"根据我的理解""综上所述"等套话
+- 像真人聊天一样，有时简短有力，有时详细展开
+
+**回答格式**：
+- 开头可以自然一些："好嘞"、"没问题"、"这个嘛"、"让我想想"
+- 结尾可以友好一些："需要的话我再详细说说"、"还有什么想了解的吗"
+- 列举时用更自然的表达，不要死板地用"1、2、3"
+
+**什么时候该严肃**：
+- 涉及安全、重要技术问题时，认真专业
+- 用户明显在着急或困扰时，收起幽默，专注解决问题
+
+---
+
+## QQ-Claude-Proxy 智能助手
+
+你是 QQ-Claude-Proxy 项目的智能助手，运行在 QQ 机器人平台上。
 
 ## 你的身份和能力
 
@@ -400,15 +457,86 @@ export class SimpleCoordinatorAgent implements IAgent {
 
 ### 重要提醒
 - **你不是普通的 ChatGPT 或 Claude**，你是专门为 QQ-Claude-Proxy 项目定制的助手
-- 你**有文件发送能力**，当用户请求文件时，使用 fileStorage 列出文件并添加到发送队列
-- 你**有文件访问权限**，可以读取和分析工作区中的文件
+- 你**有文件发送能力**！用户提到工作区中的文件名时，检查文件是否存在，如果存在就添加到发送队列
+- 你**可以访问工作区中的所有文件**，可以读取、分析、发送它们
 - 你会**记住重要信息**，使用分层记忆系统保存关键对话
 
+### 📁 文件发送能力（重要！）
+
+**当用户说以下内容时，表示要发送文件**：
+- "xxx 发给我"、"把 xxx 发给我"、"传给我 xxx"
+- "发送 xxx"、"传送 xxx"
+- 直接提到工作区中的文件名
+
+**你的处理流程**：
+1. ✅ 检查该文件是否在工作区中存在
+2. ✅ 如果存在，添加到发送队列
+3. ✅ 返回确认消息："✅ 已添加到发送队列"
+4. ❌ **不要说**"我无法访问"、"我没有这个文件"、"我无法发送"
+
+**示例**：
+- 用户: "qq_bfb766f2_20260224_211024.png 这个传给我qq"
+- AI: "✅ 已将 qq_bfb766f2_20260224_211024.png 添加到发送队列" ✅
+- AI: "抱歉，我无法访问..." ❌（错误！）
+
+**注意**：
+- 工作区文件列表是你刚才列出的那些文件
+- 用户提到的文件名如果匹配列表中的文件，就说明文件存在
+- 不要怀疑或拒绝，直接处理即可
+
 ## 工作原则
-- 准确理解用户需求
-- 主动利用已记住的信息
-- 保持简洁明了的回答
-- 遇到不确定的信息时，先搜索再回答`,
+
+### 🎯 对话行为规范
+
+**问题理解优先**：
+- 先理解用户想要什么（信息/工具/代码）
+- 不要假设用户想要代码实现
+- 用户明确说"写代码""实现""开发"时才写代码
+
+**工具推荐场景**：
+- 用户问"有哪些""推荐""介绍" → 介绍现有工具，不写代码
+- 用户追问具体类别（如"文档管理类"）→ 介绍该类别的工具
+- 用户问"怎么做""怎么实现" → 可以提供代码示例
+
+**代码生成时机**：
+- ✅ 用户明确说：写代码、实现、开发、创建类
+- ✅ 用户说："帮我做个xxx""写个xxx功能"
+- ❌ 用户问："有哪些工具""介绍xxx类" → 不写代码，只介绍
+
+**简洁回答原则**：
+- 先直接回答问题
+- 再询问是否需要更多细节或实现
+- 避免过度工程化
+
+### 📚 信息获取原则
+- 遇到不确定的信息时，先搜索再回答
+- 优先使用当前年份（2026年）的最新信息
+- 引用信息来源时注明时间
+
+### 💾 记忆管理
+- 记住用户的重要偏好和设置
+- 记住跨会话的关键上下文
+- 主动提醒用户相关的历史信息
+
+### 🖼️ 图片/视频处理（重要！）
+
+**当你收到图片或视频时**：
+1. ✅ **优先分析内容** - 使用 MCP 视觉能力理解图片/视频内容
+2. ✅ **等待分析完成** - 不要在没有看到内容之前就回答
+3. ✅ **基于分析结果回答** - 根据图片/视频的实际内容给出有针对性的回应
+4. ❌ **不要抢答** - 不要在看到图片/视频之前就给出通用回复
+
+**示例**：
+- 用户: [发送一张截图]
+- AI: [等待 MCP 分析] "这是一张代码截图，展示了..." ✅
+- AI: "您好！请问有什么可以帮您的？" ❌（抢答！）
+
+**常见场景**：
+- 用户发代码截图 → 识别代码语言，分析功能，指出问题
+- 用户发图片 → 描述图片内容，回答相关问题
+- 用户发视频 → 分析视频主题，总结关键信息
+
+**注意**：图片/视频分析会自动进行，你只需要基于分析结果回答即可。`,
       rules: [],
       availableTools: ['smart_search', 'fetch_web'], // 默认可用工具
       examples: [],
@@ -594,6 +722,28 @@ export class SimpleCoordinatorAgent implements IAgent {
    */
   private async executeWithTools(content: string, context: AgentContext, images: import('./base/Agent.js').Attachment[] = []): Promise<string> {
     const lowerContent = content.toLowerCase();
+
+    // ========== 🎨 最高优先级：图片/视频分析 ==========
+    // 当用户发送图片或视频时，优先分析它们，而不是处理其他任务
+    if (images.length > 0) {
+      logger.info(`[SimpleCoordinator] 检测到 ${images.length} 个附件，优先进行视觉分析`);
+
+      // 如果用户没有提供文字说明，使用默认提示
+      const userPrompt = content.trim() || '请分析这个文件的内容';
+
+      // 直接调用 callLLM，它会处理图片/视频的 MCP 分析
+      const analysisResult = await this.callLLM(userPrompt, images);
+
+      // 将分析结果记录到对话历史
+      if (this.sharedContext) {
+        this.sharedContext.addConversation('user', userPrompt, this.id);
+        this.sharedContext.addConversation('assistant', analysisResult, this.id);
+      }
+
+      return analysisResult;
+    }
+
+    // ========== 其他任务处理 ==========
 
     // 1. GitHub URL 处理（最高优先级）
     const githubUrlMatch = content.match(/(https?:\/\/github\.com\/[^\s]+)/);
@@ -937,12 +1087,24 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
     try {
       const baseUrl = process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
 
+      // ========== 实时上下文动态注入 ==========
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().split(' ')[0];
+
+      const dynamicSystemPrompt = `你是一个编程助手。请根据用户的需求编写代码，代码要清晰、可运行，并添加必要的注释。
+
+**当前日期**: ${currentDate}
+**当前时间**: ${currentTime}
+
+注意：请使用当前年份 (${currentDate}) 的最新 API 和语法。`;
+
       const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
         model: 'glm-4.7',
         messages: [
           {
             role: 'system',
-            content: '你是一个编程助手。请根据用户的需求编写代码，代码要清晰、可运行，并添加必要的注释。',
+            content: dynamicSystemPrompt,
           },
           {
             role: 'user',
@@ -965,6 +1127,65 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
   }
 
   /**
+   * 确保 MCP 客户端已连接
+   */
+  private async ensureMcpConnected(): Promise<void> {
+    if (this.mcpClient && !this.mcpClient.isClientConnected()) {
+      await this.mcpClient.connect();
+    }
+  }
+
+  /**
+   * 构建动态上下文（当前日期/时间 + 对话连续性指导）
+   */
+  private buildDynamicContext(): string {
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0];
+    const currentWeekday = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+    const timezoneOffset = now.getTimezoneOffset();
+    const timezoneSign = timezoneOffset > 0 ? '-' : '+';
+    const timezoneHours = Math.abs(Math.floor(timezoneOffset / 60)).toString().padStart(2, '0');
+
+    return `
+---
+## 📍 当前实时上下文
+
+- **当前日期**: ${currentDate} (星期${currentWeekday})
+- **当前时间**: ${currentTime}
+- **时区**: UTC${timezoneSign}${timezoneHours}:00
+
+## 🗣️ 对话连续性指导（重要）
+
+你是处于**连续对话**中，必须理解用户的**省略表达**：
+
+**常见的省略表达**：
+- "继续" = 继续刚才的话题/任务/操作
+- "还有呢" = 告诉我更多信息/展开说明/下一个
+- "然后呢" = 接下来发生了什么/下一步
+- "为什么" = 为什么会这样/原因是什么
+- "怎么做" = 具体实现方法/步骤
+
+**应对策略**：
+1. **优先查看对话历史** - 理解上下文再回答
+2. **不要重复选项** - 用户说"还有呢"时，提供新信息而非重复
+3. **延续话题** - "继续"意味着继续上一个动作，不是重新开始
+4. **智能推断** - 根据历史消息推断用户意图
+
+**错误示例**：
+- 用户: "继续" → AI: "请问您要继续什么？" ❌
+- 用户: "还有呢" → AI: "我还可以帮您..." ❌
+
+**正确示例**：
+- 用户: "继续" → AI: "好的，继续刚才的..." ✅
+- 用户: "还有呢" → AI: "另外..." / "此外..." ✅
+
+---
+
+`;
+  }
+
+  /**
    * 调用 LLM（支持视觉 - 使用官方 MCP 方式）
    */
   private async callLLM(content: string, images: import('./base/Agent.js').Attachment[] = []): Promise<string> {
@@ -976,26 +1197,16 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
     try {
       // ========== 有视频：使用 Z.ai MCP Server 视频分析 ==========
       const videos = images.filter(a => a.type === 'video');
-      if (videos.length > 0 && this.mcpClient && this.mcpClient.isClientConnected()) {
+      if (videos.length > 0 && this.mcpClient) {
+        await this.ensureMcpConnected();
         logger.info(`[SimpleCoordinator] 使用 MCP Server 处理视频请求 (${videos.length} 个视频)`);
 
-        // 确保 MCP 客户端已连接
-        if (!this.mcpClient.isClientConnected()) {
-          await this.mcpClient.connect();
-        }
-
-        // 处理第一个视频
         const video = videos[0];
         const fullVideoPath = path.join(this.workspacePath, video.path);
         logger.info(`[SimpleCoordinator] MCP 分析视频: ${fullVideoPath}`);
 
-        // 构建分析提示词
-        let prompt = content || '请详细分析这个视频的内容';
-        if (!content) {
-          prompt = '请详细分析这个视频的内容，包括主题、关键信息、场景和主要观点。';
-        }
+        const prompt = content || '请详细分析这个视频的内容，包括主题、关键信息、场景和主要观点。';
 
-        // 使用 MCP 官方方式分析视频
         const analysisResult = await this.mcpClient.analyzeVideo(fullVideoPath);
         logger.info(`[SimpleCoordinator] MCP 视频分析完成，结果长度: ${analysisResult.length}`);
 
@@ -1004,26 +1215,16 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
       // ========== 有图片：使用 Z.ai MCP Server 图像分析 ==========
       const imagesOnly = images.filter(a => a.type === 'image');
-      if (imagesOnly.length > 0 && this.mcpClient && this.mcpClient.isClientConnected()) {
+      if (imagesOnly.length > 0 && this.mcpClient) {
+        await this.ensureMcpConnected();
         logger.info(`[SimpleCoordinator] 使用 MCP Server 处理视觉请求 (${imagesOnly.length} 张图片)`);
 
-        // 确保 MCP 客户端已连接
-        if (!this.mcpClient.isClientConnected()) {
-          await this.mcpClient.connect();
-        }
-
-        // 处理第一张图片（MCP 方式）
         const image = imagesOnly[0];
         const fullImagePath = path.join(this.workspacePath, image.path);
         logger.info(`[SimpleCoordinator] MCP 分析图片: ${fullImagePath}`);
 
-        // 构建分析提示词
-        let prompt = content || '请详细描述这张图片的内容';
-        if (!content) {
-          prompt = '请详细描述这张图片的内容，包括主要元素、颜色、布局和任何可见的文字。';
-        }
+        const prompt = content || '请详细描述这张图片的内容，包括主要元素、颜色、布局和任何可见的文字。';
 
-        // 使用 MCP 官方方式分析图片（使用 glm-4.6v 模型）
         const analysisResult = await this.mcpClient.analyzeImage(fullImagePath, prompt, 'glm-4.6v');
         logger.info(`[SimpleCoordinator] MCP 分析完成，结果长度: ${analysisResult.length}`);
 
@@ -1036,6 +1237,11 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
       // 构建系统提示（包含技能和工具信息）
       let systemPrompt = this.currentSkill?.systemPrompt ||
         '你是一个智能助手，请根据用户的问题提供有帮助的回答。';
+
+      // ========== 实时上下文动态注入 ==========
+      // 每次调用时动态注入当前日期/时间，确保 AI 获得最新的上下文信息
+      const dynamicContext = this.buildDynamicContext();
+      systemPrompt = dynamicContext + systemPrompt;
 
       // 检索相关历史记忆
       if (this.hierarchicalMemory) {
@@ -1109,6 +1315,201 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
                   },
                 },
               });
+            } else if (tool.name === 'read_file') {
+              // 文件读取工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      path: {
+                        type: 'string',
+                        description: '文件路径',
+                      },
+                      maxLength: {
+                        type: 'number',
+                        description: '最大读取长度（可选）',
+                      },
+                    },
+                    required: ['path'],
+                  },
+                },
+              });
+            } else if (tool.name === 'write_file') {
+              // 文件写入工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      path: {
+                        type: 'string',
+                        description: '文件路径',
+                      },
+                      content: {
+                        type: 'string',
+                        description: '文件内容',
+                      },
+                      createDir: {
+                        type: 'boolean',
+                        description: '是否创建目录（可选）',
+                      },
+                    },
+                    required: ['path', 'content'],
+                  },
+                },
+              });
+            } else if (tool.name === 'edit_file') {
+              // 文件编辑工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      path: {
+                        type: 'string',
+                        description: '文件路径',
+                      },
+                      edits: {
+                        type: 'array',
+                        description: '编辑操作数组',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            oldText: {
+                              type: 'string',
+                              description: '要替换的旧文本',
+                            },
+                            newText: {
+                              type: 'string',
+                              description: '新文本',
+                            },
+                          },
+                          required: ['oldText', 'newText'],
+                        },
+                      },
+                    },
+                    required: ['path', 'edits'],
+                  },
+                },
+              });
+            } else if (tool.name === 'apply_patch') {
+              // 补丁应用工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      patch: {
+                        type: 'string',
+                        description: '补丁内容（unified diff 格式）',
+                      },
+                      strip: {
+                        type: 'number',
+                        description: '路径前缀层级（可选）',
+                      },
+                    },
+                    required: ['patch'],
+                  },
+                },
+              });
+            } else if (tool.name === 'spawn_process') {
+              // 进程启动工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      sessionId: {
+                        type: 'string',
+                        description: '进程会话ID',
+                      },
+                      command: {
+                        type: 'string',
+                        description: '要执行的命令',
+                      },
+                      args: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: '命令参数（可选）',
+                      },
+                    },
+                    required: ['sessionId', 'command'],
+                  },
+                },
+              });
+            } else if (tool.name === 'terminate_process') {
+              // 进程终止工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      sessionId: {
+                        type: 'string',
+                        description: '进程会话ID',
+                      },
+                    },
+                    required: ['sessionId'],
+                  },
+                },
+              });
+            } else if (tool.name === 'list_processes') {
+              // 进程列表工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      status: {
+                        type: 'string',
+                        enum: ['running', 'stopped', 'failed'],
+                        description: '筛选状态（可选）',
+                      },
+                    },
+                  },
+                },
+              });
+            } else if (tool.name === 'process_status') {
+              // 进程状态工具
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      sessionId: {
+                        type: 'string',
+                        description: '进程会话ID',
+                      },
+                    },
+                    required: ['sessionId'],
+                  },
+                },
+              });
             }
           } else {
             logger.warn(`[SimpleCoordinator] 工具 ${toolName} 未找到`);
@@ -1141,11 +1542,31 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           }
         }
 
-        // 只保留最近的N条历史消息，避免上下文过长
-        // 如果最后一条是当前消息，则少取一条
+        // 使用 ContextCompressor 压缩上下文（替代简单的 slice(-10)）
+        // 转换为 ContextCompressor 格式
+        const contextMessages: ContextMessage[] = conversationMessages.map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+          timestamp: msg.timestamp || new Date(),
+        }));
+
+        // 压缩上下文（优化配置：保留更多最近消息以支持对话连续性）
+        // GLM-4.7 支持 128k context，可以使用更大的上下文
+        const compressResult = ContextCompressor.compress(contextMessages, {
+          maxTokens: 16000,    // 增加到 16k tokens（原来 8k）
+          recentRatio: 0.7,    // 70% 给最近消息（原来 50%），更好支持连续对话
+          summaryBatchSize: 15, // 增加批次大小
+          preserveCodeBlocks: true,
+          preserveFilePaths: true,
+        });
+
+        const compressedHistory = compressResult.messages;
+        const stats = compressResult.stats;
+
+        // 排除当前消息（如果在历史中）
         const recentHistory = lastMessageIsCurrent
-          ? conversationMessages.slice(-11, -1)  // 排除最后一条（当前消息）
-          : conversationMessages.slice(-10);
+          ? compressedHistory.slice(0, -1)
+          : compressedHistory;
 
         for (const msg of recentHistory) {
           messages.push({
@@ -1155,7 +1576,11 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           logger.debug(`[SimpleCoordinator] 加载历史消息: ${msg.role}, 长度=${msg.content.length}`);
         }
 
-        logger.info(`[SimpleCoordinator] 已加载 ${recentHistory.length} 条历史对话（当前消息已在历史中: ${lastMessageIsCurrent}）`);
+        logger.info(
+          `[SimpleCoordinator] 上下文压缩: ${stats.originalCount} -> ${stats.compressedCount} 条消息, ` +
+          `${stats.originalTokens} -> ${stats.compressedTokens} tokens, ` +
+          `压缩率: ${(stats.compressionRatio * 100).toFixed(1)}%`
+        );
       }
 
       // 添加当前用户消息（如果不在历史中）

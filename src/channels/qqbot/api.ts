@@ -129,7 +129,8 @@ export class QQBotAPI {
   private async request<T>(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
+    timeoutMs: number = 30000
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers = await this.buildHeaders();
@@ -139,22 +140,36 @@ export class QQBotAPI {
       logger.debug(`[API] Body: ${JSON.stringify(body).substring(0, 200)}`);
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    // 使用 AbortController 实现超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const data = await this.safeParseJson(response);
-    logger.info(`[API] Response status: ${response.status}, ok: ${response.ok}`);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const error = data as QQAPIError;
-      logger.error(`[API] Error: ${JSON.stringify(error)}`);
-      throw new Error(`API 请求失败 [${method} ${path}]: ${error.message || 'Unknown error'} (${error.code || 'N/A'})`);
+      const data = await this.safeParseJson(response);
+      logger.info(`[API] Response status: ${response.status}, ok: ${response.ok}`);
+
+      if (!response.ok) {
+        const error = data as QQAPIError;
+        logger.error(`[API] Error: ${JSON.stringify(error)}`);
+        throw new Error(`API 请求失败 [${method} ${path}]: ${error.message || 'Unknown error'} (${error.code || 'N/A'})`);
+      }
+
+      return data as T;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error(`API 请求超时 (${timeoutMs}ms) [${method} ${path}]`);
+      }
+      throw error;
     }
-
-    return data as T;
   }
 
   // ==================== 消息发送 API ====================
@@ -387,31 +402,46 @@ export class QQBotAPI {
       file_data: base64Data,
     };
 
-    // 使用现有的 request 方法发送 JSON 请求
-    const token = await this.getAccessToken();
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `QQBot ${token}`,
-        'Content-Type': 'application/json',
-        'X-Union-Appid': this.config.appId,
-      },
-      body: JSON.stringify(body),
-    });
+    // 使用 AbortController 实现超时 (文件上传需要更长时间，默认 60 秒)
+    const controller = new AbortController();
+    const timeoutMs = 60000; // 60 秒超时
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const data = await this.safeParseJson(response);
-    logger.info(`[API] Upload Response status: ${response.status}`);
+    try {
+      // 使用现有的 request 方法发送 JSON 请求
+      const token = await this.getAccessToken();
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `QQBot ${token}`,
+          'Content-Type': 'application/json',
+          'X-Union-Appid': this.config.appId,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const error = data as QQAPIError;
-      logger.error(`[API] Upload Error - Status: ${response.status}`);
-      logger.error(`[API] Error response: ${JSON.stringify(error, null, 2)}`);
-      const errorCode = error.code || error.err_code || 'N/A';
-      const errorMessage = error.message || error.msg || 'Unknown error';
-      throw new Error(`文件上传失败 [${errorCode}]: ${errorMessage}`);
+      const data = await this.safeParseJson(response);
+      logger.info(`[API] Upload Response status: ${response.status}`);
+
+      if (!response.ok) {
+        const error = data as QQAPIError;
+        logger.error(`[API] Upload Error - Status: ${response.status}`);
+        logger.error(`[API] Error response: ${JSON.stringify(error, null, 2)}`);
+        const errorCode = error.code || error.err_code || 'N/A';
+        const errorMessage = error.message || error.msg || 'Unknown error';
+        throw new Error(`文件上传失败 [${errorCode}]: ${errorMessage}`);
+      }
+
+      return data as UploadFileResponse;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error(`文件上传超时 (${timeoutMs}ms)`);
+      }
+      throw error;
     }
-
-    return data as UploadFileResponse;
   }
 
   /**
