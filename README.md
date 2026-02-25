@@ -2,10 +2,10 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)
-![Code](https://img.shields.io/badge/code-29.5k%20lines-orange.svg)
+![Code](https://img.shields.io/badge/code-31.8k%20lines-orange.svg)
 
 ---
 
@@ -54,22 +54,53 @@
 | **直接工具调用** | 不经过 ReAct，直接执行 |
 | **专业 Agents** | 按需调用 Browser/Shell/Search 等专业 Agents |
 
+### 🤖 Agent 人格设定系统
+
+每个 Agent 都有独特的人格设定，包含：
+- **角色定位** - Agent 的身份和职责
+- **核心职责** - 具体负责什么
+- **性格特点** - 行为风格（简洁/详细/友好/专业）
+- **工作原则** - 决策准则
+- **协作方式** - 与其他 Agent 配合
+
+**阿白** - Simple 模式的默认人格：
+- 🤗 友善亲切，像朋友一样自然交流
+- 💡 专业可靠，有能力解决问题
+- 😊 偶尔幽默，轻松聊天
+- 🎯 灵活应变，根据话题调整语气
+
+### 🧠 分层记忆系统 (OpenViking 风格)
+
+| 层级 | 容量 | 用途 | 访问范围 |
+|------|------|------|----------|
+| **L0** | ~100 tokens | 快速检索索引、关键词 | 仅当前 Agent |
+| **L1** | ~2000 tokens | 内容导航、关键点 | Agent 间共享 |
+| **L2** | 无限 | 完整数据、原始引用 | 全局共享 |
+
+### 📁 完整文件传输
+
+- 支持图片、视频、文档等所有文件类型
+- 自动识别文件类型并选择发送方式
+- 完善的错误处理和重试机制
+
 ---
 
 ## 📊 项目统计
 
 | 分类 | 文件数 | 代码行数 |
 |------|-------|---------|
-| **后端** (TypeScript) | 83 | **~25,500** |
-| **前端** (HTML/CSS/JS) | 15 | ~4,000 |
-| **总计** | **98** | **~29,500** |
+| **后端** (TypeScript) | 93 | **~30,424** |
+| **前端** (HTML/CSS/JS) | 5 | ~1,419 |
+| **总计** | **98** | **~31,843** |
 
 **核心模块**:
-- LLM Provider 统一接口 (OpenAI/Anthropic/GLM)
 - SimpleCoordinatorAgent (极简协调 Agent)
-- Z.ai MCP 集成 (官方视觉理解服务)
-- 分层记忆系统 (OpenViking 风格 L0/L1/L2)
-- 技能管理系统 (30+ 内置技能)
+- Agent 人格设定系统
+- ContextCompressor (上下文压缩)
+- LazyAgentProxy (延迟加载)
+- SharedContext (会话管理)
+- ZaiMcpClient (MCP 视觉理解)
+- 技能管理系统 (34+ 内置技能)
 - 定时任务调度器
 - Web Dashboard
 
@@ -102,14 +133,21 @@ cp .env.example .env
 # 编辑 .env 文件，填入 QQ_BOT_APP_ID 和 QQ_BOT_SECRET
 ```
 
-### 4. 启动服务
+### 4. 配置 LLM API (Simple 模式需要)
+
+```bash
+# 编辑 .env 文件，添加以下配置
+GLM_API_KEY=your_glm_api_key_here
+```
+
+### 5. 启动服务
 ```bash
 npm run dev    # 开发模式 (热重载)
 npm start      # 生产模式
 quick-start.bat  # Windows 快捷启动
 ```
 
-### 5. 访问 Dashboard
+### 6. 访问 Dashboard
 打开浏览器访问 **http://localhost:8080**
 
 ---
@@ -127,7 +165,8 @@ quick-start.bat  # Windows 快捷启动
 ### QQ 常用命令
 ```
 列出文件              # 查看工作区文件
-把 xxx.md 发给我      # 发送文件到 QQ
+把 xxx.png 发给我     # 发送文件到 QQ
+搜索 xxx              # 网络搜索
 清空历史              # 重置对话
 新任务                # 开始新任务
 列出任务              # 查看定时任务
@@ -198,24 +237,73 @@ QQ-Claude-Proxy/
 │   ├── agents/                 # 🤖 多 Agent 系统
 │   │   ├── base/              # Agent 基础接口 (IAgent, PersonaAgent)
 │   │   ├── memory/            # 🧠 分层记忆 (OpenViking L0/L1/L2)
-│   │   ├── learning/          # 📚 自主学习模块
-│   │   ├── tools/             # 🔧 Agent 工具
+│   │   ├── tools-layer/       # 🔧 工具层 (搜索/Shell/文件/进程)
+│   │   ├── SimpleCoordinatorAgent.ts  # 极简协调 Agent
+│   │   ├── ContextCompressor.ts       # 上下文压缩
+│   │   ├── LazyAgentProxy.ts          # 延迟加载代理
+│   │   ├── AgentLoader.ts             # Agent 加载器
+│   │   ├── ResourceMonitor.ts         # 资源监控
 │   │   └── *.ts               # 各个 Agent 实现
 │   ├── agent/                 # Claude Code CLI 适配器
 │   ├── gateway/               # 🔶 WebSocket 消息网关
-│   ├── channels/              # 🔵 QQ Bot Channel
-│   ├── llm/                   # 🔷 LLM Provider 统一接口
+│   ├── channels/qqbot/        # 🔵 QQ Bot Channel
+│   ├── llm/                   # 🔷 LLM Provider (OpenAI/Anthropic/GLM)
 │   ├── scheduler/             # 🟡 定时任务调度器
 │   └── utils/                 # 🛠️ 工具函数
 ├── public/dashboard/          # 🌐 Web Dashboard
-├── skills/                    # 📚 技能目录 (30+ 技能)
+├── skills/                    # 📚 技能目录 (34+ 技能)
 ├── workspace/                 # 📁 Claude Code 工作目录
 └── uploads/                   # 📎 上传文件存储
 ```
 
 ---
 
-## 🔥 最新更新 (v1.5.0)
+## 🔥 最新更新 (v1.6.0)
+
+### ✨ 功能增强
+
+- **🤖 Agent 人格设定系统**
+  - 阿白人格 - 友善亲切、专业可靠的 AI 伙伴
+  - 实时上下文注入 - 当前日期/时间/时区自动感知
+  - 对话连续性指导 - 支持省略表达（"继续"、"还有呢"）
+  - 动态响应风格调整
+
+- **🧠 上下文管理优化**
+  - ContextCompressor - 智能上下文压缩 (16k tokens)
+  - SharedContext 大小限制和自动清理
+  - 对话历史权重优化 (70% 最近消息)
+
+- **⚡ 性能优化**
+  - LazyAgentProxy - Agent 延迟加载
+  - AgentLoader - 统一 Agent 加载管理
+  - SkillLoader 索引缓存
+  - ResourceMonitor - 资源使用监控
+
+- **🔧 工具层扩展**
+  - 文件工具 - 完整的文件操作支持
+  - 进程工具 - 系统进程管理
+
+- **🧠 记忆系统增强**
+  - DocumentChunker - 文档分块处理
+  - EmbeddingCache - 向量嵌入缓存
+  - HybridSearchEngine - 混合搜索引擎
+  - MemoryWatcher - 记忆监控
+
+### 🐛 Bug 修复
+
+- **📁 文件发送修复**
+  - 修复文件重复发送问题
+  - 改进文件发送错误处理
+  - 添加超时控制 (30s 普通请求, 60s 文件上传)
+
+- **🔌 稳定性改进**
+  - ZaiMcpClient 自动重连机制
+  - 搜索工具描述更新 (包含当前年份提示)
+  - API 请求超时处理
+
+---
+
+## 🔥 历史更新 (v1.5.0)
 
 ### ✨ 功能增强
 
@@ -244,33 +332,6 @@ QQ-Claude-Proxy/
 
 ---
 
-## 🔥 历史更新 (v1.4.0)
-
-### ✨ 架构重构
-
-- **🎯 Simple 模式** - 全新极简协调 Agent
-  - 单一协调者设计，减少复杂度
-  - SKILL.md 驱动，动态切换身份
-  - 直接工具调用，提升响应速度
-
-- **🧠 OpenViking 风格记忆系统** - 分层记忆优化
-  - L0: ~100 tokens 快速索引
-  - L1: ~2000 tokens 内容导航
-  - L2: 无限完整数据存储
-
-- **📦 代码精简** - 删除 ~5,000 行冗余代码
-  - 移除复杂的 GLMCoordinatorAgent
-  - 简化 Agent 调度逻辑
-  - 优化项目结构
-
-### 🐛 Bug 修复
-
-- 修复网络重试导致的内存溢出问题
-- 修复 Agent 接口类型定义
-- 修复会话持久化边界情况
-
----
-
 ## 🛡️ 安全注意事项
 
 1. 🔐 **保护 AppSecret** - 不要提交到 Git，使用 `.env` 文件
@@ -290,6 +351,9 @@ QQ-Claude-Proxy/
 - **CLI 模式**: 直接调用本地 Claude Code CLI，拥有完整的代码分析能力
 - **Simple 模式**: 极简协调 Agent，快速响应日常任务，按需调用专业 Agents
 
+### Q: Simple 模式需要配置 API Key 吗？
+**A:** 是的，Simple 模式需要配置 GLM API Key（智谱 AI）。可以在 `.env` 文件中设置 `GLM_API_KEY`。
+
 ### Q: 支持群聊吗？
 **A:** 支持！机器人可以在私聊和群聊中使用。
 
@@ -305,6 +369,7 @@ QQ-Claude-Proxy/
 
 - [Claude Code CLI 官方文档](https://docs.anthropic.com/en/docs/claude-code)
 - [QQ 开放平台](https://q.qq.com/)
+- [智谱 AI 开放平台](https://open.bigmodel.cn/)
 - [GitHub 仓库](https://github.com/VAAN0524/QQ-Claude-Proxy)
 - [问题反馈](https://github.com/VAAN0524/QQ-Claude-Proxy/issues)
 
