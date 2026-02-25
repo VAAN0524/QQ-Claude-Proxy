@@ -535,14 +535,16 @@ async function main(): Promise<void> {
   });
 
   // ========== Agent 系统 ==========
-  // 初始化共享上下文
+  // 初始化共享上下文（从配置读取参数）
   logger.info('初始化共享上下文...');
   const sharedContext = new SharedContext({
-    maxMessages: 100,
-    maxAge: 60 * 60 * 1000, // 1 小时
+    maxMessages: config.context?.maxHistoryMessages || 100,
+    maxAge: config.context?.maxContextSize
+      ? Math.floor((config.context.maxContextSize / 160) * 60 * 1000) // 粗略转换 tokens 到毫秒
+      : 60 * 60 * 1000, // 默认 1 小时
   });
 
-  // 初始化分层记忆服务
+  // 初始化分层记忆服务（从配置读取参数）
   logger.info('初始化分层记忆服务...');
   const hierarchicalMemoryService = new HierarchicalMemoryService({
     storagePath: path.join(process.cwd(), 'data', 'hierarchical-memory'),
@@ -559,8 +561,10 @@ async function main(): Promise<void> {
       participatingAgents: ['simple-coordinator'],
       syncInterval: 5 * 60 * 1000, // 5 分钟同步
     },
-    autoCleanup: true,
-    retentionTime: 90 * 24 * 60 * 60 * 1000, // 90 天
+    autoCleanup: config.memory?.enableAutoArchive ?? true,
+    retentionTime: config.memory?.retentionDays
+      ? config.memory.retentionDays * 24 * 60 * 60 * 1000
+      : 90 * 24 * 60 * 60 * 1000, // 默认 90 天
   });
   await hierarchicalMemoryService.initialize();
 

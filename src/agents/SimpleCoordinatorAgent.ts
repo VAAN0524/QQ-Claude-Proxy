@@ -18,6 +18,8 @@ import type {
   AgentResponse,
 } from './base/Agent.js';
 import { AgentCapability } from './base/Agent.js';
+import { loadConfig } from '../config/index.js';
+import type { PersonaConfig } from '../config/schema.js';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import axios, { AxiosInstance } from 'axios';
@@ -125,6 +127,8 @@ export class SimpleCoordinatorAgent implements IAgent {
   private sendMessageCallback: ((userId: string, content: string, groupId?: string) => Promise<void>) | null = null;
   /** Z.ai MCP 客户端（官方视觉理解服务） */
   private mcpClient: ZaiMcpClient | null = null;
+  /** 全局配置（支持热重载） */
+  private appConfig: ReturnType<typeof loadConfig>;
 
   constructor(config: SimpleCoordinatorConfig) {
     this.skillsPath = config.skillsPath;
@@ -136,6 +140,8 @@ export class SimpleCoordinatorAgent implements IAgent {
     this.toolManager = getToolManager();
     this.workspacePath = path.join(process.cwd(), 'workspace');
     this.fileStorage = new FileStorage(this.workspacePath);
+    // 加载应用配置（支持热重载）
+    this.appConfig = loadConfig();
 
     // 初始化 Z.ai MCP 客户端（使用 GLM_API_KEY）
     const apiKey = process.env.GLM_API_KEY || process.env.Z_AI_API_KEY;
@@ -1186,6 +1192,135 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
   }
 
   /**
+   * 构建基于 Persona 配置的系统提示词
+   */
+  private buildPersonaSystemPrompt(basePrompt: string): string {
+    // 重新加载配置以获取最新更改
+    this.appConfig = loadConfig();
+    const persona = this.appConfig.persona;
+
+    if (!persona?.enabled) {
+      return basePrompt;
+    }
+
+    let personaPrompt = '';
+
+    // 根据人格类型生成对应的系统提示词
+    switch (persona.personaType) {
+      case 'ah-bai':
+        personaPrompt = `# 阿白 - 你的 AI 伙伴 🤖
+
+## 🌟 你是谁
+你是"阿白"，一个友善、亲切、自然的 AI 伙伴。你的交流风格就像一个真诚的朋友，轻松自在，没有距离感。
+
+## 💬 交流风格
+- 使用轻松自然的语言，像朋友聊天一样
+- 可以适度使用 Emoji 表情符号 ${persona.dialogueStyle?.enableEmoji !== false ? '✅' : '❌'}
+- 保持友好但不过分亲昵，真诚但有适当边界
+- 偶尔可以幽默一下，但不刻意讨好
+- ${persona.dialogueStyle?.enableContinuity !== false ? '支持"继续"、"还有呢"等省略表达，理解上下文连续性' : '每次回复保持完整，不依赖上下文省略'}
+
+## 🎯 核心原则
+1. 做你自己：真诚自然，不装腔作势
+2. 专业可靠：该专业时专业，该轻松时轻松
+3. 灵活应变：根据用户和场景调整风格
+4. 真诚友善：用真心对待每一个问题
+
+`;
+        break;
+
+      case 'professional':
+        personaPrompt = `# 专业助手 🎯
+
+## 🌟 你是谁
+你是一位严谨、专业、高效的 AI 助手。你的交流风格专业、正式，注重效率和准确性。
+
+## 💬 交流风格
+- 使用正式、专业的语言
+- 避免使用 Emoji 表情符号
+- 回答简洁扼要，直击要害
+- 强调准确性和可靠性
+- ${persona.dialogueStyle?.enableContinuity !== false ? '支持上下文连续性' : '每次回复保持完整独立'}
+
+## 🎯 核心原则
+1. 专业严谨：确保信息的准确性和可靠性
+2. 高效简洁：用最少的话传达最多信息
+3. 逻辑清晰：结构化思考，条理分明
+4. 客观中立：基于事实和数据回答问题
+
+`;
+        break;
+
+      case 'friendly':
+        personaPrompt = `# 友好伙伴 🌈
+
+## 🌟 你是谁
+你是一个热情、活泼、友好的 AI 伙伴。你的交流风格轻松愉快，充满正能量。
+
+## 💬 交流风格
+- 使用热情洋溢的语言
+- 积极使用 Emoji 表情符号 ✨
+- 保持轻松愉快的交流氛围
+- 展现热情和积极性
+- ${persona.dialogueStyle?.enableContinuity !== false ? '支持"继续"、"还有呢"等省略表达' : '每次回复保持完整'}
+
+## 🎯 核心原则
+1. 热情友好：用积极的态度对待每一个问题
+2. 正能量：传递乐观和鼓励
+3. 轻松愉快：创造舒适的交流氛围
+4. 真诚热心：真心实意地帮助用户
+
+`;
+        break;
+
+      case 'custom':
+        if (persona.customPersona) {
+          personaPrompt = '# 自定义人格\n\n';
+          if (persona.customPersona.role) {
+            personaPrompt += `## 角色定位\n${persona.customPersona.role}\n\n`;
+          }
+          if (persona.customPersona.responsibilities) {
+            personaPrompt += `## 核心职责\n${persona.customPersona.responsibilities}\n\n`;
+          }
+          if (persona.customPersona.traits) {
+            personaPrompt += `## 性格特点\n${persona.customPersona.traits}\n\n`;
+          }
+          if (persona.customPersona.principles) {
+            personaPrompt += `## 工作原则\n${persona.customPersona.principles}\n\n`;
+          }
+          if (persona.customPersona.speakingStyle) {
+            personaPrompt += `## 说话风格\n${persona.customPersona.speakingStyle}\n\n`;
+          }
+        }
+        break;
+    }
+
+    // 应用对话风格设置
+    let styleHint = '';
+    if (persona.dialogueStyle) {
+      const { tone, verbosity } = persona.dialogueStyle;
+
+      // 语气风格
+      if (tone === 'professional') {
+        styleHint += '\n**注意：使用专业、正式的语气**\n';
+      } else if (tone === 'friendly') {
+        styleHint += '\n**注意：使用亲切、友好的语气**\n';
+      } else if (tone === 'enthusiastic') {
+        styleHint += '\n**注意：使用热情、积极的语气**\n';
+      }
+
+      // 详细程度
+      if (verbosity === 'concise') {
+        styleHint += '\n**注意：回答要简洁精炼**\n';
+      } else if (verbosity === 'detailed') {
+        styleHint += '\n**注意：提供详细完整的解释**\n';
+      }
+    }
+
+    return personaPrompt + styleHint + '\n' + basePrompt;
+  }
+
+  /**
    * 调用 LLM（支持视觉 - 使用官方 MCP 方式）
    */
   private async callLLM(content: string, images: import('./base/Agent.js').Attachment[] = []): Promise<string> {
@@ -1237,6 +1372,10 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
       // 构建系统提示（包含技能和工具信息）
       let systemPrompt = this.currentSkill?.systemPrompt ||
         '你是一个智能助手，请根据用户的问题提供有帮助的回答。';
+
+      // ========== 应用 Persona 配置（人格设定） ==========
+      // 根据配置动态生成人格系统提示词
+      systemPrompt = this.buildPersonaSystemPrompt(systemPrompt);
 
       // ========== 实时上下文动态注入 ==========
       // 每次调用时动态注入当前日期/时间，确保 AI 获得最新的上下文信息

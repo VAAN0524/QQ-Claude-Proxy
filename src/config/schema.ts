@@ -67,6 +67,91 @@ export interface AgentSystemConfig {
   coordinator: CoordinatorConfig;
 }
 
+/**
+ * Agent 人格配置
+ */
+export interface PersonaConfig {
+  /** 是否启用人格设定 */
+  enabled: boolean;
+  /** 人格类型: 'ah-bai' | 'professional' | 'friendly' | 'custom' */
+  personaType: 'ah-bai' | 'professional' | 'friendly' | 'custom';
+  /** 自定义人格（当 personaType 为 'custom' 时使用） */
+  customPersona?: {
+    /** 角色定位 */
+    role?: string;
+    /** 核心职责 */
+    responsibilities?: string;
+    /** 性格特点 */
+    traits?: string;
+    /** 工作原则 */
+    principles?: string;
+    /** 对话风格 */
+    speakingStyle?: string;
+  };
+  /** 对话风格 */
+  dialogueStyle?: {
+    /** 语气风格: 'neutral' | 'friendly' | 'professional' | 'enthusiastic' */
+    tone?: 'neutral' | 'friendly' | 'professional' | 'enthusiastic';
+    /** 详细程度: 'concise' | 'normal' | 'detailed' */
+    verbosity?: 'concise' | 'normal' | 'detailed';
+    /** 是否启用表情符号 */
+    enableEmoji?: boolean;
+    /** 是否启用对话连续性（支持省略表达） */
+    enableContinuity?: boolean;
+  };
+}
+
+/**
+ * 上下文管理配置
+ */
+export interface ContextConfig {
+  /** 最大上下文大小 (tokens) */
+  maxContextSize: number;
+  /** 最近消息权重比例 (0-1) */
+  recentRatio: number;
+  /** 最大历史消息数量 */
+  maxHistoryMessages: number;
+  /** 是否启用上下文压缩 */
+  enableCompression: boolean;
+  /** 压缩后最大 tokens */
+  compressionMaxTokens: number;
+  /** 是否保留代码块 */
+  preserveCodeBlocks: boolean;
+  /** 是否保留文件路径 */
+  preserveFilePaths: boolean;
+  /** 实时上下文配置 */
+  realtime?: {
+    /** 是否启用实时上下文 */
+    enabled?: boolean;
+    /** 是否包含日期 */
+    enableDate?: boolean;
+    /** 是否包含时间 */
+    enableTime?: boolean;
+    /** 是否包含星期 */
+    enableWeekday?: boolean;
+  };
+}
+
+/**
+ * 记忆系统配置
+ */
+export interface MemoryConfig {
+  /** 是否启用记忆系统 */
+  enabled: boolean;
+  /** L0 层最大 tokens */
+  l0MaxTokens: number;
+  /** L1 层最大 tokens */
+  l1MaxTokens: number;
+  /** 是否启用 L2 层 */
+  l2Enabled: boolean;
+  /** 记忆保留天数 */
+  retentionDays: number;
+  /** 是否启用语义搜索 */
+  enableSemanticSearch: boolean;
+  /** 是否启用自动归档 */
+  enableAutoArchive: boolean;
+}
+
 export interface Config {
   gateway: {
     port: number;
@@ -142,6 +227,12 @@ export interface Config {
       maxTokens?: number;
     };
   };
+  /** Agent 人格配置 */
+  persona?: PersonaConfig;
+  /** 上下文管理配置 */
+  context?: ContextConfig;
+  /** 记忆系统配置 */
+  memory?: MemoryConfig;
 }
 
 export const defaultConfig: Config = {
@@ -271,5 +362,49 @@ export const defaultConfig: Config = {
     maxConcurrentTasks: 3,
     taskTimeout: 30 * 60 * 1000, // 30分钟
     heartbeatInterval: 5000, // 5秒
+  },
+  // Agent 人格配置
+  persona: {
+    enabled: true,
+    personaType: 'ah-bai',
+    customPersona: {
+      role: '',
+      responsibilities: '',
+      traits: '',
+      principles: '',
+      speakingStyle: ''
+    },
+    dialogueStyle: {
+      tone: 'neutral',
+      verbosity: 'normal',
+      enableEmoji: true,
+      enableContinuity: true
+    }
+  },
+  // 上下文管理配置
+  context: {
+    maxContextSize: 16000,
+    recentRatio: 0.7,
+    maxHistoryMessages: 100,
+    enableCompression: true,
+    compressionMaxTokens: 16000,
+    preserveCodeBlocks: true,
+    preserveFilePaths: true,
+    realtime: {
+      enabled: true,
+      enableDate: true,
+      enableTime: true,
+      enableWeekday: true
+    }
+  },
+  // 记忆系统配置
+  memory: {
+    enabled: true,
+    l0MaxTokens: 100,
+    l1MaxTokens: 2000,
+    l2Enabled: true,
+    retentionDays: 30,
+    enableSemanticSearch: false,
+    enableAutoArchive: true
   }
 };

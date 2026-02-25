@@ -3,8 +3,8 @@
  * Extensions to the main styles.css
  */
 
-/* Back Link */
-.back-link {
+/* Back Link - Override styles.css for this page to show text */
+.header-left .back-link {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -14,6 +14,8 @@
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
   font-size: 0.875rem;
+  width: auto;
+  height: auto;
 }
 
 .back-link:hover {
@@ -242,12 +244,29 @@ textarea.form-input {
     width: 100%;
   }
 
-  .back-link span {
+  /* Ensure back link doesn't overlap with logo on small screens */
+  .header-left {
+    flex-wrap: wrap;
+  }
+
+  .header-left .back-link span {
     display: none;
   }
 
-  .back-link svg {
+  .header-left .back-link {
+    padding: var(--spacing-sm);
+    min-width: 36px;
+  }
+
+  .header-left .back-link svg {
     margin: 0;
+  }
+
+  .header-left .logo h1 {
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

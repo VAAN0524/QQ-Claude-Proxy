@@ -405,9 +405,10 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
 
   /**
    * GET/PUT /api/config - Get or update safe config (no secrets)
+   * 支持 POST 方法以兼容高级配置页面
    */
   const configHandler = async (req, res) => {
-    if (req.method === 'GET') {
+    if (req.method === 'GET' || req.method === 'POST') {
       // Return safe config (no secrets)
       const safeConfig = {
         gateway: context.config.gateway,
@@ -418,31 +419,115 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
           },
         },
         agent: context.config.agent,
+        agents: context.config.agents,
         storage: context.config.storage,
+        scheduler: context.config.scheduler,
+        llm: context.config.llm ? {
+          provider: context.config.llm.provider,
+          model: context.config.llm.model,
+          maxTokens: context.config.llm.maxTokens,
+          baseURL: context.config.llm.baseURL,
+        } : undefined,
+        // 新增配置
+        persona: context.config.persona,
+        context: context.config.context,
+        memory: context.config.memory,
       };
 
-      sendJson(res, safeConfig);
+      sendJson(res, { config: safeConfig });
       return;
     }
 
-    if (req.method === 'PUT') {
+    if (req.method === 'PUT' || req.method === 'POST') {
       try {
         const updates = await getBody(req);
         const configPath = resolve(process.cwd(), 'config.json');
 
-        let currentConfig = {};
+        let currentConfig: any = {};
         if (existsSync(configPath)) {
           currentConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
         }
 
-        // Merge updates
-        const newConfig = { ...currentConfig, ...updates };
+        // Deep merge with default config
+        const newConfig = {
+          ...defaultConfig,
+          ...currentConfig,
+          ...updates,
+          gateway: { ...defaultConfig.gateway, ...currentConfig.gateway, ...updates.gateway },
+          channels: {
+            ...defaultConfig.channels,
+            ...currentConfig.channels,
+            qqbot: {
+              ...defaultConfig.channels.qqbot,
+              ...currentConfig.channels?.qqbot,
+              ...updates.channels?.qqbot,
+            },
+          },
+          agent: { ...defaultConfig.agent, ...currentConfig.agent, ...updates.agent },
+          agents: { ...defaultConfig.agents, ...currentConfig.agents, ...updates.agents },
+          storage: { ...defaultConfig.storage, ...currentConfig.storage, ...updates.storage },
+          scheduler: { ...defaultConfig.scheduler, ...currentConfig.scheduler, ...updates.scheduler },
+          llm: {
+            ...defaultConfig.llm,
+            ...currentConfig.llm,
+            ...updates.llm,
+            glm: {
+              ...defaultConfig.llm?.glm,
+              ...currentConfig.llm?.glm,
+              ...updates.llm?.glm,
+            },
+            anthropic: {
+              ...defaultConfig.llm?.anthropic,
+              ...currentConfig.llm?.anthropic,
+              ...updates.llm?.anthropic,
+            },
+            openai: {
+              ...defaultConfig.llm?.openai,
+              ...currentConfig.llm?.openai,
+              ...updates.llm?.openai,
+            },
+          },
+          // 新增配置合并
+          persona: {
+            ...defaultConfig.persona,
+            ...currentConfig.persona,
+            ...updates.persona,
+            customPersona: {
+              ...defaultConfig.persona?.customPersona,
+              ...currentConfig.persona?.customPersona,
+              ...updates.persona?.customPersona,
+            },
+            dialogueStyle: {
+              ...defaultConfig.persona?.dialogueStyle,
+              ...currentConfig.persona?.dialogueStyle,
+              ...updates.persona?.dialogueStyle,
+            },
+          },
+          context: {
+            ...defaultConfig.context,
+            ...currentConfig.context,
+            ...updates.context,
+            realtime: {
+              ...defaultConfig.context?.realtime,
+              ...currentConfig.context?.realtime,
+              ...updates.context?.realtime,
+            },
+          },
+          memory: {
+            ...defaultConfig.memory,
+            ...currentConfig.memory,
+            ...updates.memory,
+          },
+        };
 
         // Write to file
         writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
 
+        // Update in-memory config
+        context.config = newConfig;
+
         logger.info(`Config updated via Dashboard`);
-        sendJson(res, { success: true, message: '配置已更新，需要重启生效' });
+        sendJson(res, { success: true, message: '配置已保存', needsRestart: true });
       } catch (error) {
         logger.error(`Failed to update config: ${error}`);
         sendJson(res, { error: '更新配置失败' }, 500);
@@ -497,6 +582,10 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
             maxTokens: context.config.llm.openai.maxTokens,
           } : undefined,
         } : undefined,
+        // 新增配置字段
+        persona: context.config.persona,
+        context: context.config.context,
+        memory: context.config.memory,
       };
 
       sendJson(res, fullConfig);
@@ -552,6 +641,37 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
               ...updates.llm?.openai,
             },
           },
+          // 新增配置合并
+          persona: {
+            ...defaultConfig.persona,
+            ...currentConfig.persona,
+            ...updates.persona,
+            customPersona: {
+              ...defaultConfig.persona?.customPersona,
+              ...currentConfig.persona?.customPersona,
+              ...updates.persona?.customPersona,
+            },
+            dialogueStyle: {
+              ...defaultConfig.persona?.dialogueStyle,
+              ...currentConfig.persona?.dialogueStyle,
+              ...updates.persona?.dialogueStyle,
+            },
+          },
+          context: {
+            ...defaultConfig.context,
+            ...currentConfig.context,
+            ...updates.context,
+            realtime: {
+              ...defaultConfig.context?.realtime,
+              ...currentConfig.context?.realtime,
+              ...updates.context?.realtime,
+            },
+          },
+          memory: {
+            ...defaultConfig.memory,
+            ...currentConfig.memory,
+            ...updates.memory,
+          },
         };
 
         // Merge agents config if provided
@@ -584,8 +704,11 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
         // Write to file
         writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
 
+        // Update in-memory config
+        context.config = newConfig;
+
         logger.info(`Full config updated via Dashboard`);
-        sendJson(res, { success: true, message: '配置已更新，需要重启生效' });
+        sendJson(res, { success: true, message: '配置已更新，需要重启生效', needsRestart: true });
       } catch (error) {
         logger.error(`Failed to update full config: ${error}`);
         sendJson(res, { error: '更新配置失败' }, 500);
@@ -628,6 +751,91 @@ export function createApiHandlers(context: ApiHandlerContext): Map<string, (req:
     } catch (error) {
       logger.error(`Failed to restart: ${error}`);
       sendJson(res, { error: '重启失败' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/service/restart - Service restart endpoint (for advanced config page)
+   */
+  handlers.set('POST:/api/service/restart', async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      if (context.restartCallback) {
+        // Send success response before restarting
+        sendJson(res, { success: true, message: '服务正在重启中...' });
+
+        // Delay restart slightly to allow response to be sent
+        setTimeout(() => {
+          context.restartCallback!().catch((error) => {
+            logger.error(`Service restart failed: ${error}`);
+          });
+        }, 500);
+      } else {
+        sendJson(res, { error: '重启功能未配置' }, 501);
+      }
+    } catch (error) {
+      logger.error(`Failed to restart service: ${error}`);
+      sendJson(res, { error: '重启服务失败' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/memory/stats - Get memory system statistics
+   */
+  handlers.set('GET:/api/memory/stats', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      // TODO: 实现真实的记忆统计
+      // 目前返回模拟数据，实际需要从 HierarchicalMemoryService 获取
+      const stats = {
+        total: 0,
+        l0: 0,
+        l1: 0,
+        l2: 0,
+        active: 0,
+        archived: 0
+      };
+
+      // 尝试从记忆目录读取统计数据
+      const memoryPath = resolve(process.cwd(), 'data/memory');
+      if (existsSync(memoryPath)) {
+        try {
+          const l0Path = join(memoryPath, 'simple-coordinator/L0');
+          const l1Path = join(memoryPath, 'simple-coordinator/L1');
+          const l2Path = join(memoryPath, 'simple-coordinator/L2');
+
+          if (existsSync(l0Path)) {
+            const l0Files = readdirSync(l0Path).filter(f => f.endsWith('.json'));
+            stats.l0 = l0Files.length;
+          }
+          if (existsSync(l1Path)) {
+            const l1Files = readdirSync(l1Path).filter(f => f.endsWith('.json'));
+            stats.l1 = l1Files.length;
+          }
+          if (existsSync(l2Path)) {
+            const l2Files = readdirSync(l2Path).filter(f => f.endsWith('.json'));
+            stats.l2 = l2Files.length;
+          }
+
+          stats.total = stats.l0 + stats.l1 + stats.l2;
+          stats.active = stats.total;
+        } catch (err) {
+          logger.warn(`Failed to read memory stats: ${err}`);
+        }
+      }
+
+      sendJson(res, stats);
+    } catch (error) {
+      logger.error(`Failed to get memory stats: ${error}`);
+      sendJson(res, { error: '获取记忆统计失败' }, 500);
     }
   });
 

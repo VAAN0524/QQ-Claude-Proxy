@@ -190,13 +190,14 @@
 /* ==================== Mode Switcher ==================== */
 .mode-switcher {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: var(--spacing-md);
 }
 
 .mode-option {
   cursor: pointer;
   display: block;
+  flex: 1;
 }
 
 .mode-option input[type="radio"] {
@@ -499,7 +500,7 @@
 }
 
 .agent-card.disabled {
-  opacity: 0.6;
+  display: none;
 }
 
 .agent-card.deprecated {

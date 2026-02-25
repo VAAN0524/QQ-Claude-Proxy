@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高级配置 - QQ-Claude-Proxy Dashboard</title>
+  <link rel="stylesheet" href="styles.css?v=3.4">
+  <link rel="stylesheet" href="advanced.css?v=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <a href="index.html" class="back-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          <span>返回 Dashboard</span>
+        </a>
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <h1>高级配置</h1>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="status-indicator" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">连接中...</span>
+        </div>
+        <button class="btn-primary" id="saveBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          保存配置
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Restart Notice -->
+      <div class="restart-notice" id="restartNotice" style="display: none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <div class="notice-content">
+          <div class="notice-title">配置已更改</div>
+          <div class="notice-text">部分配置需要重启服务才能生效</div>
+        </div>
+        <button class="btn-secondary btn-sm" id="restartNowBtn">立即重启</button>
+      </div>
+
+      <!-- Tabs Navigation -->
+      <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="persona">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          Agent 人格
+        </button>
+        <button class="tab-btn" data-tab="context">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          上下文管理
+        </button>
+        <button class="tab-btn" data-tab="memory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          记忆系统
+        </button>
+      </div>
+
+      <!-- Tab Contents -->
+      <div class="tab-content">
+        <!-- Agent Persona Tab -->
+        <div class="tab-pane active" id="persona-tab">
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                Agent 人格设定
+              </h2>
+              <p class="section-desc">配置 Agent 的人格特征，影响其说话风格和行为方式</p>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="personaEnabled" class="form-checkbox">
+              <span>启用人格设定系统</span>
+            </div>
+
+            <div class="form-group">
+              <label for="personaType">人格类型</label>
+              <select id="personaType" class="form-input">
+                <option value="ah-bai">阿白 (友善亲切，自然交流)</option>
+                <option value="professional">专业助手 (严谨专业，高效简洁)</option>
+                <option value="friendly">友好伙伴 (热情活泼，轻松聊天)</option>
+                <option value="custom">自定义人格</option>
+              </select>
+            </div>
+
+            <!-- Custom Persona Section -->
+            <div id="customPersonaSection" style="display: none;">
+              <h3 class="subsection-title">自定义人格配置</h3>
+
+              <div class="form-group">
+                <label for="customRole">角色定位</label>
+                <textarea id="customRole" class="form-input" rows="2" placeholder="例如：你是一个资深的软件工程师，专门负责代码审查和架构设计"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="customResponsibilities">核心职责</label>
+                <textarea id="customResponsibilities" class="form-input" rows="3" placeholder="例如：1. 代码质量把关 2. 架构优化建议 3. 最佳实践指导"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="customTraits">性格特点</label>
+                <textarea id="customTraits" class="form-input" rows="2" placeholder="例如：严谨细致，但不失亲和力；善于发现问题，同时也乐于提供建设性建议"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="customPrinciples">工作原则</label>
+                <textarea id="customPrinciples" class="form-input" rows="3" placeholder="例如：1. 代码质量第一 2. 可读性优先 3. 性能与安全并重"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="customSpeakingStyle">说话风格</label>
+                <textarea id="customSpeakingStyle" class="form-input" rows="2" placeholder="例如：专业但不生硬，使用清晰的技术术语，同时保持友好"></textarea>
+              </div>
+            </div>
+
+            <!-- Persona Preview -->
+            <div class="persona-preview">
+              <h3 class="subsection-title">人格预览</h3>
+              <div class="preview-card" id="personaPreviewCard">
+                <div class="preview-avatar">🤖</div>
+                <div class="preview-content">
+                  <div class="preview-name" id="previewName">阿白</div>
+                  <div class="preview-desc" id="previewDesc">友善亲切，像朋友一样自然交流</div>
+                  <div class="preview-traits" id="previewTraits">专业可靠 • 偶尔幽默 • 灵活应变</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Dialogue Style Settings -->
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                对话风格设置
+              </h2>
+            </div>
+
+            <div class="form-group">
+              <label for="toneStyle">语气风格</label>
+              <select id="toneStyle" class="form-input">
+                <option value="neutral">中性 - 客观平衡</option>
+                <option value="professional">专业 - 严谨正式</option>
+                <option value="friendly">友好 - 亲切热情</option>
+                <option value="casual">随意 - 轻松自然</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="verbosityStyle">详细程度</label>
+              <select id="verbosityStyle" class="form-input">
+                <option value="normal">正常 - 适中的详细程度</option>
+                <option value="concise">简洁 - 精炼的回答</option>
+                <option value="detailed">详细 - 完整的解释</option>
+              </select>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableEmoji" class="form-checkbox" checked>
+              <span>使用 Emoji 表情符号</span>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableContinuity" class="form-checkbox" checked>
+              <span>启用对话连续性（支持省略表达）</span>
+              <small class="form-hint">支持"继续"、"还有呢"等省略表达</small>
+            </div>
+          </section>
+        </div>
+
+        <!-- Context Management Tab -->
+        <div class="tab-pane" id="context-tab">
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                </svg>
+                上下文管理
+              </h2>
+              <p class="section-desc">配置对话上下文的大小、保留策略和压缩设置</p>
+            </div>
+
+            <div class="form-group">
+              <label for="maxContextSize">最大上下文大小 (Tokens)</label>
+              <input type="number" id="maxContextSize" class="form-input" min="1000" max="100000" step="1000" value="16000">
+              <small class="form-hint">控制保留的最大对话上下文大小</small>
+            </div>
+
+            <div class="form-group">
+              <label for="recentRatio">最近消息权重: <span id="recentRatioValue">70</span>%</label>
+              <input type="range" id="recentRatio" class="form-range" min="0" max="100" value="70">
+              <small class="form-hint">分配给最近消息的比例，越高越注重近期对话</small>
+            </div>
+
+            <div class="form-group">
+              <label for="maxHistoryMessages">历史消息保留数量</label>
+              <input type="number" id="maxHistoryMessages" class="form-input" min="10" max="200" value="100">
+              <small class="form-hint">保留的最大历史消息条数</small>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableCompression" class="form-checkbox" checked>
+              <span>启用上下文压缩</span>
+              <small class="form-hint">自动压缩旧消息以节省 tokens</small>
+            </div>
+
+            <div class="form-group">
+              <label for="compressionMaxTokens">压缩后最大 Tokens</label>
+              <input type="number" id="compressionMaxTokens" class="form-input" min="1000" max="50000" value="16000">
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="preserveCodeBlocks" class="form-checkbox" checked>
+              <span>保留代码块</span>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="preserveFilePaths" class="form-checkbox" checked>
+              <span>保留文件路径</span>
+            </div>
+          </section>
+
+          <!-- Real-time Context -->
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                实时上下文注入
+              </h2>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableRealtimeContext" class="form-checkbox" checked>
+              <span>启用实时上下文</span>
+              <small class="form-hint">在每次请求中注入当前日期、时间、时区等信息</small>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableDateInContext" class="form-checkbox" checked>
+              <span>注入当前日期</span>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableTimeInContext" class="form-checkbox" checked>
+              <span>注入当前时间</span>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableWeekdayInContext" class="form-checkbox" checked>
+              <span>注入星期信息</span>
+            </div>
+
+            <div class="context-preview" id="contextPreview">
+              <div class="preview-header">实时上下文预览</div>
+              <pre id="contextPreviewContent"></pre>
+            </div>
+          </section>
+        </div>
+
+        <!-- Memory System Tab -->
+        <div class="tab-pane" id="memory-tab">
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                分层记忆系统
+              </h2>
+              <p class="section-desc">OpenViking 风格的三层记忆架构配置</p>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="memoryEnabled" class="form-checkbox" checked>
+              <span>启用分层记忆系统</span>
+            </div>
+
+            <!-- Memory Layers -->
+            <div class="memory-layers">
+              <div class="layer-card l0-layer">
+                <div class="layer-header">
+                  <span class="layer-title">L0 层 - 快速索引</span>
+                  <span class="layer-capacity">~100 tokens</span>
+                </div>
+                <p class="layer-desc">用于快速检索的索引层，包含关键词和摘要</p>
+                <div class="form-group">
+                  <label>最大 Tokens</label>
+                  <input type="number" class="form-input" id="l0MaxTokens" value="100" min="50" max="500">
+                </div>
+              </div>
+
+              <div class="layer-card l1-layer">
+                <div class="layer-header">
+                  <span class="layer-title">L1 层 - 内容导航</span>
+                  <span class="layer-capacity">~2000 tokens</span>
+                </div>
+                <p class="layer-desc">内容导航层，包含关键点和上下文信息</p>
+                <div class="form-group">
+                  <label>最大 Tokens</label>
+                  <input type="number" class="form-input" id="l1MaxTokens" value="2000" min="500" max="10000">
+                </div>
+              </div>
+
+              <div class="layer-card l2-layer">
+                <div class="layer-header">
+                  <span class="layer-title">L2 层 - 完整数据</span>
+                  <span class="layer-capacity">无限</span>
+                </div>
+                <p class="layer-desc">完整的原始数据，长期存储</p>
+                <div class="form-group checkbox-block">
+                  <input type="checkbox" id="l2Enabled" class="form-checkbox" checked>
+                  <span>启用 L2 层存储</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Memory Settings -->
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                记忆管理设置
+              </h2>
+            </div>
+
+            <div class="form-group">
+              <label for="retentionDays">记忆保留天数</label>
+              <input type="number" id="retentionDays" class="form-input" min="1" max="365" value="30">
+              <small class="form-hint">超过此天数的旧记忆将被自动清理</small>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableSemanticSearch" class="form-checkbox">
+              <span>启用语义搜索</span>
+              <small class="form-hint">使用向量嵌入进行语义搜索（需要额外配置）</small>
+            </div>
+
+            <div class="form-group checkbox-block">
+              <input type="checkbox" id="enableAutoArchive" class="form-checkbox" checked>
+              <span>启用自动归档</span>
+              <small class="form-hint">自动将旧记忆归档到 L2 层</small>
+            </div>
+          </section>
+
+          <!-- Memory Statistics -->
+          <section class="config-section">
+            <div class="section-header">
+              <h2>
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 3v18h18"/>
+                  <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+                </svg>
+                记忆统计
+              </h2>
+            </div>
+
+            <div class="memory-stats">
+              <div class="stat-item">
+                <div class="stat-label">总记忆条目</div>
+                <div class="stat-value" id="totalMemories">-</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">L0 条目</div>
+                <div class="stat-value" id="l0Memories">-</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">L1 条目</div>
+                <div class="stat-value" id="l1Memories">-</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">L2 条目</div>
+                <div class="stat-value" id="l2Memories">-</div>
+              </div>
+            </div>
+
+            <button type="button" class="btn-secondary" id="refreshMemoryStats">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              刷新统计
+            </button>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="advanced.js?v=1.0"></script>
+</body>
+</html>

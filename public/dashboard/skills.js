@@ -14,7 +14,7 @@ const state = {
   searchQuery: '',
   selectedFiles: [],
   currentSkill: null,
-  viewMode: 'list', // 'grid' or 'list'
+  viewMode: 'grid', // 'grid' or 'list' - 默认使用网格视图
   selectedSkills: new Set(), // Set of selected skill names
 };
 
@@ -316,13 +316,11 @@ function renderSkillsGrid() {
 
   // Render based on view mode
   if (state.viewMode === 'list') {
+    // List view: render list items directly
     container.innerHTML = filtered.map(skill => renderSkillListItem(skill)).join('');
   } else {
-    container.innerHTML = `
-      <div class="skills-grid">
-        ${filtered.map(skill => renderSkillCard(skill)).join('')}
-      </div>
-    `;
+    // Grid view: render skill cards directly (container has grid layout)
+    container.innerHTML = filtered.map(skill => renderSkillCard(skill)).join('');
   }
 
   // Update batch toolbar visibility

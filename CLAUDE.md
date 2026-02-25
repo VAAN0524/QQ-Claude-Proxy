@@ -156,6 +156,14 @@ npm run monitor       # 启动终端监控界面
 - L0/L1: 自动清理过期记忆
 - L2: 持久化存储，长期保留
 
+**记忆生命周期**:
+
+| 阶段 | 标签 | 保留时间 | 清理策略 |
+|-----|------|----------|----------|
+| active | 活跃 | 无限期 | 保留 |
+| archived | 归档 | 30 天 | 定期检查 |
+| expired | 过期 | 7 天 | 自动清理 |
+
 ## 技能管理系统
 
 **位置**: [src/agents/SkillLoader.ts](src/agents/SkillLoader.ts), [src/agents/SkillInstaller.ts](src/agents/SkillInstaller.ts)
@@ -170,6 +178,43 @@ npm run monitor       # 启动终端监控界面
 - `docker-*/` - Docker 相关
 - `network-solutions/` - 网络解决方案
 - `run_*_agent/` - 各 Agent 运行技能
+
+## 工具层系统
+
+**位置**: [src/agents/tools-layer/](src/agents/tools-layer/)
+
+Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具函数：
+
+| 分类 | 工具 | 说明 |
+|------|------|------|
+| **搜索** | `duckduckgo_search` | DuckDuckGo 搜索 |
+| | `tavily_search` | Tavily 深度搜索（需 API Key） |
+| | `smart_search` | 智能搜索（自动选择最佳方式） |
+| **网页** | `fetch_web` | 获取网页内容 |
+| **命令** | `execute_command` | 执行系统命令（有安全检查） |
+| **文件** | `read_file`, `write_file`, `edit_file`, `apply_patch` | 文件操作 |
+| **进程** | `spawn_process`, `terminate_process`, `list_processes` | 后台进程管理 |
+
+**重要**: 所有搜索工具必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。
+
+**技能索引机制**: 使用 `.skill-index.json` 缓存加速启动，只在 SKILL.md 修改时重建。
+
+**工具管理器** (`ToolManager`):
+
+```typescript
+import { getToolManager } from './agents/tools-layer/index.js';
+
+const toolManager = getToolManager();
+
+// 获取工具
+const tool = toolManager.get('duckduckgo_search');
+
+// 按分类获取工具
+const searchTools = toolManager.getByCategory('search');
+
+// 获取所有工具描述（用于 LLM 提示）
+const descriptions = toolManager.getToolDescriptions();
+```
 
 ## LLM Provider 系统
 
@@ -203,6 +248,19 @@ npm run monitor       # 启动终端监控界面
 - 所有 import 必须包含 `.js` 扩展名
 - 动态 import: `await import('./agents/CodeAgent.js')`
 
+### 测试框架
+- 使用 **vitest** 作为测试框架
+- 测试文件位于 `tests/` 目录
+- 全局 API 可用（describe, it, expect 等）
+- 覆盖率报告: `npm run test:coverage`
+- 支持 v8 覆盖率提供者
+
+### TypeScript 编译
+- 目标: ES2022, 模块: NodeNext
+- 严格模式已关闭（`strict: false`）
+- 输出目录: `dist/`
+- 声明文件已启用
+
 ### 日志
 - 使用 `src/utils/logger.ts` 的 pino logger
 - 结构化日志：`logger.info({ context }, 'message')`
@@ -234,25 +292,33 @@ npm run monitor       # 启动终端监控界面
 ### 添加新技能
 
 1. 在 `skills/` 目录创建技能文件夹
-2. 创建 `SKILL.md` 元数据文件：
+2. 创建 `SKILL.md` 元数据文件（YAML frontmatter 格式）：
    ```markdown
+   ---
+   name: skill-name
+   description: 技能的简短描述
+   ---
+
    # 技能名称
 
-   ## description
-   技能描述
+   ## 功能
+   - 能力1
+   - 能力2
 
-   ## systemPrompt
-   系统提示词
+   ## 使用场景
+   - 场景1
+   - 场景2
 
-   ## rules
-   - 规则1
-   - 规则2
+   ## 参数
+   - `param1` (必需/可选): 参数说明
+   - `param2` (必需/可选): 参数说明
 
-   ## examples
-   ### input
-   用户输入示例
-   ### output
-   期望输出示例
+   ## 输出格式
+   输出格式说明...
+
+   ## 注意事项
+   - 注意事项1
+   - 注意事项2
    ```
 3. 通过 Dashboard 或 QQ 命令安装
 
@@ -284,6 +350,7 @@ QQ-Claude-Proxy/
 │   ├── config/                # 配置管理
 │   ├── skills/                # 技能系统
 │   └── index.ts               # 主入口
+├── tests/                     # 测试文件 (vitest)
 ├── public/                    # 静态文件
 │   └── dashboard/             # Web Dashboard 前端
 ├── skills/                    # 技能目录 (30+ 技能)
