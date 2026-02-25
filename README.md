@@ -127,16 +127,39 @@ npm install
 2. 创建机器人应用，获取 **AppID** 和 **AppSecret**
 3. 配置沙箱用户（添加你的 QQ 号）
 4. 用手机 QQ 扫码添加机器人
+5. 复制配置模板并填入你的密钥：
 
+**Windows (CMD/PowerShell):**
+```cmd
+copy .env.example .env
+```
+
+**Linux/Mac:**
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入 QQ_BOT_APP_ID 和 QQ_BOT_SECRET
+```
+
+然后用记事本或 VS Code 编辑 `.env` 文件，将占位符替换为你的真实密钥：
+
+```env
+# 将 your_app_id_here 替换为你的 AppID
+QQ_BOT_APP_ID=your_app_id_here
+
+# 将 your_app_secret_here 替换为你的 AppSecret
+QQ_BOT_SECRET=your_app_secret_here
 ```
 
 ### 4. 配置 LLM API (Simple 模式需要)
 
-```bash
-# 编辑 .env 文件，添加以下配置
+Simple 模式需要配置 GLM API Key。获取方式：
+1. 访问 [智谱 AI 开放平台](https://open.bigmodel.cn/)
+2. 注册并登录，进入「控制台」→「API密钥」
+3. 创建并复制 API Key
+
+编辑 `.env` 文件：
+
+```env
+# 将 your_glm_api_key_here 替换为你的 API Key
 GLM_API_KEY=your_glm_api_key_here
 ```
 
