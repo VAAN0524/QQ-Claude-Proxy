@@ -1105,14 +1105,21 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
 注意：请使用当前年份 (${currentDate}) 的最新 API 和语法。`;
 
-      // 智谱 AI 网络搜索工具（正确格式）
+      // 获取当前日期用于搜索提示
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+      // 智谱 AI 网络搜索工具（完整参数配置）
       const webSearchTool = {
         type: 'web_search',
         web_search: {
           enable: 'True',
           search_engine: 'search_pro',
           search_result: 'True',
+          search_prompt: `今天是${dateStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
           count: '5',
+          search_recency_filter: '7d',  // 限制搜索最近7天的内容
+          content_size: 'high',  // 获取更详细的内容摘要
         }
       };
 
@@ -1768,6 +1775,8 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
         // 添加智谱 AI 内置网络搜索工具
         if (!isLastIteration) {
+          const now = new Date();
+          const todayStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
           requestBody.tools = requestBody.tools || [];
           requestBody.tools.push({
             type: 'web_search',
@@ -1775,6 +1784,9 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
               enable: 'True',
               search_engine: 'search_pro',
               search_result: 'True',
+              search_prompt: `今天是${todayStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
+              search_recency_filter: '7d',  // 限制搜索最近7天的内容
+              content_size: 'high',
             }
           });
         }
