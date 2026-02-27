@@ -8,6 +8,9 @@
 // 搜索工具
 export * from './search-tools.js';
 
+// 导出 Agent Reach 相关类型
+export type { ExaSearchOptions, ExaResult, VideoInfo, SmartSearchV2Result } from './search-tools.js';
+
 // 网页工具
 export * from './web-tools.js';
 
@@ -71,6 +74,96 @@ export class ToolManager {
           return result.tip;
         }
         return formatSearchResults(result.results, result.answer, result.source);
+      },
+    });
+
+    // Agent Reach 搜索工具
+    this.register({
+      name: 'exa_search',
+      description: 'Exa 语义搜索，支持代码搜索。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
+      category: 'search',
+      execute: async (params: { query: string; options?: { numResults?: number; livecrawl?: 'fallback' | 'preferred'; type?: 'auto' | 'fast' } }) => {
+        const { exaSearch, formatAgentReachResult } = await import('./search-tools.js');
+        try {
+          const results = await exaSearch(params.query, params.options || {});
+          return formatAgentReachResult({ source: 'exa', results });
+        } catch (error: any) {
+          return `❌ Exa 搜索失败: ${error.message}\n\n请确保 mcporter 和 Exa 已正确配置。`;
+        }
+      },
+    });
+
+    this.register({
+      name: 'exa_code_search',
+      description: 'Exa 代码搜索，查找 API 文档和代码示例。',
+      category: 'search',
+      execute: async (params: { query: string; tokensNum?: number }) => {
+        const { exaCodeSearch } = await import('./search-tools.js');
+        try {
+          return await exaCodeSearch(params.query, params.tokensNum);
+        } catch (error: any) {
+          return `❌ Exa 代码搜索失败: ${error.message}\n\n请确保 mcporter 和 Exa 已正确配置。`;
+        }
+      },
+    });
+
+    this.register({
+      name: 'jina_read',
+      description: '使用 Jina Reader 提取网页内容，支持任意 URL。',
+      category: 'web',
+      execute: async (params: { url: string }) => {
+        const { jinaRead, formatAgentReachResult } = await import('./search-tools.js');
+        try {
+          const content = await jinaRead(params.url);
+          return formatAgentReachResult({ source: 'jina', content });
+        } catch (error: any) {
+          return `❌ 网页读取失败: ${error.message}`;
+        }
+      },
+    });
+
+    this.register({
+      name: 'youtube_search',
+      description: 'YouTube 视频信息提取，获取标题、描述、时长等。',
+      category: 'search',
+      execute: async (params: { url: string }) => {
+        const { youtubeSearch, formatAgentReachResult } = await import('./search-tools.js');
+        try {
+          const video = await youtubeSearch(params.url);
+          return formatAgentReachResult({ source: 'youtube', video });
+        } catch (error: any) {
+          return `❌ YouTube 视频信息提取失败: ${error.message}`;
+        }
+      },
+    });
+
+    this.register({
+      name: 'bilibili_search',
+      description: 'B站视频信息提取，获取标题、描述、时长等。',
+      category: 'search',
+      execute: async (params: { url: string }) => {
+        const { bilibiliSearch, formatAgentReachResult } = await import('./search-tools.js');
+        try {
+          const video = await bilibiliSearch(params.url);
+          return formatAgentReachResult({ source: 'bilibili', video });
+        } catch (error: any) {
+          return `❌ B站视频信息提取失败: ${error.message}`;
+        }
+      },
+    });
+
+    this.register({
+      name: 'smart_search_v2',
+      description: '智能搜索 V2 - 自动识别 URL/视频/关键词并路由到最佳搜索方式。重要：搜索时必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。',
+      category: 'search',
+      execute: async (params: { query: string; numResults?: number }) => {
+        const { smart_search_v2, formatAgentReachResult } = await import('./search-tools.js');
+        try {
+          const result = await smart_search_v2(params.query, { numResults: params.numResults });
+          return formatAgentReachResult(result);
+        } catch (error: any) {
+          return `❌ 智能搜索失败: ${error.message}\n\n已回退到基本搜索功能。`;
+        }
       },
     });
 

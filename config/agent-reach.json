@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "mcporter": {
+    "configured": true,
+    "path": "mcporter",
+    "servers": ["exa"]
+  },
+  "ytDlp": {
+    "installed": true,
+    "path": "yt-dlp"
+  },
+  "social": {
+    "twitter": false,
+    "reddit": false,
+    "xiaohongshu": false,
+    "douyin": false
+  },
+  "lastUpdated": "2026-02-27T00:00:00.000Z"
+}

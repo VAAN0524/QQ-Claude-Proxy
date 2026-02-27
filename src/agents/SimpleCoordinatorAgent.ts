@@ -204,9 +204,12 @@ export class SimpleCoordinatorAgent implements IAgent {
       // 合并图片和视频，统一作为附件处理
       const visualAttachments = [...images, ...videos];
 
+      // 计算实际要记录和使用的用户消息（如果内容为空且有图片，使用默认提示）
+      const effectiveContent = content.trim() || (visualAttachments.length > 0 ? '请分析这个文件的内容' : content);
+
       // 记录用户消息到共享上下文
       if (activeContext) {
-        activeContext.addConversation('user', content, this.id);
+        activeContext.addConversation('user', effectiveContent, this.id);
 
         // 同时记录到分层记忆（长期存储）
         if (this.hierarchicalMemory) {
@@ -727,6 +730,8 @@ export class SimpleCoordinatorAgent implements IAgent {
    * 使用工具层执行任务
    */
   private async executeWithTools(content: string, context: AgentContext, images: import('./base/Agent.js').Attachment[] = []): Promise<string> {
+    // 获取正确的共享上下文（优先使用 context 传入的上下文）
+    const activeContext = context.sharedContext || this.sharedContext;
     const lowerContent = content.toLowerCase();
 
     // ========== 🎨 最高优先级：图片/视频分析 ==========
@@ -735,16 +740,14 @@ export class SimpleCoordinatorAgent implements IAgent {
       logger.info(`[SimpleCoordinator] 检测到 ${images.length} 个附件，优先进行视觉分析`);
 
       // 如果用户没有提供文字说明，使用默认提示
+      // 注意：effectiveContent 已在 process() 中计算过，这里直接使用 content
+      // 如果 content 为空，process() 已经使用了 '请分析这个文件的内容'
       const userPrompt = content.trim() || '请分析这个文件的内容';
 
       // 直接调用 callLLM，它会处理图片/视频的 MCP 分析
-      const analysisResult = await this.callLLM(userPrompt, images);
+      const analysisResult = await this.callLLM(userPrompt, images, activeContext);
 
-      // 将分析结果记录到对话历史
-      if (this.sharedContext) {
-        this.sharedContext.addConversation('user', userPrompt, this.id);
-        this.sharedContext.addConversation('assistant', analysisResult, this.id);
-      }
+      // 注意：对话历史由 process() 方法统一记录，这里不重复记录
 
       return analysisResult;
     }
@@ -783,7 +786,7 @@ export class SimpleCoordinatorAgent implements IAgent {
     }
 
     // 7. 默认：调用 LLM
-    return await this.callLLM(content, images);
+    return await this.callLLM(content, images, activeContext);
   }
 
   /**
@@ -1109,10 +1112,8 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
       const webSearchTool = {
         type: 'web_search',
         web_search: {
-          enable: 'True',
-          search_engine: 'search_pro',
-          search_result: 'True',
-          count: '5',
+          enable: true,
+          search_result: true,
         }
       };
 
@@ -1334,8 +1335,15 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
   /**
    * 调用 LLM（支持视觉 - 使用官方 MCP 方式）
+   * @param content 用户输入内容
+   * @param images 附件（图片/视频）
+   * @param sharedContext 共享上下文（用于读取对话历史）
    */
-  private async callLLM(content: string, images: import('./base/Agent.js').Attachment[] = []): Promise<string> {
+  private async callLLM(
+    content: string,
+    images: import('./base/Agent.js').Attachment[] = [],
+    sharedContext?: SharedContext
+  ): Promise<string> {
     const apiKey = process.env.GLM_API_KEY;
     if (!apiKey) {
       return `❌ GLM API Key 未配置`;
@@ -1678,10 +1686,10 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
         },
       ];
 
-      // 加载历史对话（从 SharedContext）
+      // 加载历史对话（从 SharedContext 参数）
       let lastMessageIsCurrent = false;
-      if (this.sharedContext) {
-        const history = this.sharedContext.getAllMessages();
+      if (sharedContext) {
+        const history = sharedContext.getAllMessages();
         // 过滤掉system消息，避免重复
         const conversationMessages = history.filter(m => m.role !== 'system');
 
@@ -1772,9 +1780,8 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           requestBody.tools.push({
             type: 'web_search',
             web_search: {
-              enable: 'True',
-              search_engine: 'search_pro',
-              search_result: 'True',
+              enable: true,
+              search_result: true,
             }
           });
         }
