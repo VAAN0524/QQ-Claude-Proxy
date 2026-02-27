@@ -6,12 +6,12 @@
 import { QQBotAPI } from '../dist/channels/qqbot/api.js';
 
 const config = {
-  appId: '102862558',
-  appSecret: 'W4dCmMxZBoR5jO3jP6oWFyiaTMGA51xu',
-  sandbox: false,
+  appId: process.env.QQ_BOT_APP_ID || 'your_app_id_here',
+  appSecret: process.env.QQ_BOT_SECRET || 'your_app_secret_here',
+  sandbox: process.env.QQ_BOT_SANDBOX === 'true',
 };
 
-const userOpenId = '9F876637318A3309060486DF5DF0CF8C';
+const userOpenId = process.env.ALLOWED_USERS?.split(',')[0] || 'your_user_openid_here';
 
 // AI资讯摘要 (最新热门资讯 - 2026年2月23日)
 const newsSummary = `

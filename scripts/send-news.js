@@ -9,10 +9,10 @@ import * as path from 'path';
 
 // 配置
 const config = {
-  appId: process.env.QQ_BOT_APP_ID || '102862558',
-  appSecret: process.env.QQ_BOT_SECRET || 'W4dCmMxZBoR5jO3jP6oWFyiaTMGA51xu',
+  appId: process.env.QQ_BOT_APP_ID || 'your_app_id_here',
+  appSecret: process.env.QQ_BOT_SECRET || 'your_app_secret_here',
   sandbox: process.env.QQ_BOT_SANDBOX === 'true',
-  allowedUser: process.env.ALLOWED_USERS || '9F876637318A3309060486DF5DF0CF8C'
+  allowedUser: process.env.ALLOWED_USERS || 'your_user_openid_here'
 };
 
 async function sendAINews() {
