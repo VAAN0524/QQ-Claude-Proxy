@@ -185,9 +185,33 @@ quick-start.bat  # Windows 快捷启动
 
 ## 🔄 升级指南
 
-如果你已经安装过本项目，请按以下步骤升级：
+### 🚀 一键升级（推荐）
 
-### 1. 获取最新代码
+**Windows 用户：**
+```cmd
+upgrade.bat
+```
+
+**Linux/Mac 用户：**
+```bash
+chmod +x upgrade.sh
+./upgrade.sh
+```
+
+升级脚本会自动完成：
+- ✅ 获取最新代码
+- ✅ 检查并安装依赖（mcporter, yt-dlp）
+- ✅ 更新 .env 配置
+- ✅ 创建配置文件
+- ✅ 重新编译项目
+
+---
+
+### 手动升级
+
+如果你更喜欢手动控制，请按以下步骤操作：
+
+#### 1. 获取最新代码
 
 ```bash
 cd 你的项目目录
@@ -195,19 +219,21 @@ git fetch origin
 git pull origin main
 ```
 
-### 2. 安装新增依赖
+#### 2. 安装新增依赖
 
 ```bash
-# 检查是否已安装（如果已安装可跳过）
-mcporter --version
-yt-dlp --version
-
-# 如果未安装，执行：
+# mcporter (通过 npm)
 npm install -g mcporter
-npm install -g yt-dlp
+
+# yt-dlp (通过 pip)
+pip install yt-dlp
+# 或者
+pip3 install yt-dlp
+# 或者
+python -m pip install yt-dlp
 ```
 
-### 3. 更新 .env 配置
+#### 3. 更新 .env 配置
 
 在现有 `.env` 文件**末尾追加**以下内容（不要修改已有配置）：
 
@@ -218,14 +244,11 @@ AGENT_REACH_YTDLP_PATH=yt-dlp
 AGENT_REACH_ENABLE_SOCIAL=true
 ```
 
-### 4. 创建配置文件
+#### 4. 创建配置文件
 
-```bash
-# 确保 config 目录存在
-mkdir -p config
-```
+升级脚本会自动创建，或手动创建：
 
-创建 `config/agent-reach.json`：
+**config/agent-reach.json:**
 ```json
 {
   "version": "1.0.0",
@@ -241,14 +264,14 @@ mkdir -p config
 }
 ```
 
-创建 `config/mcporter.json`：
+**config/mcporter.json:**
 ```json
 {
   "exa": "https://mcp.exa.ai/mcp"
 }
 ```
 
-### 5. 重新编译和启动
+#### 5. 重新编译和启动
 
 ```bash
 npm run build
@@ -260,6 +283,7 @@ npm start
 - **安全升级** - 您的现有配置（QQ_BOT_*、GLM_API_KEY 等）完全不受影响
 - **向后兼容** - 原有的搜索功能继续正常工作
 - **可选功能** - Agent Reach 是增强功能，不配置也不影响基础使用
+- **幂等性** - 升级脚本可以重复运行，不会重复添加配置
 
 ---
 
