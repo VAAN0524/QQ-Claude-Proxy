@@ -1116,18 +1116,11 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
       const webSearchTool = {
         type: 'web_search',
         web_search: {
-<<<<<<< HEAD
-          enable: 'True',
-          search_engine: 'search_pro',
-          search_result: 'True',
-          search_prompt: `今天是${dateStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
-          count: '5',
-          search_recency_filter: '7d',  // 限制搜索最近7天的内容
-          content_size: 'high',  // 获取更详细的内容摘要
-=======
           enable: true,
           search_result: true,
->>>>>>> feature/agent-reach-integration
+          search_prompt: `今天是${dateStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
+          search_recency_filter: '7d',
+          content_size: 'high',
         }
       };
 
