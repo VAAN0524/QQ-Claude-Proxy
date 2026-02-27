@@ -183,6 +183,86 @@ quick-start.bat  # Windows 快捷启动
 
 ---
 
+## 🔄 升级指南
+
+如果你已经安装过本项目，请按以下步骤升级：
+
+### 1. 获取最新代码
+
+```bash
+cd 你的项目目录
+git fetch origin
+git pull origin main
+```
+
+### 2. 安装新增依赖
+
+```bash
+# 检查是否已安装（如果已安装可跳过）
+mcporter --version
+yt-dlp --version
+
+# 如果未安装，执行：
+npm install -g mcporter
+npm install -g yt-dlp
+```
+
+### 3. 更新 .env 配置
+
+在现有 `.env` 文件**末尾追加**以下内容（不要修改已有配置）：
+
+```env
+# Agent Reach 配置
+AGENT_REACH_MCPORTER_PATH=mcporter
+AGENT_REACH_YTDLP_PATH=yt-dlp
+AGENT_REACH_ENABLE_SOCIAL=true
+```
+
+### 4. 创建配置文件
+
+```bash
+# 确保 config 目录存在
+mkdir -p config
+```
+
+创建 `config/agent-reach.json`：
+```json
+{
+  "version": "1.0.0",
+  "mcporter": {
+    "configured": true,
+    "path": "mcporter",
+    "servers": ["exa"]
+  },
+  "ytDlp": {
+    "installed": true,
+    "path": "yt-dlp"
+  }
+}
+```
+
+创建 `config/mcporter.json`：
+```json
+{
+  "exa": "https://mcp.exa.ai/mcp"
+}
+```
+
+### 5. 重新编译和启动
+
+```bash
+npm run build
+npm start
+```
+
+### ✅ 重要说明
+
+- **安全升级** - 您的现有配置（QQ_BOT_*、GLM_API_KEY 等）完全不受影响
+- **向后兼容** - 原有的搜索功能继续正常工作
+- **可选功能** - Agent Reach 是增强功能，不配置也不影响基础使用
+
+---
+
 ## 📖 使用指南
 
 ### 模式切换
