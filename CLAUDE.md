@@ -275,7 +275,40 @@ const descriptions = toolManager.getToolDescriptions();
 - 用户输入文件名必须经过 `sanitizeFileName()` 清理
 - 防止路径穿越攻击
 
-## 扩展开发
+---
+
+## 🔒 安全铁律
+
+**禁止泄露敏感信息到 Git 仓库**
+
+以下信息**绝对禁止**提交到 Git：
+
+- ❌ API Keys (Tavily, GLM, Anthropic, OpenAI, etc.)
+- ❌ 密钥和密码 (QQ Bot Secret, Access Token, etc.)
+- ❌ 用户 OpenID 和个人标识信息
+- ❌ 任何形式的真实凭证
+
+**正确做法**：
+
+1. 所有敏感信息必须放在 `.env` 文件中（已在 `.gitignore`）
+2. 代码中使用 `process.env.VARIABLE_NAME` 读取
+3. 示例和文档中必须使用占位符（如 `your_api_key_here`）
+4. 提交前必须执行安全检查
+
+```bash
+# 检查是否有敏感信息泄露
+git ls-files | xargs grep -l "tvly-"      # Tavily Key
+git ls-files | xargs grep -l "sk-ant-"     # Anthropic Key
+git ls-files | xargs grep -l "\.A6TPPWg"  # GLM Key 模式
+```
+
+**违规后果**：
+
+- 必须立即从 Git 历史中删除敏感信息
+- 如果密钥已泄露，必须立即撤销并重新生成
+- 使用 `git filter-branch` 或 `git filter-repo` 清理历史
+
+---
 
 ### 添加新 Agent
 

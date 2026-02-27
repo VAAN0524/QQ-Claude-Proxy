@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": 1772204082770,
+  "lastUpdated": 1772204283900,
   "skills": {
     "agent-coordination": {
       "name": "agent-coordination",
@@ -231,16 +231,16 @@
       "path": "C:\\Test\\bot\\skills\\smart-search",
       "trigger": "smart_search",
       "description": "智能搜索技能。集成 DuckDuckGo、Tavily、Exa 语义搜索、Jina Reader、视频搜索等多种搜索能力，获取实时信息、查找资料、提取网页内容。",
-      "mtime": 1772202400807.6853,
-      "size": 5452
+      "mtime": 1772204273196.4146,
+      "size": 5647
     },
     "tavily-search": {
       "name": "tavily-search",
       "path": "C:\\Test\\bot\\skills\\tavily-search",
       "trigger": "tavily-search",
       "description": "使用 Tavily AI 搜索 API 进行实时网络搜索，需要 API Key。",
-      "mtime": 1772201602814.7546,
-      "size": 418
+      "mtime": 1772204276037.9856,
+      "size": 443
     },
     "test-case-generator": {
       "name": "test-case-generator",

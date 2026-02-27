@@ -19,7 +19,7 @@
 ## 🔑 API 密钥
 
 ```
-TAVILY_API_KEY=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
+TAVILY_API_KEY=tvly-your-api-key-here
 ```
 
 ## 🌐 网络问题解决方案

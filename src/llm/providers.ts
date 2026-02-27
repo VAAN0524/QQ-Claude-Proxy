@@ -348,15 +348,20 @@ export function glm(config: ProviderConfig & {
 
             // 启用智谱 AI 内置网络搜索（使用正确的 tools 格式）
             if (enableWebSearch) {
+              const now = new Date();
+              const todayStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
               toolsList.push({
                 type: 'web_search',
                 web_search: {
                   enable: 'True',
                   search_engine: 'search_pro',
                   search_result: 'True',
+                  search_prompt: `今天是${todayStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
+                  search_recency_filter: '7d',  // 限制搜索最近7天的内容
+                  content_size: 'high',  // 获取更详细的内容摘要
                 }
               });
-              logger.debug('[LLM Provider] GLM web_search enabled via tools');
+              logger.debug('[LLM Provider] GLM web_search enabled via tools with recency filter');
             }
 
             if (toolsList.length > 0) {

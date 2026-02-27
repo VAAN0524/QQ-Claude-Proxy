@@ -106,6 +106,14 @@
 
 ---
 
+## 📢 现有用户注意
+
+**如果你已经安装过本项目**，请查看 [**UPGRADE.md**](./UPGRADE.md) 了解如何升级到最新版本。
+
+升级过程**不会改变你的现有配置**，只需添加少量新配置项即可。
+
+---
+
 ## 🚀 快速开始
 
 ### 1. 安装 Claude Code CLI (必需)
@@ -172,6 +180,110 @@ quick-start.bat  # Windows 快捷启动
 
 ### 6. 访问 Dashboard
 打开浏览器访问 **http://localhost:8080**
+
+---
+
+## 🔄 升级指南
+
+### 🚀 一键升级（推荐）
+
+**Windows 用户：**
+```cmd
+upgrade.bat
+```
+
+**Linux/Mac 用户：**
+```bash
+chmod +x upgrade.sh
+./upgrade.sh
+```
+
+升级脚本会自动完成：
+- ✅ 获取最新代码
+- ✅ 检查并安装依赖（mcporter, yt-dlp）
+- ✅ 更新 .env 配置
+- ✅ 创建配置文件
+- ✅ 重新编译项目
+
+---
+
+### 手动升级
+
+如果你更喜欢手动控制，请按以下步骤操作：
+
+#### 1. 获取最新代码
+
+```bash
+cd 你的项目目录
+git fetch origin
+git pull origin main
+```
+
+#### 2. 安装新增依赖
+
+```bash
+# mcporter (通过 npm)
+npm install -g mcporter
+
+# yt-dlp (通过 pip)
+pip install yt-dlp
+# 或者
+pip3 install yt-dlp
+# 或者
+python -m pip install yt-dlp
+```
+
+#### 3. 更新 .env 配置
+
+在现有 `.env` 文件**末尾追加**以下内容（不要修改已有配置）：
+
+```env
+# Agent Reach 配置
+AGENT_REACH_MCPORTER_PATH=mcporter
+AGENT_REACH_YTDLP_PATH=yt-dlp
+AGENT_REACH_ENABLE_SOCIAL=true
+```
+
+#### 4. 创建配置文件
+
+升级脚本会自动创建，或手动创建：
+
+**config/agent-reach.json:**
+```json
+{
+  "version": "1.0.0",
+  "mcporter": {
+    "configured": true,
+    "path": "mcporter",
+    "servers": ["exa"]
+  },
+  "ytDlp": {
+    "installed": true,
+    "path": "yt-dlp"
+  }
+}
+```
+
+**config/mcporter.json:**
+```json
+{
+  "exa": "https://mcp.exa.ai/mcp"
+}
+```
+
+#### 5. 重新编译和启动
+
+```bash
+npm run build
+npm start
+```
+
+### ✅ 重要说明
+
+- **安全升级** - 您的现有配置（QQ_BOT_*、GLM_API_KEY 等）完全不受影响
+- **向后兼容** - 原有的搜索功能继续正常工作
+- **可选功能** - Agent Reach 是增强功能，不配置也不影响基础使用
+- **幂等性** - 升级脚本可以重复运行，不会重复添加配置
 
 ---
 
@@ -283,7 +395,15 @@ QQ-Claude-Proxy/
 
 ## 🔥 最新更新 (v1.6.0)
 
+> 📌 **现有用户升级**: 查看 [UPGRADE.md](./UPGRADE.md) 获取平滑升级指南
+
 ### ✨ 功能增强
+
+- **🔍 Agent Reach 集成** 🆕
+  - Exa 语义搜索 - AI 驱动的智能搜索
+  - Jina Reader - 网页内容提取
+  - YouTube/B站视频搜索 - 获取视频信息
+  - 智能路由 - 自动识别查询类型
 
 - **🤖 Agent 人格设定系统**
   - 阿白人格 - 友善亲切、专业可靠的 AI 伙伴
@@ -305,6 +425,7 @@ QQ-Claude-Proxy/
 - **🔧 工具层扩展**
   - 文件工具 - 完整的文件操作支持
   - 进程工具 - 系统进程管理
+  - 搜索工具 - Tavily/Exa/Jina Reader/视频搜索
 
 - **🧠 记忆系统增强**
   - DocumentChunker - 文档分块处理
@@ -323,6 +444,7 @@ QQ-Claude-Proxy/
   - ZaiMcpClient 自动重连机制
   - 搜索工具描述更新 (包含当前年份提示)
   - API 请求超时处理
+  - web_search 布尔值格式修复 (`'True'` → `true`)
 
 ---
 

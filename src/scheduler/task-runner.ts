@@ -108,9 +108,9 @@ export class TaskRunner {
         ? command
         : `--dangerously-skip-permissions ${command}`;
 
-      // 使用 npx 来执行 claude 命令，确保跨平台兼容
+      // 直接调用 claude 命令（已在 PATH 中）
       // -p 参数使 CLI 以非交互模式运行，执行后自动退出
-      const fullCommand = `npx claude -p ${cmd}`;
+      const fullCommand = `claude -p ${cmd}`;
 
       // 创建环境变量，移除 CLAUDECODE 以避免嵌套会话检测
       // CLI 检查 process.env.CLAUDECODE === "1"
