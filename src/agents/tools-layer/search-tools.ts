@@ -355,7 +355,14 @@ export async function exaSearch(
   try {
     logger.info(`[Agent Reach] Exa 搜索: ${query}`);
 
-    const cmd = `mcporter call exa.web_search_exa '${JSON.stringify({ query, ...options })}'`;
+    // mcporter 参数格式: key:value key2:value2
+    const params: string[] = [`query:${query}`];
+    if (options.numResults) params.push(`numResults:${options.numResults}`);
+    if (options.livecrawl) params.push(`livecrawl:${options.livecrawl}`);
+    if (options.type) params.push(`type:${options.type}`);
+    if (options.contextMaxCharacters) params.push(`contextMaxCharacters:${options.contextMaxCharacters}`);
+
+    const cmd = `mcporter call exa.web_search_exa ${params.join(' ')}`;
     const output = execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] });
 
     // 解析 Exa 输出（Markdown 格式）
@@ -378,32 +385,41 @@ function parseExaOutput(output: string): ExaResult[] {
   let currentResult: Partial<ExaResult> | null = null;
 
   for (const line of lines) {
-    const titleMatch = line.match(/^#+\s+(.+)$/);
-    if (titleMatch) {
+    // Title 行 - 这是主要的标识符
+    if (line.startsWith('Title:')) {
       if (currentResult?.title) {
         results.push(currentResult as ExaResult);
       }
-      currentResult = { title: titleMatch[1].trim() };
+      currentResult = { title: line.substring(7).trim() };
       continue;
     }
 
-    const urlMatch = line.match(/^\*\*URL:\*\*\s+(.+)$/);
-    if (urlMatch && currentResult) {
-      currentResult.url = urlMatch[1].trim();
+    // URL 行
+    if (line.startsWith('URL:') && currentResult) {
+      currentResult.url = line.substring(5).trim();
       continue;
     }
 
-    const dateMatch = line.match(/^\*\*Published Date:\*\*\s+(.+)$/);
-    if (dateMatch && currentResult) {
-      currentResult.publishedDate = dateMatch[1].trim();
+    // Published Date 行
+    if (line.startsWith('Published Date:') && currentResult) {
+      currentResult.publishedDate = line.substring(15).trim();
       continue;
     }
 
-    if (line.startsWith('**Text:**') || line.startsWith('**text:**') && currentResult) {
-      currentResult.text = line.replace(/^\*\*[Tt]ext:\*\*\s*/, '').trim();
-    } else if (currentResult && line.trim() && !line.match(/^\*\*/)) {
-      // 继续累积文本内容
-      currentResult.text = (currentResult.text || '') + ' ' + line.trim();
+    // Text 行 (内容开始)
+    if (line.startsWith('Text:') && currentResult) {
+      currentResult.text = line.substring(6).trim();
+      continue;
+    }
+
+    // 继续累积文本内容（任何非空行，且不是新的字段）
+    if (currentResult && line.trim() &&
+        !line.startsWith('Title:') &&
+        !line.startsWith('URL:') &&
+        !line.startsWith('Published Date:') &&
+        !line.startsWith('Text:') &&
+        !line.startsWith('Author:')) {
+      currentResult.text = (currentResult.text || '') + '\n' + line;
     }
   }
 
