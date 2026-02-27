@@ -547,7 +547,13 @@ export class SimpleCoordinatorAgent implements IAgent {
 
 **注意**：图片/视频分析会自动进行，你只需要基于分析结果回答即可。`,
       rules: [],
-      availableTools: ['smart_search', 'fetch_web'], // 默认可用工具
+      availableTools: [
+        'smart_search', 'tavily_search',
+        'exa_search', 'exa_code_search', 'smart_search_v2',
+        'jina_read',
+        'youtube_search', 'bilibili_search',
+        'fetch_web'
+      ], // 默认可用工具（包含 Agent Reach）
       examples: [],
     };
   }
@@ -879,7 +885,7 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
   }
 
   /**
-   * 执行网络搜索
+   * 执行网络搜索（改进的关键词提取）
    */
   private async executeSearch(content: string): Promise<string> {
     logger.info(`[SimpleCoordinator] 网络搜索`);
@@ -890,19 +896,283 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
     }
 
     try {
-      const query = content
-        .replace(/^(搜索|search)\s*/i, '')
-        .replace(/用\s*\w+\s*搜索/i, '')
+      // 改进的关键词提取逻辑
+      let query = content
+        // 移除搜索命令前缀
+        .replace(/^(搜索|search|查|查找|查询)\s*/i, '')
+        // 移除"用xxx搜索"模式
+        .replace(/用\s*\w+(\s+搜索)?\s*/i, '')
+        // 移除"一下"、"一下"等语气词
+        .replace(/一下|一哈|一下下/g, '')
+        // 移除常见的搜索引导词
+        .replace(/^(帮我|请|麻烦|能否|可以)/, '')
+        // 移除标点符号（保留英文、数字、中文）
+        .replace(/[，。！？、,.?!]/g, ' ')
+        // 压缩多余空格
+        .replace(/\s+/g, ' ')
         .trim();
 
+      // 如果提取后为空，使用原文
       if (!query) {
-        return `⚠️ 无法提取搜索关键词`;
+        query = content.replace(/^(搜索|search)\s*/i, '').trim();
       }
 
-      return await tool.execute({ query, maxResults: 5 });
+      logger.info(`[SimpleCoordinator] 提取的搜索关键词: "${query}"`);
+
+      if (!query || query.length < 2) {
+        return `⚠️ 无法提取有效的搜索关键词。\n\n请尝试直接说出你想搜索的内容，例如：\n- "搜索 TypeScript 最新版本"\n- "TypeScript 有哪些新特性"`;
+      }
+
+      // 自动添加当前年份以获取最新信息（如果查询中没有年份）
+      const currentYear = new Date().getFullYear();
+      const hasYear = new RegExp(`${currentYear}|202[0-9]|20[12][0-9]`).test(query);
+      if (!hasYear && !/latest|new|最新|recent|最近/i.test(query)) {
+        // 查询中没有年份或"最新"关键词，添加当前年份
+        query += ` ${currentYear}`;
+        logger.info(`[SimpleCoordinator] 自动添加年份: ${query}`);
+      }
+
+      const result = await tool.execute({ query, maxResults: 5 });
+
+      // 检查结果质量
+      const qualityCheck = this.checkSearchResultQuality(result, query);
+      if (!qualityCheck.isGood) {
+        logger.warn(`[SimpleCoordinator] 搜索结果质量不佳: ${qualityCheck.reason}`);
+        // 尝试使用简化关键词重新搜索
+        const simplifiedQuery = this.simplifySearchQuery(content);
+        if (simplifiedQuery !== query) {
+          logger.info(`[SimpleCoordinator] 尝试简化关键词重新搜索: "${simplifiedQuery}"`);
+          const retryResult = await tool.execute({ query: simplifiedQuery, maxResults: 5 });
+          return retryResult;
+        }
+      }
+
+      return result;
     } catch (error) {
-      return `❌ 搜索失败: ${error}`;
+      logger.error(`[SimpleCoordinator] 搜索失败: ${error}`);
+      return `❌ 搜索失败: ${error instanceof Error ? error.message : String(error)}`;
     }
+  }
+
+  /**
+   * 简化搜索查询（移除修饰词，保留核心关键词）
+   */
+  private simplifySearchQuery(content: string): string {
+    // 移除所有修饰词，只保留名词、动词和专有名词
+    let simplified = content
+      .replace(/^(搜索|search|查|查找|查询|帮我|请)/gi, '')
+      .replace(/一下|一哈|一下下/g, '')
+      .replace(/最新的|最近的|最近的|当前的|现在的/g, '')
+      .replace(/怎么样|如何|怎么|什么是|什么叫|哪些是/g, '')
+      .replace(/关于|有关|相关的/g, '')
+      .trim();
+
+    // 如果简化后太短，使用原文的核心部分
+    if (simplified.length < 3) {
+      const words = content.split(/[\s，。！？、]+/);
+      // 取最长的词作为关键词
+      simplified = words.reduce((longest, word) => word.length > longest.length ? word : longest, '');
+    }
+
+    return simplified;
+  }
+
+  /**
+   * 检查搜索结果质量（改进版 - 真正判断相关性）
+   *
+   * 质量标准：
+   * 1. 必须有足够数量的有效结果（≥2条）
+   * 2. 结果标题必须与查询关键词相关
+   * 3. URL 必须有效且正常
+   * 4. 不能只是错误提示或配置指南
+   */
+  private checkSearchResultQuality(result: string, query: string): { isGood: boolean; reason?: string; score?: number } {
+    if (!result || result.trim().length < 30) {
+      return { isGood: false, reason: '结果为空', score: 0 };
+    }
+
+    // ========== 1. 检查是否是错误/配置提示 ==========
+    const errorPatterns = [
+      'API Key', 'TAVILY_API_GUIDE', '申请步骤', '配置方法',
+      '免费额度', '搜索失败', '❌', '未找到', '无法连接',
+      '请配置', '请申请', '需要 API Key'
+    ];
+    for (const pattern of errorPatterns) {
+      if (result.includes(pattern)) {
+        // 如果包含错误提示但结果长度仍然很长，可能是混合内容
+        if (result.length > 500) {
+          // 继续检查，但降低权重
+          break;
+        }
+        return { isGood: false, reason: `包含错误提示: ${pattern}`, score: 0 };
+      }
+    }
+
+    // ========== 2. 解析搜索结果 ==========
+    // Tavily/Exa 格式: "1. **标题**\n   内容...\n   🔗 URL"
+    const resultEntries = this.parseSearchResultEntries(result);
+
+    if (resultEntries.length === 0) {
+      return { isGood: false, reason: '无法解析出有效结果条目', score: 0 };
+    }
+
+    // ========== 3. 计算相关性得分 ==========
+    const queryKeywords = this.extractQueryKeywords(query);
+    logger.info(`[搜索质量检查] 查询关键词: ${queryKeywords.join(', ')}, 结果数量: ${resultEntries.length}`);
+
+    let totalScore = 0;
+    let relevantCount = 0;
+    const maxScore = resultEntries.length * 100;
+
+    for (const entry of resultEntries) {
+      const entryScore = this.calculateEntryRelevance(entry, queryKeywords);
+      totalScore += entryScore;
+      if (entryScore >= 40) { // 单条结果相关性阈值
+        relevantCount++;
+      }
+      logger.debug(`[搜索质量检查] 条目: "${entry.title.substring(0, 30)}...", 得分: ${entryScore}`);
+    }
+
+    const relevanceScore = Math.round((totalScore / maxScore) * 100);
+    logger.info(`[搜索质量检查] 总体相关性: ${relevanceScore}%, 相关条目: ${relevantCount}/${resultEntries.length}`);
+
+    // ========== 4. 质量判定 ==========
+    // 必须满足：至少2条结果 且 相关性 >= 30%
+    const isGood = resultEntries.length >= 2 && relevanceScore >= 30;
+
+    if (!isGood) {
+      let reason = '';
+      if (resultEntries.length < 2) {
+        reason = `结果数量不足 (${resultEntries.length}条)`;
+      } else if (relevanceScore < 30) {
+        reason = `相关性过低 (${relevanceScore}%)`;
+      } else {
+        reason = `质量不达标 (条目:${resultEntries.length}, 相关性:${relevanceScore}%)`;
+      }
+      return { isGood: false, reason, score: relevanceScore };
+    }
+
+    return { isGood: true, score: relevanceScore };
+  }
+
+  /**
+   * 解析搜索结果条目
+   */
+  private parseSearchResultEntries(result: string): Array<{ title: string; url: string; content: string }> {
+    const entries: Array<{ title: string; url: string; content: string }> = [];
+
+    // 按条目分割（查找 "1. "、"2. " 等编号）
+    const lines = result.split('\n');
+    let currentEntry: { title: string; url: string; content: string } | null = null;
+
+    for (const line of lines) {
+      // 检测条目开始: "数字. "**标题**" 或 "数字. 标题"
+      const entryMatch = line.match(/^(\d+)\.\s+\*\*(.+?)\*\*|(\d+)\.\s*(.+)$/);
+      if (entryMatch) {
+        // 保存前一个条目
+        if (currentEntry && currentEntry.url) {
+          entries.push(currentEntry);
+        }
+        currentEntry = {
+          title: (entryMatch[1] || entryMatch[3] || '').replace(/\*\*/g, '').trim(),
+          url: '',
+          content: ''
+        };
+      } else if (currentEntry) {
+        // 检测 URL: "🔗 URL" 或 "http"
+        const urlMatch = line.match(/🔗\s*(https?:\/\/\S+)|http(s)?:\/\/\S+/);
+        if (urlMatch) {
+          currentEntry.url = urlMatch[1] || urlMatch[0];
+        }
+        // 收集内容
+        if (line.trim() && !line.startsWith('🔗') && !line.startsWith('📅')) {
+          currentEntry.content += line + ' ';
+        }
+      }
+    }
+
+    // 保存最后一个条目
+    if (currentEntry && currentEntry.url) {
+      entries.push(currentEntry);
+    }
+
+    return entries;
+  }
+
+  /**
+   * 提取查询关键词（移除停用词）
+   */
+  private extractQueryKeywords(query: string): string[] {
+    // 移除常见的停用词
+    const stopWords = new Set([
+      '的', '了', '是', '在', '和', '与', '或', '但', '而', '及',
+      'a', 'an', 'the', 'of', 'and', 'or', 'but', 'for', 'with', 'about',
+      '最新', '最近', '如何', '怎么', '什么', '哪些', '怎样', '有没有',
+      '最新', 'latest', 'new', 'recent', '如何', 'how', 'what', 'which'
+    ]);
+
+    // 分词：按空格、中文边界分词
+    const tokens = query
+      .toLowerCase()
+      .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ')
+      .split(/\s+/);
+
+    // 过滤停用词和短词
+    return tokens
+      .map(t => t.trim())
+      .filter(t => t.length >= 2 && !stopWords.has(t));
+  }
+
+  /**
+   * 计算单条结果的相关性得分 (0-100)
+   */
+  private calculateEntryRelevance(
+    entry: { title: string; url: string; content: string },
+    queryKeywords: string[]
+  ): number {
+    if (!entry.title || queryKeywords.length === 0) {
+      return 20; // 基础分
+    }
+
+    const titleLower = entry.title.toLowerCase();
+    const urlLower = entry.url.toLowerCase();
+    let score = 20; // 基础分
+
+    // 标题完全匹配 (+50)
+    const exactMatch = queryKeywords.find(kw => titleLower.includes(kw));
+    if (exactMatch) {
+      score += 50;
+    }
+
+    // 标题包含多个关键词 (+30)
+    const matchCount = queryKeywords.filter(kw => titleLower.includes(kw)).length;
+    if (matchCount >= 2) {
+      score += 30;
+    } else if (matchCount === 1) {
+      score += 15;
+    }
+
+    // URL 包含关键词 (+10)
+    if (queryKeywords.some(kw => urlLower.includes(kw))) {
+      score += 10;
+    }
+
+    // 内容长度合理 (+10)
+    if (entry.content && entry.content.length >= 50 && entry.content.length <= 500) {
+      score += 10;
+    }
+
+    // 标题长度合理 (+10)
+    if (entry.title.length >= 10 && entry.title.length <= 100) {
+      score += 10;
+    }
+
+    // URL 有效 (+10)
+    if (entry.url && (entry.url.startsWith('http') || entry.url.startsWith('https'))) {
+      score += 10;
+    }
+
+    return Math.min(score, 100);
   }
 
   /**
@@ -1108,12 +1378,19 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
 注意：请使用当前年份 (${currentDate}) 的最新 API 和语法。`;
 
-      // 智谱 AI 网络搜索工具（正确格式）
+      // 获取当前日期用于搜索提示
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+      // 智谱 AI 网络搜索工具（完整参数配置）
       const webSearchTool = {
         type: 'web_search',
         web_search: {
           enable: true,
           search_result: true,
+          search_prompt: `今天是${dateStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
+          search_recency_filter: '7d',
+          content_size: 'high',
         }
       };
 
@@ -1669,6 +1946,137 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
                   },
                 },
               });
+            } else if (tool.name === 'exa_search') {
+              // Agent Reach - Exa 语义搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '搜索关键词',
+                      },
+                      options: {
+                        type: 'object',
+                        description: '搜索选项（可选）',
+                        properties: {
+                          numResults: { type: 'number', description: '返回结果数量' },
+                          livecrawl: { type: 'string', enum: ['fallback', 'preferred'], description: '实时抓取模式' },
+                          type: { type: 'string', enum: ['auto', 'fast'], description: '搜索类型' },
+                        },
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
+            } else if (tool.name === 'exa_code_search') {
+              // Agent Reach - Exa 代码搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '代码搜索关键词',
+                      },
+                      tokensNum: {
+                        type: 'number',
+                        description: 'Token 数量（可选）',
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
+            } else if (tool.name === 'jina_read') {
+              // Agent Reach - Jina Reader 网页提取
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: '要提取的网页 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'youtube_search') {
+              // Agent Reach - YouTube 视频搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: 'YouTube 视频 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'bilibili_search') {
+              // Agent Reach - B站视频搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: 'B站视频 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'smart_search_v2') {
+              // Agent Reach - 智能搜索 V2
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '搜索关键词或 URL',
+                      },
+                      numResults: {
+                        type: 'number',
+                        description: '返回结果数量（可选）',
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
             }
           } else {
             logger.warn(`[SimpleCoordinator] 工具 ${toolName} 未找到`);
@@ -1776,12 +2184,17 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
         // 添加智谱 AI 内置网络搜索工具
         if (!isLastIteration) {
+          const now = new Date();
+          const todayStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
           requestBody.tools = requestBody.tools || [];
           requestBody.tools.push({
             type: 'web_search',
             web_search: {
               enable: true,
               search_result: true,
+              search_prompt: `今天是${todayStr}。请搜索并总结最新的相关信息，优先展示最近7天内的新闻和资讯。请标注信息来源的发布日期。`,
+              search_recency_filter: '7d',  // 限制搜索最近7天的内容
+              content_size: 'high',
             }
           });
         }
@@ -1877,11 +2290,203 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
 
       logger.debug(`[SimpleCoordinator] Function Calling 完成，最终响应长度: ${finalResponse?.length || 0}`);
 
+      // ========== 🔄 回答质量自检和闭环反馈 ==========
+      const qualityCheck = this.checkResponseQuality(finalResponse, content);
+      if (!qualityCheck.isQualityGood) {
+        logger.warn(`[SimpleCoordinator] 回答质量不合格: ${qualityCheck.reason}`);
+        logger.info(`[SimpleCoordinator] 启动闭环反馈机制...`);
+
+        // 尝试自动纠正
+        const correctedResponse = await this.autoCorrectResponse(content, finalResponse, qualityCheck);
+        if (correctedResponse && correctedResponse !== finalResponse) {
+          logger.info(`[SimpleCoordinator] 闭环纠正成功，响应长度: ${correctedResponse.length}`);
+          return correctedResponse;
+        }
+      }
+
       return finalResponse;
     } catch (error) {
       logger.error(`[SimpleCoordinator] LLM 调用失败: ${error}`);
       return `❌ LLM 调用失败: ${error instanceof Error ? error.message : String(error)}`;
     }
+  }
+
+  /**
+   * 检查回答质量
+   *
+   * 无效答案定义：
+   * 1. 纯粹拒绝（有拒绝词但无实质内容）
+   * 2. 纯粹AI声明（只有身份声明，无实际回答）
+   * 3. 纯粹"不知道"（只有无知声明，无其他信息）
+   * 4. 空或近空响应
+   * 5. 纯思考过程（"让我想想"等，无实际内容）
+   *
+   * @returns { isQualityGood: boolean, reason?: string }
+   */
+  private checkResponseQuality(response: string, originalQuery: string): { isQualityGood: boolean; reason?: string } {
+    if (!response || response.trim().length === 0) {
+      return { isQualityGood: false, reason: '响应为空' };
+    }
+
+    const trimmed = response.trim();
+    const lowerResponse = trimmed.toLowerCase();
+
+    // ========== 1. 纯粹拒绝检测 ==========
+    // 匹配 "抱歉，我无法..." 但后面没有实质内容的情况
+    const pureRefusalPattern = /^(抱歉|对不起|不好意思|sorry|我无法|我没法|我不能)[，,。\s]*?(无法|不能|没法|没办法).*?([。！？\.!?]|\s*$)/;
+    if (pureRefusalPattern.test(lowerResponse) && trimmed.length < 50) {
+      return { isQualityGood: false, reason: '纯粹拒绝回答' };
+    }
+
+    // ========== 2. 纯粹 AI 身份声明检测 ==========
+    // 匹配只有身份声明，没有实际回答的情况
+    const pureAIIdentityPattern = /^(作为(一个)?AI(语言模型)?|我(只是|是一个)AI)[，,。\s]*?(我(没有|无法|不能|没法)|(没有|无法|不能|没法)(个人观点|意识|知识)).*?([。！？\.!?]|\s*$)/;
+    if (pureAIIdentityPattern.test(lowerResponse) && trimmed.length < 80) {
+      return { isQualityGood: false, reason: '纯粹AI身份声明' };
+    }
+
+    // ========== 3. 纯粹"不知道"检测 ==========
+    // 匹配只有"我不知道"之类，没有提供任何替代方案或建议
+    const pureDontKnowPattern = /^(我(不知道|不清楚|不确定|不了解)|不知道|不清楚|不确定)[，,。\s]*?([。！？\.!?]|\s*$)/;
+    if (pureDontKnowPattern.test(lowerResponse) && trimmed.length < 30) {
+      return { isQualityGood: false, reason: '纯粹不知道' };
+    }
+
+    // ========== 4. 空或近空响应检测 ==========
+    // 只有空白字符、表情符号等
+    if (/^[\s\u200b\u200c\u200d\p{Emoji}]+$/u.test(trimmed)) {
+      return { isQualityGood: false, reason: '仅包含空白/表情' };
+    }
+
+    // ========== 5. 纯思考过程检测 ==========
+    // 只有思考标记，没有实际内容
+    const pureThinkingPattern = /^(让我(想想|思考|查查)|我需要(思考|查找|研究)|正在(思考|查找|搜索))[，,。\s]*?([。！？\.!?]|\s*$)/;
+    if (pureThinkingPattern.test(lowerResponse) && trimmed.length < 40) {
+      return { isQualityGood: false, reason: '纯思考过程' };
+    }
+
+    // ========== 6. 过短响应检测（但要有实质内容） ==========
+    if (trimmed.length < 15) {
+      // 检查是否有实质内容（中英文、数字、链接中的至少一种）
+      const hasSubstance = /[\u4e00-\u9fa5a-zA-Z0-9]{5,}|https?:\/\//.test(trimmed);
+      if (!hasSubstance) {
+        return { isQualityGood: false, reason: '过短且无实质内容' };
+      }
+    }
+
+    // ========== 7. 检查是否有基本内容 ==========
+    // 必须包含至少一个有意义的内容元素
+    const hasBasicContent =
+      /[\u4e00-\u9fa5]{8,}/.test(trimmed) ||  // 至少8个中文字符
+      /[a-zA-Z]{15,}/.test(trimmed) ||      // 至少15个英文字母
+      /\d{3,}/.test(trimmed) ||             // 至少3个连续数字
+      /https?:\/\/\S+/.test(trimmed);        // 或一个URL
+
+    if (!hasBasicContent) {
+      return { isQualityGood: false, reason: '缺少基本内容' };
+    }
+
+    return { isQualityGood: true };
+  }
+
+  /**
+   * 自动纠正低质量响应（闭环反馈）
+   */
+  private async autoCorrectResponse(
+    originalQuery: string,
+    failedResponse: string,
+    qualityCheck: { isQualityGood: boolean; reason?: string }
+  ): Promise<string | null> {
+    logger.info(`[SimpleCoordinator] 尝试自动纠正，原因: ${qualityCheck.reason}`);
+
+    // 策略1: 如果是搜索相关查询，尝试使用备用搜索工具
+    const lowerQuery = originalQuery.toLowerCase();
+    if (lowerQuery.includes('搜索') || lowerQuery.includes('search') || lowerQuery.includes('查找')) {
+      logger.info(`[SimpleCoordinator] 检测到搜索查询，尝试备用搜索`);
+
+      // 尝试 Tavily
+      const tavilyTool = this.toolManager.get('tavily_search');
+      if (tavilyTool) {
+        try {
+          const query = originalQuery.replace(/^(搜索|search|用\s*\w+\s*搜索)\s*/i, '').trim();
+          const result = await tavilyTool.execute({ query, maxResults: 5 });
+          if (result && result.length > 50 && !result.includes('API')) {
+            logger.info(`[SimpleCoordinator] Tavily 备用搜索成功`);
+            return `🔍 **搜索结果** (Tavily)\n\n${result}`;
+          }
+        } catch (e) {
+          logger.debug(`[SimpleCoordinator] Tavily 备用搜索失败: ${e}`);
+        }
+      }
+
+      // 尝试 DuckDuckGo
+      const ddgTool = this.toolManager.get('duckduckgo_search');
+      if (ddgTool) {
+        try {
+          const query = originalQuery.replace(/^(搜索|search|用\s*\w+\s*搜索)\s*/i, '').trim();
+          const result = await ddgTool.execute({ query, maxResults: 5 });
+          if (result && result.length > 50) {
+            logger.info(`[SimpleCoordinator] DuckDuckGo 备用搜索成功`);
+            return `🔍 **搜索结果** (DuckDuckGo)\n\n${result}`;
+          }
+        } catch (e) {
+          logger.debug(`[SimpleCoordinator] DuckDuckGo 备用搜索失败: ${e}`);
+        }
+      }
+    }
+
+    // 策略2: 重新生成响应（带更明确的指令）
+    try {
+      const baseUrl = process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
+      const apiKey = process.env.GLM_API_KEY;
+
+      const retryMessages = [
+        {
+          role: 'system',
+          content: `你是一个专业助手。用户的问题是：${originalQuery}
+
+之前的回答质量不合格（${qualityCheck.reason}）。请重新提供高质量的回答。
+
+## 要求：
+1. 直接回答用户的问题，不要说"我不知道"、"无法回答"等
+2. 提供具体、详细的信息
+3. 如果不确定，请说明你将尽力帮助
+4. 使用清晰的格式和结构
+5. 不要以 AI 身份自限
+
+请直接给出有帮助的回答。`
+        },
+        {
+          role: 'user',
+          content: originalQuery
+        }
+      ];
+
+      const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, {
+        model: 'glm-4.7',
+        messages: retryMessages,
+        max_tokens: 2048,
+        temperature: 0.7,
+      }, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+
+      const newResponse = response.data.choices?.[0]?.message?.content;
+      if (newResponse && newResponse.length > 20) {
+        // 检查新响应质量
+        const newQualityCheck = this.checkResponseQuality(newResponse, originalQuery);
+        if (newQualityCheck.isQualityGood) {
+          logger.info(`[SimpleCoordinator] 重新生成响应成功`);
+          return newResponse;
+        }
+      }
+    } catch (e) {
+      logger.debug(`[SimpleCoordinator] 重新生成响应失败: ${e}`);
+    }
+
+    // 策略3: 返回友好的错误提示
+    logger.warn(`[SimpleCoordinator] 所有纠正策略均失败`);
+    return null;
   }
 
   /**
