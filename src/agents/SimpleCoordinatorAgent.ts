@@ -547,7 +547,13 @@ export class SimpleCoordinatorAgent implements IAgent {
 
 **注意**：图片/视频分析会自动进行，你只需要基于分析结果回答即可。`,
       rules: [],
-      availableTools: ['smart_search', 'fetch_web'], // 默认可用工具
+      availableTools: [
+        'smart_search', 'tavily_search',
+        'exa_search', 'exa_code_search', 'smart_search_v2',
+        'jina_read',
+        'youtube_search', 'bilibili_search',
+        'fetch_web'
+      ], // 默认可用工具（包含 Agent Reach）
       examples: [],
     };
   }
@@ -1673,6 +1679,137 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
                       },
                     },
                     required: ['sessionId'],
+                  },
+                },
+              });
+            } else if (tool.name === 'exa_search') {
+              // Agent Reach - Exa 语义搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '搜索关键词',
+                      },
+                      options: {
+                        type: 'object',
+                        description: '搜索选项（可选）',
+                        properties: {
+                          numResults: { type: 'number', description: '返回结果数量' },
+                          livecrawl: { type: 'string', enum: ['fallback', 'preferred'], description: '实时抓取模式' },
+                          type: { type: 'string', enum: ['auto', 'fast'], description: '搜索类型' },
+                        },
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
+            } else if (tool.name === 'exa_code_search') {
+              // Agent Reach - Exa 代码搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '代码搜索关键词',
+                      },
+                      tokensNum: {
+                        type: 'number',
+                        description: 'Token 数量（可选）',
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              });
+            } else if (tool.name === 'jina_read') {
+              // Agent Reach - Jina Reader 网页提取
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: '要提取的网页 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'youtube_search') {
+              // Agent Reach - YouTube 视频搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: 'YouTube 视频 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'bilibili_search') {
+              // Agent Reach - B站视频搜索
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      url: {
+                        type: 'string',
+                        description: 'B站视频 URL',
+                      },
+                    },
+                    required: ['url'],
+                  },
+                },
+              });
+            } else if (tool.name === 'smart_search_v2') {
+              // Agent Reach - 智能搜索 V2
+              tools.push({
+                type: 'function',
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: '搜索关键词或 URL',
+                      },
+                      numResults: {
+                        type: 'number',
+                        description: '返回结果数量（可选）',
+                      },
+                    },
+                    required: ['query'],
                   },
                 },
               });
