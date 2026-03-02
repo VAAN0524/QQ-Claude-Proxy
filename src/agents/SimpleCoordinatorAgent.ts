@@ -1414,6 +1414,7 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
         headers: {
           'Authorization': `Bearer ${apiKey}`,
         },
+        timeout: 300000, // 代码生成任务使用 web_search，超时 5 分钟
       });
 
       return response.data.choices?.[0]?.message?.content || '代码生成失败';
@@ -2303,7 +2304,7 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           logger.debug('[SimpleCoordinator] 跳过 web_search（不需要网络搜索或使用 Coding Plan 端点）');
         }
 
-        // 诊断日志：记录请求体（用于调试 400 错误）
+        // 诊断日志：记录请求体（用于调试）
         logger.info(`[SimpleCoordinator] GLM API 请求: ${JSON.stringify({
           model: requestBody.model,
           messages_count: requestBody.messages?.length,
@@ -2311,10 +2312,16 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           tools: requestBody.tools,
         })}`);
 
+        // 根据是否使用 web_search 设置不同的超时时间
+        // web_search 需要更多时间进行网络搜索
+        const requestTimeout = routeDecision.needsWebSearch ? 300000 : 180000; // web_search: 5分钟, 普通: 3分钟
+        logger.info(`[SimpleCoordinator] 请求超时设置: ${requestTimeout/1000}秒 (${routeDecision.needsWebSearch ? 'web_search' : '普通请求'})`);
+
         const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, requestBody, {
           headers: {
             'Authorization': `Bearer ${apiKey}`,
           },
+          timeout: requestTimeout,
         });
 
         const choice = response.data.choices?.[0];
