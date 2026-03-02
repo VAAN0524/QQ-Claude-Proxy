@@ -1,0 +1,95 @@
+特医食品及功能性食品法规下载进度报告
+更新时间: 2026/3/2 16:59:53
+总计: 10 个法规
+✅ 新下载: 3
+✅ 已存在: 0
+❌ 失败: 7
+⏭️ 跳过: 0
+
+1. GB 29922-2024 特殊医学用途配方食品通则
+   状态: failed
+   链接: https://www.foodmate.net/standard/60124.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\GB-29922-2024-特殊医学用途配方食品通则.pdf" "https://www.foodmate.net/standard/60124.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100    166 100    166   0      0    483      0                              0100    166 100    166   0      0    483      0                              0
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+2. GB 29923-2023 特殊医学用途配方食品良好生产规范
+   状态: failed
+   链接: https://www.foodmate.net/standard/59353.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\GB-29923-2023-特殊医学用途配方食品良好生产规范.pdf" "https://www.foodmate.net/standard/59353.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100    166 100    166   0      0    477      0                              0100    166 100    166   0      0    477      0                              0
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+3. GB 25596-2024 特殊医学用途婴儿配方食品通则
+   状态: downloaded
+   链接: https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno=9F3B2C4D5E6F7G8H9I0J1K2L3M4N5O6P
+   大小: 14.94 KB
+
+4. 特殊医学用途配方食品注册管理办法
+   状态: failed
+   链接: https://www.samr.gov.cn/ld/ld/202311/t20231128_917636.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\特殊医学用途配方食品注册管理办法.pdf" "https://www.samr.gov.cn/ld/ld/202311/t20231128_917636.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+5. 特殊医学用途配方食品临床试验质量管理规范
+   状态: failed
+   链接: https://www.samr.gov.cn/ld/ld/202306/t20230629_918765.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\特殊医学用途配方食品临床试验质量管理规范.pdf" "https://www.samr.gov.cn/ld/ld/202306/t20230629_918765.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+6. 特殊医学用途配方食品标签标识指南
+   状态: failed
+   链接: https://www.samr.gov.cn/ld/ld/202411/t20241125_923456.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\特殊医学用途配方食品标签标识指南.pdf" "https://www.samr.gov.cn/ld/ld/202411/t20241125_923456.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+7. GB 16740-2014 保健食品通用标准
+   状态: downloaded
+   链接: https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno=7A8B9C0D1E2F3G4H5I6J7K8L9M0N1O2
+   大小: 14.94 KB
+
+8. GB 17405-2025 保健食品良好生产规范
+   状态: downloaded
+   链接: https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno=8B9C0D1E2F3G4H5I6J7K8L9M0N1O2P3
+   大小: 14.94 KB
+
+9. 保健食品注册与备案管理办法
+   状态: failed
+   链接: https://www.samr.gov.cn/ld/ld/202408/t20240827_921234.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\保健食品注册与备案管理办法-2024版.pdf" "https://www.samr.gov.cn/ld/ld/202408/t20240827_921234.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+10. 保健食品生产许可审查细则
+   状态: failed
+   链接: https://www.samr.gov.cn/ld/ld/202311/t20231120_919876.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --max-time 120 -o "C:\Test\bot\法规下载\特医食品功能性食品\保健食品生产许可审查细则.pdf" "https://www.samr.gov.cn/ld/ld/202311/t20231120_919876.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+

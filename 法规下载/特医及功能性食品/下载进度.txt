@@ -1,0 +1,58 @@
+法规下载进度报告
+更新时间: 2026/2/28 11:01:36
+总计: 10 个法规
+✅ 新下载: 6
+✅ 已存在: 0
+❌ 失败: 4
+
+
+1. 特殊医学用途配方食品生产许可审查细则
+   状态: not_found
+
+2. 特殊医学用途配方食品生产质量管理规范(GB 29923)
+   状态: downloaded
+   链接: https://www.foodgacc.com/filespath/files/GACCREGISTRATON/Special_Dietary_Foods/GB29923-2013.pdf
+
+3. 特殊医学用途配方食品注册管理办法
+   状态: failed
+   链接: https://www.samr.gov.cn/hd/ptjyjz/bzxs/art/2023/art_9c80c8e6e5a14e8a8f8e8e8e8e8e8e8e8e8e8e8e8e8.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" --max-time 60 -o "C:\Test\bot\法规下载\特医及功能性食品\特殊医学用途配方食品注册管理办法.pdf" "https://www.samr.gov.cn/hd/ptjyjz/bzxs/art/2023/art_9c80c8e6e5a14e8a8f8e8e8e8e8e8e8e8e8e8e8e8e8.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+4. 保健食品生产许可审查细则
+   状态: downloaded
+   链接: https://faolex.fao.org/docs/pdf/chn229078.pdf
+
+5. 食品生产许可管理办法
+   状态: failed
+   链接: http://www.samr.gov.cn/hd/ptjyjz/bzxs/art/2020/art_9c80c8e6e5a14e8a8f8e8e8e8e8e8e8e8e8e8e8e8e8.html
+   错误: Command failed: curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" --max-time 60 -o "C:\Test\bot\法规下载\特医及功能性食品\食品生产许可管理办法.pdf" "http://www.samr.gov.cn/hd/ptjyjz/bzxs/art/2020/art_9c80c8e6e5a14e8a8f8e8e8e8e8e8e8e8e8e8e8e8e8.html"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100    162 100    162   0      0   1330      0                              0100    162 100    162   0      0   1328      0                              0
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 404
+
+
+6. 药品生产质量管理规范(GMP)
+   状态: downloaded
+   链接: https://www.huasan.net/wp-content/uploads/2025/06/%E8%8D%AF%E5%93%81%E7%94%9F%E4%BA%A7%E8%B4%A8%E9%87%8F%E7%AE%A1%E7%90%86%E8%A7%84%E8%8C%83%EF%BC%882010%E5%B9%B4%E4%BF%AE%E8%AE%A2%EF%BC%89.pdf
+
+7. 药品经营质量管理规范(GSP)
+   状态: downloaded
+   链接: https://pharmwyp.com/posts/56814/1.%E9%80%9A%E7%94%A8%E6%B3%95%E8%A7%84/1.5GxPs/1.5.4GSP/20221130_NMPA_%E5%85%B3%E4%BA%8E%E5%8F%91%E5%B8%83%E3%80%8A%E8%8D%AF%E5%93%81%E7%BB%8F%E8%90%A5%E8%B4%A8%E9%87%8F%E7%AE%A1%E7%90%86%E8%A7%84%E8%8C%83%E9%99%84%E5%BD%956%EF%BC%9A%E8%8D%AF%E5%93%81%E9%9B%B6%E5%94%AE%E9%85%8D%E9%80%81%E8%B4%A8%E9%87%8F%E7%AE%A1%E7%90%86%E3%80%8B%E7%9A%84%E5%85%AC%E5%91%8A%EF%BC%882022%E5%B9%B4%E7%AC%AC113%E5%8F%B7%EF%BC%89.pdf
+
+8. 保健食品注册与备案管理办法
+   状态: downloaded
+   链接: https://www.cirs-group.com/uploads/soft/150915/1.pdf
+
+9. 食品生产许可审查通则(2022版)
+   状态: not_found
+
+10. 食品安全管理体系认证规则(HACCP)
+   状态: downloaded
+   链接: http://www.qic-china.com/attachments/2024/11/12/1731396468673303743aa92383740723.pdf
