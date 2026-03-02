@@ -1414,7 +1414,7 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
         headers: {
           'Authorization': `Bearer ${apiKey}`,
         },
-        timeout: 300000, // 代码生成任务使用 web_search，超时 5 分钟
+        timeout: 0, // 不限时（代码生成任务可能使用 web_search）
       });
 
       return response.data.choices?.[0]?.message?.content || '代码生成失败';
@@ -2312,10 +2312,10 @@ ${result.content.substring(0, 3000)}${result.content.length > 3000 ? '\n\n...(�
           tools: requestBody.tools,
         })}`);
 
-        // 根据是否使用 web_search 设置不同的超时时间
-        // web_search 需要更多时间进行网络搜索
-        const requestTimeout = routeDecision.needsWebSearch ? 300000 : 180000; // web_search: 5分钟, 普通: 3分钟
-        logger.info(`[SimpleCoordinator] 请求超时设置: ${requestTimeout/1000}秒 (${routeDecision.needsWebSearch ? 'web_search' : '普通请求'})`);
+        // 超时设置：0 表示不限时
+        // web_search 需要较长时间进行网络搜索
+        const requestTimeout = 0; // 不限时
+        logger.info(`[SimpleCoordinator] 请求超时设置: 不限时 (${routeDecision.needsWebSearch ? 'web_search' : '普通请求'})`);
 
         const response = await this.axiosInstance.post(`${baseUrl}/chat/completions`, requestBody, {
           headers: {
