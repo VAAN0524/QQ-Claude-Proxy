@@ -8,6 +8,7 @@
  * 2. 摘要旧消息
  * 3. 保留最近 N 条完整消息
  * 4. 提取关键信息（代码、文件路径、结果）
+ * 5. 相关性过滤（集成 ContextFilter）
  *
  * @example
  * ```typescript
@@ -23,6 +24,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { ContextFilter } from './ContextFilter.js';
 
 /**
  * 消息角色类型
@@ -81,15 +83,17 @@ export class ContextCompressor {
   private static readonly DEFAULT_BATCH_SIZE = 10;
 
   /**
-   * 压缩上下文
+   * 压缩上下文（带相关性过滤）
    *
    * @param messages - 原始消息列表
    * @param options - 压缩配置
+   * @param query - 当前查询（用于相关性过滤，可选）
    * @returns 压缩后的消息列表和统计信息
    */
   static compress(
     messages: Message[],
-    options: CompressionOptions = {}
+    options: CompressionOptions = {},
+    query?: string
   ): { messages: Message[]; stats: CompressionStats } {
     const {
       maxTokens = this.DEFAULT_MAX_TOKENS,
@@ -116,12 +120,34 @@ export class ContextCompressor {
 
     logger.debug(`[ContextCompressor] 开始压缩: ${messages.length} 条消息, ~${originalTokens} tokens`);
 
+    // 0. 相关性过滤（如果提供了查询）
+    let filteredMessages = messages;
+    if (query && messages.length > 20) {
+      // 转换为 ContextMessage 格式进行过滤
+      const contextMessages: import('./SharedContext.js').ContextMessage[] = messages.map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content,
+        timestamp: m.timestamp || new Date(),
+      }));
+
+      const relevantContexts = ContextFilter.filterRelevant(contextMessages, query, 20);
+
+      // 转换回 Message 格式
+      filteredMessages = relevantContexts.map(cm => ({
+        role: cm.role as MessageRole,
+        content: cm.content,
+        timestamp: cm.timestamp,
+      }));
+
+      logger.debug(`[ContextCompressor] 相关性过滤: ${messages.length} -> ${filteredMessages.length} 条`);
+    }
+
     // 1. 保留最近的完整消息（按预算比例）
     const recentBudget = Math.floor(maxTokens * recentRatio);
-    const recent = this.extractRecentMessages(messages, recentBudget);
+    const recent = this.extractRecentMessages(filteredMessages, recentBudget);
 
     // 2. 压缩旧消息
-    const oldMessages = messages.slice(0, messages.length - recent.length);
+    const oldMessages = filteredMessages.slice(0, filteredMessages.length - recent.length);
     const compressed = this.compressOldMessages(oldMessages, {
       batchSize: summaryBatchSize,
       preserveCodeBlocks,

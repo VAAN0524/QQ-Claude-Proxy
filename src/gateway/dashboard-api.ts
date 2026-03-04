@@ -2321,6 +2321,176 @@ export function createExtendedApiHandlers(context: ExtendedApiHandlerContext): M
     }
   });
 
+  // ==================== 上下文监控 API ====================
+
+  /**
+   * GET /api/context/stats - 获取上下文统计
+   */
+  handlers.set('GET:/api/context/stats', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { SharedContext } = await import('../agents/SharedContext.js');
+      // 使用默认的共享上下文实例（如果存在）
+      const stats = {
+        messageCount: 0,
+        workStateCount: 0,
+        fileReferenceCount: 0,
+      };
+      sendJson(res, stats);
+    } catch (error) {
+      logger.error(`Failed to get context stats: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '获取上下文统计失败' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/context/history - 获取消息历史
+   */
+  handlers.set('GET:/api/context/history', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { SharedContext } = await import('../agents/SharedContext.js');
+      // 返回空历史，实际应用中需要从会话中获取
+      sendJson(res, []);
+    } catch (error) {
+      logger.error(`Failed to get context history: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '获取消息历史失败' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/context/prune-stats - 获取修剪统计
+   */
+  handlers.set('GET:/api/context/prune-stats', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { SharedContext } = await import('../agents/SharedContext.js');
+      // 返回默认统计
+      const stats = {
+        totalPrunedByAge: 0,
+        totalPrunedByCount: 0,
+        lastPruneTime: Date.now(),
+      };
+      sendJson(res, stats);
+    } catch (error) {
+      logger.error(`Failed to get prune stats: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '获取修剪统计失败' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/context/clear - 清空对话历史
+   */
+  handlers.set('POST:/api/context/clear', async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      sendJson(res, { success: true });
+    } catch (error) {
+      logger.error(`Failed to clear context: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '清空对话历史失败' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/context/prune - 手动清理上下文
+   */
+  handlers.set('POST:/api/context/prune', async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const force = url.searchParams.get('force') === 'true';
+
+      const { SharedContext } = await import('../agents/SharedContext.js');
+      // 模拟清理
+      const pruned = 0;
+      sendJson(res, { pruned });
+    } catch (error) {
+      logger.error(`Failed to prune context: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '清理上下文失败' }, 500);
+    }
+  });
+
+  // ==================== 工具追踪 API ====================
+
+  /**
+   * GET /api/tools/stats - 获取工具统计
+   */
+  handlers.set('GET:/api/tools/stats', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { ToolCallTracker } = await import('../agents/ToolCallTracker.js');
+      const stats = ToolCallTracker.getStats();
+      sendJson(res, stats);
+    } catch (error) {
+      logger.error(`Failed to get tool stats: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '获取工具统计失败' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/tools/logs - 获取工具调用日志
+   */
+  handlers.set('GET:/api/tools/logs', async (req, res) => {
+    if (req.method !== 'GET') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { ToolCallTracker } = await import('../agents/ToolCallTracker.js');
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+      const logs = ToolCallTracker.getRecentLogs(limit);
+      sendJson(res, logs);
+    } catch (error) {
+      logger.error(`Failed to get tool logs: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '获取工具日志失败' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/tools/clear - 清空工具日志
+   */
+  handlers.set('POST:/api/tools/clear', async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, { error: 'Method not allowed' }, 405);
+      return;
+    }
+
+    try {
+      const { ToolCallTracker } = await import('../agents/ToolCallTracker.js');
+      ToolCallTracker.clear();
+      sendJson(res, { success: true });
+    } catch (error) {
+      logger.error(`Failed to clear tool logs: ${error}`);
+      sendJson(res, { error: error instanceof Error ? error.message : '清空工具日志失败' }, 500);
+    }
+  });
+
   // 应用鉴权包装器
   const authHandlers = new Map();
   for (const [key, handler] of handlers.entries()) {

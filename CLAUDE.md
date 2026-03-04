@@ -13,16 +13,17 @@ QQ Bot → QQ Gateway ──────┐
                           │
                     Internal Gateway (WS, port 18789)
                           │
-                          ├──→ SimpleCoordinatorAgent (Simple模式)
+                          ├──→ SimpleCoordinatorAgent (Simple 模式)
                           │       └──→ 动态技能加载 (SKILL.md)
+                          │       └──→ 工具层直接调用 (search/web/shell/file/process)
                           │       └──→ 专业 Agents (按需调用)
                           │
-                          └──→ Claude Code CLI (CLI模式)
+                          └──→ Claude Code CLI (CLI 模式)
 ```
 
 ### Gateway 消息协议
 
-**位置**: [src/gateway/protocol.ts](src/gateway/protocol.ts)
+**位置**: `src/gateway/protocol.ts`
 
 Gateway 使用 WebSocket 实现三种消息类型：
 
@@ -32,7 +33,7 @@ Gateway 使用 WebSocket 实现三种消息类型：
 | **Response** | RPC 响应 | `{ type: 'res', id, ok, payload?, error? }` |
 | **Event** | 发布/订阅事件 | `{ type: 'event', channel, event, data }` |
 
-**Router** ([src/gateway/router.ts](src/gateway/router.ts)) 负责消息路由：
+**Router** (`src/gateway/router.ts`) 负责消息路由：
 - `onMethod(method, handler)` - 注册 RPC 方法处理器
 - `onEvent(channel, handler)` - 注册事件处理器
 
@@ -56,9 +57,9 @@ npm run typecheck
 npm test              # 运行所有测试
 npm run test:watch    # 监视模式
 npm run test:coverage # 覆盖率报告
+npm run test tests/gateway.test.ts  # 运行单个测试文件
 
 # Watchdog (进程守护)
-npm run watchdog      # 启动 watchdog
 npm run watchdog:start # 注册为系统服务并启动
 npm run watchdog:stop  # 停止服务
 npm run watchdog:status # 查看状态
@@ -70,79 +71,66 @@ npm run daily-cleanup # 清理过期的记忆条目
 npm run monitor       # 启动终端监控界面
 ```
 
-## Agent 系统（核心）
+## 代码结构导航
 
-### 双模式架构
+```
+src/
+├── agents/                    # Agent 系统核心
+│   ├── base/                 # Agent 基础接口
+│   ├── memory/               # 分层记忆 (L0/L1/L2)
+│   ├── tools-layer/          # 工具层 (搜索/Shell/文件/进程)
+│   ├── SimpleCoordinatorAgent.ts
+│   ├── AgentDispatcher.ts
+│   └── personas.ts
+├── gateway/                   # WebSocket 消息网关
+│   ├── server.ts
+│   ├── http-server.ts
+│   ├── dashboard-api.ts
+│   └── protocol.ts
+├── channels/qqbot/           # QQ Bot Channel
+├── agent/                     # Claude Code CLI 适配器
+├── llm/                       # LLM Provider (OpenAI/Anthropic/GLM)
+├── scheduler/                 # 定时任务调度器
+├── config/                    # 配置加载和验证
+└── utils/                     # 工具函数
+```
+
+## 双模式架构
 
 项目支持**两种模式**，通过 ModeManager 管理：
 
 | 模式 | 协调器 | 说明 |
 |------|--------|------|
 | **CLI 模式** | - | 直接调用本地 Claude Code CLI |
-| **Simple 模式** | SimpleCoordinatorAgent | 极简协调 Agent + SKILL.md 驱动 |
+| **Simple 模式** | SimpleCoordinatorAgent | 极简协调 Agent + SKILL.md 驱动 + 工具层直接调用 |
 
 **模式切换**: `/mode cli` 或 `/mode simple`（支持中文：`/模式 cli`、`/模式 简单`）
 
-### SimpleCoordinatorAgent 设计理念
+## 核心组件
 
-**位置**: [src/agents/SimpleCoordinatorAgent.ts](src/agents/SimpleCoordinatorAgent.ts)
+### 1. SimpleCoordinatorAgent (`src/agents/SimpleCoordinatorAgent.ts`)
 
 核心设计原则：
 1. **单一协调者** - 一个 Agent 处理所有任务
 2. **动态技能加载** - 通过 SKILL.md 切换身份和技能
 3. **简化记忆** - 基于 markdown 文档的记忆系统
-4. **规则引擎** - 通过 markdown 文档定义规则
-5. **直接工具调用** - 不经过 ReAct，直接调用工具
+4. **直接工具调用** - 通过工具层直接调用功能
 
-### Agent 人格设定系统
+### 2. 工具层 (`src/agents/tools-layer/`)
 
-**位置**: [src/agents/personas.ts](src/agents/personas.ts)
+Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具函数。
 
-每个 Agent 都有人格设定，包含：
-- **角色定位**: Agent 的身份和职责
-- **核心职责**: 具体负责什么
-- **性格特点**: 行为风格（简洁/详细/友好/专业）
-- **工作原则**: 决策准则
-- **协作方式**: 与其他 Agent 配合
+**工具分类**:
+- **搜索**: `tavily_search`, `smart_search`, `exa_search`, `exa_code_search`
+- **视频**: `youtube_search`, `bilibili_search`
+- **网页**: `jina_read`, `fetch_web`
+- **命令**: `execute_command`
+- **文件**: `read_file`, `write_file`, `edit_file`, `apply_patch`
+- **进程**: `spawn_process`, `terminate_process`, `list_processes`
 
-**应用方案**：
-1. **System Prompt 注入**: 将人格设定转换为 LLM System Prompt
-2. **基类扩展**: PersonaAgent 提供人格默认实现
-3. **通信风格**: Agent 间通信时传递人格标签
+**重要**: 所有搜索工具必须在关键词中包含当前年份以获取最新资讯。
 
-### 已注册 Agents
-
-| Agent ID | 名称 | 能力 |
-|----------|------|------|
-| `simple-coordinator` | 极简协调器 | 技能驱动、直接执行、通用任务 |
-| `claude` | Claude Code Agent | 调用本地 Claude Code CLI |
-| `browser` | 浏览器自动化 | Browser, Automation, Testing |
-| `shell` | 命令行专家 | Shell, System, File |
-| `websearch` | 网络搜索 | Web, Search, DuckDuckGo |
-| `tavily-search` | 深度搜索分析师 | Deep Research, Vertical Search |
-| `data` | 数据分析专家 | Analysis, Data, Statistics |
-| `vision` | 视觉理解专家 | Vision, OCR, Image Analysis (MCP) |
-| `code` | 代码专家 | Code, Analyze, Refactoring |
-| `refactor` | 代码重构专家 | Code, Refactoring, Quality |
-| `skill-manager` | 技能管理员 | Skill Management, Installation |
-
-**查看人格设定**: `node scripts/list-agents.ts`
-
-### Agent 调度器
-
-**位置**: [src/agents/AgentDispatcher.ts](src/agents/AgentDispatcher.ts)
-
-路由优先级：
-1. **显式指定**: 前缀如 `/code`, `/browser`, `/shell`, `/claude`
-2. **用户偏好**: 记住用户上次选择的 Agent
-3. **智能选择**: 基于能力匹配自动选择
-4. **默认回退**: Claude Code Agent
-
-## 分层记忆系统
-
-**位置**: [src/agents/memory/](src/agents/memory/)
-
-### OpenViking 风格三层架构
+### 3. 分层记忆系统 (`src/agents/memory/`)
 
 | 层级 | 容量 | 用途 | 访问范围 |
 |------|------|------|----------|
@@ -150,75 +138,30 @@ npm run monitor       # 启动终端监控界面
 | **L1** | ~2000 tokens | 内容导航、关键点 | Agent 间共享 |
 | **L2** | 无限 | 完整数据、原始引用 | 全局共享 |
 
-**配置**: 在 `src/index.ts` 中初始化 `HierarchicalMemoryService`
-
-**定期归档**:
-- L0/L1: 自动清理过期记忆
-- L2: 持久化存储，长期保留
-
 **记忆生命周期**:
-
 | 阶段 | 标签 | 保留时间 | 清理策略 |
-|-----|------|----------|----------|
+|------|------|----------|----------|
 | active | 活跃 | 无限期 | 保留 |
 | archived | 归档 | 30 天 | 定期检查 |
 | expired | 过期 | 7 天 | 自动清理 |
 
-## 技能管理系统
+### 4. Agent 调度器 (`src/agents/AgentDispatcher.ts`)
 
-**位置**: [src/agents/SkillLoader.ts](src/agents/SkillLoader.ts), [src/agents/SkillInstaller.ts](src/agents/SkillInstaller.ts)
+路由优先级：
+1. **显式指定**: 前缀如 `/code`, `/browser`, `/shell`, `/claude`
+2. **用户偏好**: 记住用户上次选择的 Agent
+3. **智能选择**: 基于能力匹配自动选择
+4. **默认回退**: Claude Code Agent
+
+### 5. 技能管理
+
+**位置**: `src/agents/SkillLoader.ts`, `src/agents/SkillInstaller.ts`
 
 - **渐进式加载**: 只扫描 SKILL.md 元数据，按需加载完整代码
 - **安装源**: 本地、GitHub、GitLab
-- **管理接口**: SkillManagerAgent 提供安装/卸载/搜索/启用/禁用
+- **技能索引**: 使用 `.skill-index.json` 缓存加速启动
 
-**技能目录**: `skills/` 包含 30+ 技能，按功能分类：
-- `code/` - 代码相关
-- `git-*/` - Git 工作流
-- `docker-*/` - Docker 相关
-- `network-solutions/` - 网络解决方案
-- `run_*_agent/` - 各 Agent 运行技能
-
-## 工具层系统
-
-**位置**: [src/agents/tools-layer/](src/agents/tools-layer/)
-
-Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具函数：
-
-| 分类 | 工具 | 说明 |
-|------|------|------|
-| **搜索** | `duckduckgo_search` | DuckDuckGo 搜索 |
-| | `tavily_search` | Tavily 深度搜索（需 API Key） |
-| | `smart_search` | 智能搜索（自动选择最佳方式） |
-| **网页** | `fetch_web` | 获取网页内容 |
-| **命令** | `execute_command` | 执行系统命令（有安全检查） |
-| **文件** | `read_file`, `write_file`, `edit_file`, `apply_patch` | 文件操作 |
-| **进程** | `spawn_process`, `terminate_process`, `list_processes` | 后台进程管理 |
-
-**重要**: 所有搜索工具必须在关键词中包含当前年份（如 "2026年"）以获取最新资讯。
-
-**技能索引机制**: 使用 `.skill-index.json` 缓存加速启动，只在 SKILL.md 修改时重建。
-
-**工具管理器** (`ToolManager`):
-
-```typescript
-import { getToolManager } from './agents/tools-layer/index.js';
-
-const toolManager = getToolManager();
-
-// 获取工具
-const tool = toolManager.get('duckduckgo_search');
-
-// 按分类获取工具
-const searchTools = toolManager.getByCategory('search');
-
-// 获取所有工具描述（用于 LLM 提示）
-const descriptions = toolManager.getToolDescriptions();
-```
-
-## LLM Provider 系统
-
-**位置**: [src/llm/providers.ts](src/llm/providers.ts)
+### 6. LLM Provider (`src/llm/providers.ts`)
 
 统一接口支持多提供商：
 - **OpenAI**: GPT-4 系列
@@ -227,19 +170,13 @@ const descriptions = toolManager.getToolDescriptions();
 
 **代理支持**: 自动读取环境变量 `HTTP_PROXY` / `HTTPS_PROXY`
 
-## 定时任务调度器
-
-**位置**: [src/scheduler/](src/scheduler/)
+### 7. 定时任务调度器 (`src/scheduler/`)
 
 支持两种任务类型：
-- **周期任务**: 按固定间隔重复执行（秒/分钟/小时/天）
+- **周期任务**: 按固定间隔重复执行
 - **定时任务**: 在指定时间执行一次
 
 **存储**: `data/tasks.json`
-
-**管理方式**:
-- QQ 对话命令: `列出任务`, `创建任务`, `删除任务A`, `暂停任务A`
-- Dashboard: http://localhost:8080/tasks.html
 
 ## 重要约定
 
@@ -248,151 +185,66 @@ const descriptions = toolManager.getToolDescriptions();
 - 所有 import 必须包含 `.js` 扩展名
 - 动态 import: `await import('./agents/CodeAgent.js')`
 
+### TypeScript 编译
+- 目标：ES2022, 模块：NodeNext
+- 严格模式已关闭 (`strict: false`)
+- 输出目录：`dist/`
+- 声明文件已启用
+
 ### 测试框架
 - 使用 **vitest** 作为测试框架
 - 测试文件位于 `tests/` 目录
-- 全局 API 可用（describe, it, expect 等）
-- 覆盖率报告: `npm run test:coverage`
 - 支持 v8 覆盖率提供者
-
-### TypeScript 编译
-- 目标: ES2022, 模块: NodeNext
-- 严格模式已关闭（`strict: false`）
-- 输出目录: `dist/`
-- 声明文件已启用
 
 ### 日志
 - 使用 `src/utils/logger.ts` 的 pino logger
-- 结构化日志：`logger.info({ context }, 'message')`
 - 日志级别：`trace`, `debug`, `info`, `warn`, `error`
 
 ### 配置加载
-- 优先级: `.env` > `config.json` > `config/default.json`
-- 配置 Schema: [src/config/schema.ts](src/config/schema.ts)
-- 模式存储: `data/mode.json`
+- 优先级：`.env` > `config.json` > `config/default.json`
+- 配置 Schema: `src/config/schema.ts`
+- 模式存储：`data/mode.json`
 
 ### 文件路径安全
 - 用户输入文件名必须经过 `sanitizeFileName()` 清理
 - 防止路径穿越攻击
 
----
-
-## 🔒 安全铁律
-
-**禁止泄露敏感信息到 Git 仓库**
-
-以下信息**绝对禁止**提交到 Git：
-
-- ❌ API Keys (Tavily, GLM, Anthropic, OpenAI, etc.)
-- ❌ 密钥和密码 (QQ Bot Secret, Access Token, etc.)
-- ❌ 用户 OpenID 和个人标识信息
-- ❌ 任何形式的真实凭证
-
-**正确做法**：
-
-1. 所有敏感信息必须放在 `.env` 文件中（已在 `.gitignore`）
-2. 代码中使用 `process.env.VARIABLE_NAME` 读取
-3. 示例和文档中必须使用占位符（如 `your_api_key_here`）
-4. 提交前必须执行安全检查
-
-```bash
-# 检查是否有敏感信息泄露
-git ls-files | xargs grep -l "tvly-"      # Tavily Key
-git ls-files | xargs grep -l "sk-ant-"     # Anthropic Key
-git ls-files | xargs grep -l "\.A6TPPWg"  # GLM Key 模式
-```
-
-**违规后果**：
-
-- 必须立即从 Git 历史中删除敏感信息
-- 如果密钥已泄露，必须立即撤销并重新生成
-- 使用 `git filter-branch` 或 `git filter-repo` 清理历史
-
----
+## 添加新组件
 
 ### 添加新 Agent
 
-1. 创建 `src/agents/NewAgent.ts`，实现 `IAgent` 接口 ([src/agents/base/Agent.ts](src/agents/base/Agent.ts))
-   - 必须实现: `id`, `name`, `description`, `capabilities`, `config`, `process()`
-   - 可选实现: `canHandle()`, `initialize()`, `cleanup()`, `getPersona()`, `applyPersonaStyle()`
+1. 创建 `src/agents/NewAgent.ts`，实现 `IAgent` 接口 (`src/agents/base/Agent.ts`)
+   - 必须实现：`id`, `name`, `description`, `capabilities`, `config`, `process()`
+   - 可选实现：`canHandle()`, `initialize()`, `cleanup()`, `getPersona()`, `applyPersonaStyle()`
 
 2. 在 `src/agents/index.ts` 中导出新 Agent
 
 3. 在 `src/index.ts` 的 Agent 注册部分添加初始化代码
 
-4. 在 `src/agents/personas.ts` 中添加人格设定（包含：角色定位、核心职责、性格特点、工作原则、协作方式）
+4. 在 `src/agents/personas.ts` 中添加人格设定
+
+### 添加新工具
+
+工具层位于 `src/agents/tools-layer/`，按分类组织：
+
+1. 在对应分类文件中添加工具函数（如 `search-tools.ts`）
+2. 在 `index.ts` 的 `ToolManager.registerBuiltinTools()` 中注册：
+```typescript
+this.register({
+  name: 'your_tool',
+  description: '工具描述',
+  category: 'search', // 或 web, shell, file, process
+  execute: async (params) => {
+    // 工具实现
+  },
+});
+```
 
 ### 添加新技能
 
 1. 在 `skills/` 目录创建技能文件夹
-2. 创建 `SKILL.md` 元数据文件（YAML frontmatter 格式）：
-   ```markdown
-   ---
-   name: skill-name
-   description: 技能的简短描述
-   ---
-
-   # 技能名称
-
-   ## 功能
-   - 能力1
-   - 能力2
-
-   ## 使用场景
-   - 场景1
-   - 场景2
-
-   ## 参数
-   - `param1` (必需/可选): 参数说明
-   - `param2` (必需/可选): 参数说明
-
-   ## 输出格式
-   输出格式说明...
-
-   ## 注意事项
-   - 注意事项1
-   - 注意事项2
-   ```
+2. 创建 `SKILL.md` 元数据文件（YAML frontmatter 格式）
 3. 通过 Dashboard 或 QQ 命令安装
-
-## 目录结构
-
-```
-QQ-Claude-Proxy/
-├── src/
-│   ├── agents/                 # 多 Agent 系统
-│   │   ├── base/              # Agent 基础接口 (IAgent, PersonaAgent)
-│   │   ├── memory/            # 分层记忆系统 (L0/L1/L2 OpenViking风格)
-│   │   ├── learning/          # 自主学习模块
-│   │   ├── tools/             # Agent 工具 (agent/file/learning/network)
-│   │   └── *.ts               # 各个 Agent 实现
-│   ├── agent/                 # Claude Code CLI 适配器
-│   │   ├── claude-cli.ts      # CLI 进程管理
-│   │   ├── cli-session-manager.ts  # 会话管理
-│   │   └── *.ts
-│   ├── gateway/               # 内部 Gateway (WS port 18789)
-│   │   ├── protocol.ts        # 消息协议 (Request/Response/Event)
-│   │   ├── router.ts          # 消息路由器
-│   │   ├── server.ts          # WebSocket 服务器
-│   │   └── dashboard-api.ts   # Dashboard API
-│   ├── channels/              # 外部渠道适配器
-│   │   └── qqbot/             # QQ Bot Channel
-│   ├── llm/                   # LLM Provider 统一接口
-│   ├── scheduler/             # 定时任务调度器
-│   ├── utils/                 # 工具函数
-│   ├── config/                # 配置管理
-│   ├── skills/                # 技能系统
-│   └── index.ts               # 主入口
-├── tests/                     # 测试文件 (vitest)
-├── public/                    # 静态文件
-│   └── dashboard/             # Web Dashboard 前端
-├── skills/                    # 技能目录 (30+ 技能)
-├── scripts/                   # 实用脚本
-├── workspace/                 # Claude Code 工作目录
-├── uploads/                   # 文件上传存储
-├── data/                      # 数据存储 (mode.json, sessions/, tasks.json)
-└── logs/                      # 日志文件
-```
 
 ## Dashboard 功能
 
@@ -420,45 +272,51 @@ QQ-Claude-Proxy/
 | `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
 | `ALLOWED_USERS` | 用户白名单 | 否 |
 | `GLM_API_KEY` | GLM API Key（Simple 模式） | 否 |
-| `GLM_BASE_URL` | GLM API 地址（可选，默认使用 coding plan） | 否 |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | 否 |
 | `TAVILY_API_KEY` | Tavily Search API Key | 否 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 代理设置 | 否 |
+| `AGENT_REACH_*` | Agent Reach 配置 | 否 |
+
+## 安全铁律
+
+**禁止泄露敏感信息到 Git 仓库**
+
+以下信息**绝对禁止**提交到 Git：
+- API Keys (Tavily, GLM, Anthropic, OpenAI, etc.)
+- 密钥和密码 (QQ Bot Secret, Access Token, etc.)
+- 用户 OpenID 和个人标识信息
+
+**正确做法**：
+1. 所有敏感信息放在 `.env` 文件中
+2. 代码中使用 `process.env.VARIABLE_NAME` 读取
+3. 提交前执行安全检查：
+```bash
+git ls-files | xargs grep -l "tvly-"      # 检查 Tavily Key
+git ls-files | xargs grep -l "sk-ant-"     # 检查 Anthropic Key
+```
 
 ## 调试与故障排除
 
 ### 日志位置
-
-- 应用日志: `logs/app.log`
-- 错误日志: `logs/error.log`
-- 开发日志: `dev.log` (npm run dev 输出)
-
-### 调试模式
-
-日志级别在 `src/utils/logger.ts` 中配置，支持：
-- `trace`: 最详细
-- `debug`: 调试信息
-- `info`: 一般信息（默认）
-- `warn`: 警告
-- `error`: 错误
+- 应用日志：`logs/app.log`
+- 错误日志：`logs/error.log`
+- 开发日志：`dev.log`
 
 ### 常见问题
 
-**问题**: Claude Code CLI 无法启动
-- 确保已全局安装: `npm install -g @anthropic-ai/claude-code`
-- 运行 `claude` 命令进行登录认证
+**Claude Code CLI 无法启动**
+- 确保已全局安装：`npm install -g @anthropic-ai/claude-code`
 
-**问题**: QQ Bot 无法连接
-- 检查 `QQ_BOT_APP_ID` 和 `QQ_BOT_SECRET` 是否正确
-- 确保已在 QQ 开放平台配置沙箱用户
-
-**问题**: Simple 模式无响应
-- 检查 `GLM_API_KEY` 是否配置
-- 验证 API Key 是否有效
+**Simple 模式无响应**
+- 检查 `GLM_API_KEY` 是否配置且有效
 - 检查网络连接到 GLM API 端点
+
+**Agent Reach 搜索失败**
+- 确保已安装 `mcporter`: `npm install -g mcporter`
+- 确保已安装 `yt-dlp`: `pip install yt-dlp`
 
 ### 会话持久化
 
 每个用户/群组的会话独立存储在 `data/sessions/` 目录：
-- 用户会话: `user_{userId}.json`
-- 群组会话: `group_{groupId}.json`
+- 用户会话：`user_{userId}.json`
+- 群组会话：`group_{groupId}.json`

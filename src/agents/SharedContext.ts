@@ -61,9 +61,9 @@ export class SharedContext {
   };
 
   constructor(options: SharedContextOptions = {}) {
-    // 降低默认值以更激进的内存控制（原值 100）
-    this.maxMessages = options.maxMessages || 50;
-    this.maxAge = options.maxAge || 60 * 60 * 1000; // 默认 1 小时
+    // 增加 Simple 模式的上下文容量（参考 OpenFang 的记忆设计）
+    this.maxMessages = options.maxMessages || 200;  // 50 → 200，支持更长对话
+    this.maxAge = options.maxAge || 4 * 60 * 60 * 1000; // 1h → 4h，延长记忆保留时间
     this.pruneLogEnabled = options.enablePruneLog ?? true;
     logger.info('[SharedContext] 初始化完成 (maxMessages: ' + this.maxMessages + ', maxAge: ' + (this.maxAge / 60000) + '分钟)');
   }

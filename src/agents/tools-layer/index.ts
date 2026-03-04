@@ -34,6 +34,27 @@ export interface Tool {
 }
 
 /**
+ * Function Calling 参数 Schema (OpenAI 格式)
+ */
+export interface ToolFunctionCallingSchema {
+  type: 'object';
+  properties: Record<string, { type: string; description: string; default?: any; items?: any }>;
+  required?: string[];
+}
+
+/**
+ * Function Calling 定义 (用于 LLM)
+ */
+export interface FunctionCallingDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: ToolFunctionCallingSchema;
+  };
+}
+
+/**
  * 工具管理器
  */
 export class ToolManager {
@@ -322,7 +343,7 @@ export class ToolManager {
   getToolDescriptions(): string {
     let output = '## 可用工具\n\n';
 
-    const categories = ['search', 'web', 'shell', 'code', 'vision', 'data'] as const;
+    const categories = ['search', 'web', 'shell', 'code', 'vision', 'data', 'file', 'process'] as const;
 
     for (const category of categories) {
       const tools = this.getByCategory(category);
@@ -335,6 +356,8 @@ export class ToolManager {
         code: '💾 代码',
         vision: '👁️ 视觉',
         data: '📊 数据',
+        file: '📁 文件',
+        process: '⚙️ 进程',
       };
 
       output += `### ${categoryNames[category]}\n\n`;
@@ -347,6 +370,162 @@ export class ToolManager {
     }
 
     return output;
+  }
+
+  /**
+   * 为工具生成 Function Calling 参数 Schema（精简方案：按工具类型动态生成）
+   */
+  private generateToolParameters(tool: Tool): ToolFunctionCallingSchema {
+    // 搜索类工具
+    if (tool.category === 'search') {
+      return {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索查询内容' },
+          maxResults: { type: 'number', description: '最大结果数量（可选）', default: 10 },
+        },
+        required: ['query'],
+      };
+    }
+
+    // Shell 工具
+    if (tool.name === 'execute_command') {
+      return {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: '要执行的命令' },
+          cwd: { type: 'string', description: '工作目录（可选）' },
+          timeout: { type: 'number', description: '超时时间（毫秒，默认 30000）', default: 30000 },
+        },
+        required: ['command'],
+      };
+    }
+
+    // 文件工具
+    if (tool.name === 'read_file') {
+      return {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '文件路径' },
+          maxLength: { type: 'number', description: '最大读取长度（可选）', default: 10000 },
+        },
+        required: ['path'],
+      };
+    }
+    if (tool.name === 'write_file') {
+      return {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '文件路径' },
+          content: { type: 'string', description: '文件内容' },
+          createDir: { type: 'boolean', description: '是否自动创建目录（可选）', default: false },
+        },
+        required: ['path', 'content'],
+      };
+    }
+    if (tool.name === 'edit_file') {
+      return {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '文件路径' },
+          edits: {
+            type: 'array',
+            description: '编辑操作数组',
+            items: {
+              type: 'object',
+              properties: {
+                oldText: { type: 'string', description: '要替换的旧文本' },
+                newText: { type: 'string', description: '新文本' },
+              },
+            },
+          },
+        },
+        required: ['path', 'edits'],
+      };
+    }
+
+    // 进程工具
+    if (tool.name === 'spawn_process') {
+      return {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: '会话标识符' },
+          command: { type: 'string', description: '要执行的命令' },
+          args: { type: 'array', description: '命令参数（可选）', items: { type: 'string' } },
+        },
+        required: ['sessionId', 'command'],
+      };
+    }
+    if (tool.name === 'terminate_process' || tool.name === 'process_status') {
+      return {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: '会话标识符' },
+        },
+        required: ['sessionId'],
+      };
+    }
+
+    // 网页工具
+    if (tool.name === 'fetch_web') {
+      return {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '网页 URL' },
+          timeout: { type: 'number', description: '超时时间（毫秒，可选）', default: 10000 },
+        },
+        required: ['url'],
+      };
+    }
+
+    // Jina Reader
+    if (tool.name === 'jina_read') {
+      return {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '网页 URL' },
+        },
+        required: ['url'],
+      };
+    }
+
+    // 视频搜索
+    if (tool.name === 'youtube_search' || tool.name === 'bilibili_search') {
+      return {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '视频 URL' },
+        },
+        required: ['url'],
+      };
+    }
+
+    // 默认空参数
+    return {
+      type: 'object',
+      properties: {},
+      required: [],
+    };
+  }
+
+  /**
+   * 获取所有工具的 Function Calling 定义（用于 LLM）
+   */
+  getFunctionCallingDefinitions(): FunctionCallingDefinition[] {
+    const definitions: FunctionCallingDefinition[] = [];
+
+    for (const tool of this.tools.values()) {
+      definitions.push({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: this.generateToolParameters(tool),
+        },
+      });
+    }
+
+    return definitions;
   }
 }
 
