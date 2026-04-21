@@ -1,6 +1,6 @@
 {
   "name": "qq-claude-proxy",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "QQ Remote Control for Claude Code - 通过QQ远程控制本地Claude Code",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
