@@ -1,7 +1,0 @@
-        for img_file, url in image_urls.items():
-            # 提取章节编号（修复：使用正则表达式正确提取）
-            match = re.search(r'chapter0?(\d+)', img_file)
-            if match:
-                chapter_int = int(match.group(1))
-                chapter_padded = str(chapter_int).zfill(2)
-                # 匹配 chapter01.png, chapter01_xxx.png, chapter1.png 等格式
