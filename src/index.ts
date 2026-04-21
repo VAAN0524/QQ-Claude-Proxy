@@ -7,10 +7,9 @@ import { Gateway } from './gateway/server.js';
 import { QQBotChannel } from './channels/qqbot/index.js';
 import { ClaudeCodeAgent } from './agent/index.js';
 import { loadConfig } from './config/index.js';
-import { modeManager, AgentMode } from './agents/ModeManager.js';
 import { logger } from './utils/logger.js';
 import { HttpServer } from './gateway/http-server.js';
-import { createApiHandlers, createExtendedApiHandlers, createDashboardState, type DashboardState } from './gateway/dashboard-api.js';
+import { createApiHandlers, createDashboardState, type DashboardState } from './gateway/dashboard-api.js';
 import { createDashboardStateStore, type DashboardStateStore } from './gateway/dashboard-state-store.js';
 import { createScheduler, type Scheduler } from './scheduler/index.js';
 import * as fs from 'fs';
@@ -20,23 +19,6 @@ import { dirname } from 'path';
 import { execSync, spawn } from 'child_process';
 import { promises as fsp } from 'fs';
 import { createHash } from 'crypto';
-
-// Agent 系统导入
-import {
-  AgentRegistry,
-  AgentDispatcher,
-  SimpleCoordinatorAgent, // Simple 模式的核心 Agent
-  SkillManagerAgent,
-  SharedContext,
-  SharedContextPersistence,
-  SessionManager,
-  registerLazyAgent,
-  type IAgent,
-  type AgentMessage,
-  type AgentContext,
-  type AgentResponse,
-} from './agents/index.js';
-import { HierarchicalMemoryService } from './agents/memory/HierarchicalMemoryService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -534,184 +516,28 @@ async function main(): Promise<void> {
     stateStore,
   });
 
-  // ========== Agent 系统 ==========
-  // 初始化共享上下文（从配置读取参数）
-  logger.info('初始化共享上下文...');
-  const sharedContext = new SharedContext({
-    maxMessages: config.context?.maxHistoryMessages || 100,
-    maxAge: config.context?.maxContextSize
-      ? Math.floor((config.context.maxContextSize / 160) * 60 * 1000) // 粗略转换 tokens 到毫秒
-      : 60 * 60 * 1000, // 默认 1 小时
-  });
-
-  // 初始化分层记忆服务（从配置读取参数）
-  logger.info('初始化分层记忆服务...');
-  const hierarchicalMemoryService = new HierarchicalMemoryService({
-    storagePath: path.join(process.cwd(), 'data', 'hierarchical-memory'),
-    agentConfigs: [
-      {
-        agentId: 'simple-coordinator',
-        memoryPath: path.join(process.cwd(), 'data', 'memory', 'simple-coordinator'),
-        enableHierarchical: true,
-      }
-    ],
-    sharedConfig: {
-      enabled: true,
-      sharedPath: path.join(process.cwd(), 'data', 'shared-memory'),
-      participatingAgents: ['simple-coordinator'],
-      syncInterval: 5 * 60 * 1000, // 5 分钟同步
-    },
-    autoCleanup: config.memory?.enableAutoArchive ?? true,
-    retentionTime: config.memory?.retentionDays
-      ? config.memory.retentionDays * 24 * 60 * 60 * 1000
-      : 90 * 24 * 60 * 60 * 1000, // 默认 90 天
-  });
-  await hierarchicalMemoryService.initialize();
-
-  // 初始化 Agent Registry
-  logger.info('初始化 Agent 系统...');
-  const agentRegistry = new AgentRegistry();
-
-  // 注册 Claude Code Agent (作为备用 Agent)
-  agentRegistry.register(agent);
-
-  // 初始化并注册内置 Agent
-  const apiKeys = {
-    anthropic: process.env.ANTHROPIC_API_KEY || '',
-    glm: process.env.GLM_API_KEY || '',
-    glmBaseUrl: process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
-  };
-
-  // ============================================
-  // 注意：专业 Agents 功能已整合到 SimpleCoordinatorAgent 的工具层
-  // - Code, Browser, Shell, Search 等功能通过工具调用实现
-  // - 如需多 Agent 协作，请使用 CLI 模式
-  // ============================================
-
-  // Skill Manager Agent (技能管理专家) - 使用延迟加载
-  try {
-    // 注册延迟加载的 SkillManagerAgent
-    const skillManagerProxy = registerLazyAgent(
-      'skill-manager',
-      async () => {
-        const { SkillManagerAgent } = await import('./agents/SkillManagerAgent.js');
-        const agent = new SkillManagerAgent();
-        if (typeof agent.initialize === 'function') {
-          await agent.initialize();
-        }
-        return agent;
-      }
-    );
-    agentRegistry.register(skillManagerProxy);
-    logger.info('[Agent 系统] Skill Manager Agent 已注册 (延迟加载)');
-  } catch (error) {
-    logger.warn(`[Agent 系统] Skill Manager Agent 注册失败: ${error}`);
-  }
-
-  // ========== 会话持久化系统 ==========
-  // 初始化会话管理器（支持跨会话记忆和状态恢复）
-  const sessionManager = new SessionManager({
-    storagePath: path.join(process.cwd(), 'data', 'sessions'),
-    autoSaveInterval: 30000, // 30秒自动保存
-    saveImmediately: true, // 每次修改后立即保存
-    maxHistoryMessages: 100, // 每个会话保留最多100条消息
-  });
-  logger.info('[会话系统] SessionManager 已初始化');
-
-  // 会话缓存（同步访问）
-  const sessionCache = new Map<string, SharedContextPersistence>();
-
-  // 辅助函数：获取或创建用户会话（异步）
-  async function getUserSession(userId: string, groupId?: string): Promise<SharedContextPersistence> {
-    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
-    return await sessionManager.getOrCreateSession(sessionId);
-  }
-
-  // 预热会话：异步加载并缓存
-  async function warmupSession(userId: string, groupId?: string): Promise<void> {
-    const sessionId = groupId ? `group_${groupId}` : `user_${userId}`;
-    if (!sessionCache.has(sessionId)) {
-      const session = await sessionManager.getOrCreateSession(sessionId);
-      sessionCache.set(sessionId, session);
-      logger.debug(`[会话系统] 会话 ${sessionId} 已预热`);
-    }
-  }
-
-  // 初始化 Agent 系统
-  let agentDispatcher: AgentDispatcher | null = null;
-  let simpleCoordinatorAgent: SimpleCoordinatorAgent | null = null;
-
-  // 始终创建 Agent Dispatcher（CLI 模式需要使用）
-  agentDispatcher = new AgentDispatcher(agentRegistry, agent);
-  logger.info('[Agent 系统] Agent Dispatcher 已创建 (CLI 模式使用)');
-
-  // 初始化 SimpleCoordinatorAgent (Simple 模式的万金油 Agent)
-  try {
-    logger.info('[Agent 系统] 尝试初始化 SimpleCoordinatorAgent...');
-    const skillsPath = path.join(process.cwd(), 'skills');
-    const memoryPath = path.join(process.cwd(), 'memory/simple');
-    const rulesPath = path.join(process.cwd(), 'rules/simple');
-
-    // 确保目录存在
-    await fsp.mkdir(skillsPath, { recursive: true });
-    await fsp.mkdir(memoryPath, { recursive: true });
-    await fsp.mkdir(rulesPath, { recursive: true });
-
-    simpleCoordinatorAgent = new SimpleCoordinatorAgent({
-      skillsPath,
-      memoryPath,
-      rulesPath,
-      sharedContext, // 传入共享上下文
-      hierarchicalMemory: hierarchicalMemoryService, // 传入分层记忆服务
-    });
-
-    await simpleCoordinatorAgent.initialize();
-    logger.info('[Agent 系统] SimpleCoordinatorAgent 已启用 (简化模式) 🆕');
-  } catch (error) {
-    logger.warn(`[Agent 系统] SimpleCoordinatorAgent 初始化失败: ${error}`);
-    simpleCoordinatorAgent = null;
-  }
-
-  logger.info(`[Agent 系统] 已注册 ${agentRegistry.size} 个 Agent`);
-  logger.info(`[Agent 系统] 默认 Agent: ${config.agents.default}`);
+  // ========== Agent 系统 (已移除) ==========
+  // 多 Agent 系统已删除，现在只使用 Claude Code CLI 模式
+  logger.info('[系统] 使用纯 Claude Code CLI 模式');
   // ===============================
 
-  // ========== 扩展 Dashboard API ==========
-  // 创建独立的 SkillLoader 实例
-  let skillLoader: any = undefined;
-  try {
-    const { SkillLoader } = await import('./agents/SkillLoader.js');
-    const skillsDir = path.join(process.cwd(), 'skills');
-    skillLoader = new SkillLoader(skillsDir);
-    await skillLoader.scanSkillsMetadata();
-    logger.info('[Dashboard] 独立 SkillLoader 已创建');
-  } catch (error) {
-    logger.warn(`[Dashboard] SkillLoader 创建失败: ${error}`);
-  }
+  // ========== 会话系统 (已移除) ==========
+  // 会话持久化系统已删除，现在只使用 Claude Code CLI 模式
+  // ===============================
 
-  // 日志文件路径
-  const logFilePath = path.join(process.cwd(), 'logs', 'app.log');
+  // ========== Agent 初始化 (已移除) ==========
+  // Agent Dispatcher 和 SimpleCoordinatorAgent 已删除
+  // ===============================
 
-  // 创建扩展的 API 处理器（包含 Agent、Skills、Logs 等管理接口）
-  const extendedApiHandlers = createExtendedApiHandlers({
-    config,
-    dashboardState,
-    restartCallback: async () => {
-      logger.info('Dashboard 请求重启服务...');
-      await shutdown('RESTART');
-    },
-    scheduler: scheduler || undefined,
-    agentRegistry,
-    skillLoader,
-    logFilePath,
+  // ========== Dashboard HTTP Server ==========
+  // 创建 HTTP Server（只包含基础 API）
+  const httpServer = new HttpServer({
+    port: 8080,
+    host: '0.0.0.0',
+    staticPath: publicPath,
+    apiHandlers,
   });
-
-  // 合并基础和扩展的 API 处理器
-  for (const [key, handler] of extendedApiHandlers.entries()) {
-    apiHandlers.set(key, handler);
-  }
-
-  logger.info(`[Dashboard] API 处理器已扩展，总计 ${apiHandlers.size} 个端点`);
+  // ===============================
 
   // 创建 HTTP Server 以使用完整的 API 处理器
   const httpServer = new HttpServer({
@@ -722,23 +548,7 @@ async function main(): Promise<void> {
   });
   // ===============================
 
-  // 设置文件发送回调（Simple 模式）
-  if (simpleCoordinatorAgent) {
-    simpleCoordinatorAgent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
-      const fileName = path.basename(filePath);
-      const targetId = groupId || userId;
-      logger.info(`[SendFileCallback] Starting file send: ${filePath} -> ${targetId}`);
-      try {
-        await qqChannel.sendFile(targetId, filePath, !!groupId, fileName);
-        logger.info(`[SendFileCallback] File sent successfully: ${filePath}`);
-      } catch (error) {
-        logger.error(`[SendFileCallback] File send FAILED: ${error}`);
-        throw error;
-      }
-    });
-  }
-
-  // CLI 模式的文件发送回调（如果需要）
+  // 设置文件发送回调（CLI 模式）
   agent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
     const fileName = path.basename(filePath);
     const targetId = groupId || userId;
@@ -808,32 +618,6 @@ async function main(): Promise<void> {
         const qqData = data as any;
         const content = qqData.content;
 
-        // 预热会话：异步加载会话数据（不阻塞消息处理）
-        warmupSession(qqData.userId, qqData.groupId).catch(err => {
-          logger.warn(`[会话系统] 会话预热失败: ${err}`);
-        });
-
-        // 检查模式切换命令
-        const modeResponse = await modeManager.handleModeCommand(content, qqData.userId, qqData.groupId);
-        if (modeResponse) {
-          await qqChannel.send({
-            userId: qqData.userId,
-            groupId: qqData.groupId,
-            content: modeResponse.message,
-          });
-          return;
-        }
-
-        // 检查帮助命令
-        if (content === '/mode' || content === '/模式' || content === '/help' || content === '/帮助') {
-          await qqChannel.send({
-            userId: qqData.userId,
-            groupId: qqData.groupId,
-            content: modeManager.getModeHelp(),
-          });
-          return;
-        }
-
         // 预处理文件：下载附件到工作区，解析嵌入图片
         logger.info(`[DEBUG] 准备调用 preprocessFiles: content="${content.substring(0, 30)}...", attachments=${qqData.attachments?.length || 0}`);
         const { content: processedContent, attachments: processedAttachments } = await preprocessFiles(
@@ -843,7 +627,9 @@ async function main(): Promise<void> {
         );
         logger.info(`[DEBUG] preprocessFiles 完成: processedAttachments.length=${processedAttachments.length}`);
 
-        const agentMessage: AgentMessage = {
+        // 直接调用 Claude Code Agent 处理消息
+        logger.info('[消息处理] 调用 Claude Code Agent...');
+        const response = await agent.process({
           channel: 'qqbot',
           userId: qqData.userId,
           groupId: qqData.groupId,
@@ -851,47 +637,15 @@ async function main(): Promise<void> {
           attachments: processedAttachments,
           timestamp: new Date(),
           rawData: data,
-        };
-
-        const agentContext: AgentContext = {
+        }, {
           workspacePath,
           storagePath,
           allowedUsers: config.agent.allowedUsers || [],
-        };
-
-        // 根据用户模式选择处理方式
-        const userMode = modeManager.getUserMode(qqData.userId, qqData.groupId);
-        let response: AgentResponse | null = null;
-
-        logger.info(`[模式检查] 用户模式: ${userMode}, simpleCoordinatorAgent 存在: ${!!simpleCoordinatorAgent}`);
-
-        if (userMode === AgentMode.SIMPLE && simpleCoordinatorAgent) {
-          // 简单模式：使用 Simple Coordinator（万金油 agent，支持 SKILL.md）
-          logger.info(`[模式] 使用简单模式 (Simple Coordinator)`);
-
-          // 获取用户会话并传递 SharedContext
-          const userSession = await getUserSession(qqData.userId, qqData.groupId);
-          const agentContextWithContext: AgentContext = {
-            ...agentContext,
-            sharedContext: userSession.getContext(),
-          };
-
-          response = await simpleCoordinatorAgent.process(agentMessage, agentContextWithContext);
-        } else {
-          // CLI 模式：使用 Agent Dispatcher (直接调用本地 Claude Code CLI)
-          if (userMode === AgentMode.CLI) {
-            logger.info(`[模式] 使用 CLI 模式 (本地 Claude Code CLI)`);
-          } else if (userMode === AgentMode.SIMPLE && !simpleCoordinatorAgent) {
-            logger.warn(`[模式] 用户请求简单模式，但 simpleCoordinatorAgent 未初始化，回退到 CLI 模式`);
-          } else {
-            logger.info(`[模式] 使用 CLI 模式 (默认)`);
-          }
-          response = await agentDispatcher!.dispatch(agentMessage, agentContext);
-        }
+        });
 
         // 检查响应是否有效
         if (!response) {
-          logger.error('[DIAG] Agent 返回了 null 响应');
+          logger.error('[消息处理] Agent 返回了 null 响应');
           await qqChannel.send({
             userId: qqData.userId,
             groupId: qqData.groupId,
@@ -900,24 +654,20 @@ async function main(): Promise<void> {
           return;
         }
 
-        logger.info(`[DIAG] Agent 处理完成, agentId=${response.agentId || 'claude'}`);
-
-        // 添加模式前缀到响应内容
-        const modePrefix = modeManager.getModePrefix(qqData.userId, qqData.groupId);
-        const prefixedContent = `${modePrefix} ${response.content}`;
+        logger.info(`[消息处理] Agent 处理完成`);
 
         // 转换回原有响应格式
         const legacyResponse = {
           userId: response.userId || qqData.userId,
           groupId: response.groupId || qqData.groupId,
           msgId: response.msgId,
-          content: prefixedContent,
+          content: response.content,
           filesToSend: response.filesToSend,
         };
 
-        logger.info(`[DIAG] 准备发送响应: userId=${legacyResponse.userId}, mode=${modePrefix}, content=${legacyResponse.content.substring(0, 50)}...`);
+        logger.info(`[消息处理] 准备发送响应: userId=${legacyResponse.userId}, content=${legacyResponse.content.substring(0, 50)}...`);
         await qqChannel.send(legacyResponse);
-        logger.info(`[DIAG] 响应已发送`);
+        logger.info(`[消息处理] 响应已发送`);
 
         // 处理文件发送（私聊和群聊都支持）
         if (legacyResponse.filesToSend && legacyResponse.filesToSend.length > 0) {
