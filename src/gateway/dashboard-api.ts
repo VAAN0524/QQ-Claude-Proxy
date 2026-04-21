@@ -96,11 +96,8 @@ export interface ApiHandlerContext {
  * Extended API Handlers context
  */
 export interface ExtendedApiHandlerContext extends ApiHandlerContext {
-  agentRegistry?: any;
-  skillLoader?: any;
   toolManager?: any; // 工具层管理器
   logFilePath?: string;
-  currentMode?: 'cli' | 'simple'; // 当前运行模式
 }
 
 /**
