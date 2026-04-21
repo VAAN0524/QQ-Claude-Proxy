@@ -60,7 +60,6 @@ export class Gateway {
         id: session.id,
         createdAt: session.createdAt,
         channels: Array.from(session.channels),
-        agents: Array.from(session.agents),
       } : null;
     });
 
@@ -78,22 +77,6 @@ export class Gateway {
       if (!channel) throw new Error('Channel name required');
       this.sessionManager.unregisterChannel(ctx.sessionId, channel);
       return { unsubscribed: channel };
-    });
-
-    // Agent registration
-    this.router.onMethod('agent.register', (params, ctx) => {
-      const agentId = params.agentId as string;
-      if (!agentId) throw new Error('Agent ID required');
-      this.sessionManager.registerAgent(ctx.sessionId, agentId);
-      return { registered: agentId };
-    });
-
-    // Agent unregistration
-    this.router.onMethod('agent.unregister', (params, ctx) => {
-      const agentId = params.agentId as string;
-      if (!agentId) throw new Error('Agent ID required');
-      this.sessionManager.unregisterAgent(ctx.sessionId, agentId);
-      return { unregistered: agentId };
     });
 
     // List available methods

@@ -15,7 +15,6 @@ export interface Session {
   createdAt: Date;
   metadata: Record<string, unknown>;
   channels: Set<string>;
-  agents: Set<string>;
 }
 
 export class SessionManager {
@@ -33,7 +32,6 @@ export class SessionManager {
       createdAt: new Date(),
       metadata,
       channels: new Set(),
-      agents: new Set(),
     };
 
     this.sessions.set(id, session);
@@ -110,30 +108,6 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.channels.delete(channel);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Register an agent for a session
-   */
-  registerAgent(sessionId: string, agentId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.agents.add(agentId);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Unregister an agent from a session
-   */
-  unregisterAgent(sessionId: string, agentId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.agents.delete(agentId);
       return true;
     }
     return false;
