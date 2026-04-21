@@ -38,18 +38,6 @@
             <polyline points="9 11 12 14 22 4"/>
           </svg>
         </button>
-        <a href="agents.html" class="btn-secondary" id="agentsBtn" title="Agent 配置">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
-          <span>Agent</span>
-        </a>
-        <a href="skills.html" class="btn-secondary" id="skillsBtn" title="技能管理">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-          </svg>
-          <span>技能</span>
-        </a>
         <a href="logs.html" class="btn-secondary" id="logsBtn" title="日志查看">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -242,7 +230,7 @@
   <div class="modal-overlay" id="createTaskModal">
     <div class="modal modal-xl">
       <div class="modal-header">
-        <h2>创建定时任务</h2>
+        <h2 id="createTaskModalTitle">创建定时任务</h2>
         <button class="btn-close" id="closeCreateTaskBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -397,7 +385,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="cancelCreateTaskBtn">取消</button>
-        <button class="btn-primary" id="saveCreateTaskBtn">创建任务</button>
+        <button class="btn-primary" id="saveCreateTaskBtn">✨ 创建任务</button>
       </div>
     </div>
   </div>
