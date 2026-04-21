@@ -3,4 +3,3 @@
  */
 
 export * from './Agent.js';
-export * from './PersonaAgent.js';
