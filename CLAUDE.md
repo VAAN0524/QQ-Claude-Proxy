@@ -4,21 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-**QQ-Claude-Proxy** 是通过 QQ 远程控制本地 Claude Code CLI 的代理系统，支持多 Agent 协作、人格设定、分层记忆等高级功能。
+**QQ-Claude-Proxy** 是通过 QQ 远程控制本地 Claude Code CLI 的纯代理系统。
+
+**版本**: 2.0.0
+**核心特性**:
+- 🚀 **纯 CLI 模式** - 直接调用 Claude Code CLI，无中间层
+- 💬 **QQ 集成** - 通过 QQ 机器人远程控制
+- 📊 **任务调度** - 支持定时任务和周期任务
+- 🎛️ **Web 监控** - 实时监控和管理界面
 
 ## 核心架构
 
 ```
-QQ Bot → QQ Gateway ──────┐
-                          │
-                    Internal Gateway (WS, port 18789)
-                          │
-                          ├──→ SimpleCoordinatorAgent (Simple 模式)
-                          │       └──→ 动态技能加载 (SKILL.md)
-                          │       └──→ 工具层直接调用 (search/web/shell/file/process)
-                          │       └──→ 专业 Agents (按需调用)
-                          │
-                          └──→ Claude Code CLI (CLI 模式)
+QQ Bot → QQ Gateway → Internal Gateway (WS, port 18789) → ClaudeCodeAgent → Claude Code CLI
 ```
 
 ### Gateway 消息协议
@@ -64,9 +62,6 @@ npm run watchdog:start # 注册为系统服务并启动
 npm run watchdog:stop  # 停止服务
 npm run watchdog:status # 查看状态
 
-# 记忆清理
-npm run daily-cleanup # 清理过期的记忆条目
-
 # Dashboard CLI
 npm run monitor       # 启动终端监控界面
 ```
@@ -75,102 +70,59 @@ npm run monitor       # 启动终端监控界面
 
 ```
 src/
-├── agents/                    # Agent 系统核心
-│   ├── base/                 # Agent 基础接口
-│   ├── memory/               # 分层记忆 (L0/L1/L2)
-│   ├── tools-layer/          # 工具层 (搜索/Shell/文件/进程)
-│   ├── SimpleCoordinatorAgent.ts
-│   ├── AgentDispatcher.ts
-│   └── personas.ts
-├── gateway/                   # WebSocket 消息网关
-│   ├── server.ts
-│   ├── http-server.ts
-│   ├── dashboard-api.ts
-│   └── protocol.ts
-├── channels/qqbot/           # QQ Bot Channel
 ├── agent/                     # Claude Code CLI 适配器
-├── llm/                       # LLM Provider (OpenAI/Anthropic/GLM)
+│   └── ClaudeCodeAgent.ts     # 主要的 Agent 实现
+├── gateway/                   # WebSocket 消息网关
+│   ├── server.ts              # WebSocket 服务器
+│   ├── http-server.ts         # HTTP 服务器（Dashboard）
+│   ├── dashboard-api.ts       # Dashboard API 端点
+│   ├── protocol.ts            # 消息协议定义
+│   └── router.ts              # 消息路由器
+├── channels/qqbot/           # QQ Bot Channel
+│   ├── client.ts              # QQ Bot 客户端
+│   └── message-handler.ts     # 消息处理
 ├── scheduler/                 # 定时任务调度器
+│   ├── task-runner.ts         # 任务执行器
+│   └── task-store.ts          # 任务存储
 ├── config/                    # 配置加载和验证
+│   └── schema.ts              # 配置 Schema
 └── utils/                     # 工具函数
+    └── logger.ts              # 日志工具
 ```
-
-## 双模式架构
-
-项目支持**两种模式**，通过 ModeManager 管理：
-
-| 模式 | 协调器 | 说明 |
-|------|--------|------|
-| **CLI 模式** | - | 直接调用本地 Claude Code CLI |
-| **Simple 模式** | SimpleCoordinatorAgent | 极简协调 Agent + SKILL.md 驱动 + 工具层直接调用 |
-
-**模式切换**: `/mode cli` 或 `/mode simple`（支持中文：`/模式 cli`、`/模式 简单`）
 
 ## 核心组件
 
-### 1. SimpleCoordinatorAgent (`src/agents/SimpleCoordinatorAgent.ts`)
+### 1. ClaudeCodeAgent (`src/agent/ClaudeCodeAgent.ts`)
 
-核心设计原则：
-1. **单一协调者** - 一个 Agent 处理所有任务
-2. **动态技能加载** - 通过 SKILL.md 切换身份和技能
-3. **简化记忆** - 基于 markdown 文档的记忆系统
-4. **直接工具调用** - 通过工具层直接调用功能
+负责与本地 Claude Code CLI 通信的核心组件：
+- **命令执行**: 调用 `claude` 命令并捕获输出
+- **流式响应**: 实时返回 CLI 的输出
+- **会话管理**: 维护与 CLI 的持久连接
 
-### 2. 工具层 (`src/agents/tools-layer/`)
+### 2. Gateway 系统 (`src/gateway/`)
 
-Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具函数。
+**WebSocket 服务器** (`server.ts`):
+- 监听端口 18789
+- 处理来自 QQ Bot 的连接
+- 消息路由到 ClaudeCodeAgent
 
-**工具分类**:
-- **搜索**: `tavily_search`, `smart_search`, `exa_search`, `exa_code_search`
-- **视频**: `youtube_search`, `bilibili_search`
-- **网页**: `jina_read`, `fetch_web`
-- **命令**: `execute_command`
-- **文件**: `read_file`, `write_file`, `edit_file`, `apply_patch`
-- **进程**: `spawn_process`, `terminate_process`, `list_processes`
+**HTTP 服务器** (`http-server.ts`):
+- 监听端口 8080
+- 提供 Dashboard API
+- 静态文件服务
 
-**重要**: 所有搜索工具必须在关键词中包含当前年份以获取最新资讯。
+### 3. QQ Bot Channel (`src/channels/qqbot/`)
 
-### 3. 分层记忆系统 (`src/agents/memory/`)
+**客户端** (`client.ts`):
+- 连接到 QQ 机器人平台
+- 接收和发送消息
 
-| 层级 | 容量 | 用途 | 访问范围 |
-|------|------|------|----------|
-| **L0** | ~100 tokens | 快速检索索引、关键词 | 仅当前 Agent |
-| **L1** | ~2000 tokens | 内容导航、关键点 | Agent 间共享 |
-| **L2** | 无限 | 完整数据、原始引用 | 全局共享 |
+**消息处理器** (`message-handler.ts`):
+- 解析 QQ 消息
+- 转发到 Gateway
+- 返回响应到 QQ
 
-**记忆生命周期**:
-| 阶段 | 标签 | 保留时间 | 清理策略 |
-|------|------|----------|----------|
-| active | 活跃 | 无限期 | 保留 |
-| archived | 归档 | 30 天 | 定期检查 |
-| expired | 过期 | 7 天 | 自动清理 |
-
-### 4. Agent 调度器 (`src/agents/AgentDispatcher.ts`)
-
-路由优先级：
-1. **显式指定**: 前缀如 `/code`, `/browser`, `/shell`, `/claude`
-2. **用户偏好**: 记住用户上次选择的 Agent
-3. **智能选择**: 基于能力匹配自动选择
-4. **默认回退**: Claude Code Agent
-
-### 5. 技能管理
-
-**位置**: `src/agents/SkillLoader.ts`, `src/agents/SkillInstaller.ts`
-
-- **渐进式加载**: 只扫描 SKILL.md 元数据，按需加载完整代码
-- **安装源**: 本地、GitHub、GitLab
-- **技能索引**: 使用 `.skill-index.json` 缓存加速启动
-
-### 6. LLM Provider (`src/llm/providers.ts`)
-
-统一接口支持多提供商：
-- **OpenAI**: GPT-4 系列
-- **Anthropic**: Claude 系列
-- **GLM**: 智谱 AI GLM-4.7 (支持 Coding Plan API)
-
-**代理支持**: 自动读取环境变量 `HTTP_PROXY` / `HTTPS_PROXY`
-
-### 7. 定时任务调度器 (`src/scheduler/`)
+### 4. 任务调度器 (`src/scheduler/`)
 
 支持两种任务类型：
 - **周期任务**: 按固定间隔重复执行
@@ -178,12 +130,40 @@ Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具
 
 **存储**: `data/tasks.json`
 
+**任务格式**:
+```json
+{
+  "id": "unique-id",
+  "name": "任务名称",
+  "type": "cron|once",
+  "schedule": "0 9 * * *",
+  "command": "claude 命令",
+  "enabled": true
+}
+```
+
+## 重要文件位置
+
+### 配置文件
+- `config.json` - 主配置文件
+- `.env` - 环境变量（不要提交到 Git）
+
+### 日志文件
+- `logs/app.log` - 应用日志
+- `logs/error.log` - 错误日志
+- `dev.log` - 开发日志
+
+### 数据目录
+- `data/sessions/` - 用户会话持久化
+- `workspace/` - Claude Code 工作目录
+- `data/tasks.json` - 定时任务存储
+
 ## 重要约定
 
 ### ES Modules
 - 项目使用 `"type": "module"`
 - 所有 import 必须包含 `.js` 扩展名
-- 动态 import: `await import('./agents/CodeAgent.js')`
+- 动态 import: `await import('./agent/ClaudeCodeAgent.js')`
 
 ### TypeScript 编译
 - 目标：ES2022, 模块：NodeNext
@@ -203,56 +183,16 @@ Simple 模式的核心组件，将专业 Agent 功能提取为可调用的工具
 ### 配置加载
 - 优先级：`.env` > `config.json` > `config/default.json`
 - 配置 Schema: `src/config/schema.ts`
-- 模式存储：`data/mode.json`
 
 ### 文件路径安全
 - 用户输入文件名必须经过 `sanitizeFileName()` 清理
 - 防止路径穿越攻击
 
-## 添加新组件
-
-### 添加新 Agent
-
-1. 创建 `src/agents/NewAgent.ts`，实现 `IAgent` 接口 (`src/agents/base/Agent.ts`)
-   - 必须实现：`id`, `name`, `description`, `capabilities`, `config`, `process()`
-   - 可选实现：`canHandle()`, `initialize()`, `cleanup()`, `getPersona()`, `applyPersonaStyle()`
-
-2. 在 `src/agents/index.ts` 中导出新 Agent
-
-3. 在 `src/index.ts` 的 Agent 注册部分添加初始化代码
-
-4. 在 `src/agents/personas.ts` 中添加人格设定
-
-### 添加新工具
-
-工具层位于 `src/agents/tools-layer/`，按分类组织：
-
-1. 在对应分类文件中添加工具函数（如 `search-tools.ts`）
-2. 在 `index.ts` 的 `ToolManager.registerBuiltinTools()` 中注册：
-```typescript
-this.register({
-  name: 'your_tool',
-  description: '工具描述',
-  category: 'search', // 或 web, shell, file, process
-  execute: async (params) => {
-    // 工具实现
-  },
-});
-```
-
-### 添加新技能
-
-1. 在 `skills/` 目录创建技能文件夹
-2. 创建 `SKILL.md` 元数据文件（YAML frontmatter 格式）
-3. 通过 Dashboard 或 QQ 命令安装
-
 ## Dashboard 功能
 
 访问 **http://localhost:8080**
 
-- **监控** (index.html): 实时任务进度、工具状态
-- **Agents** (agents.html): Agent 管理、状态查看
-- **Skills** (skills.html): 技能管理（安装/卸载/启用/禁用）
+- **监控** (index.html): 实时任务进度、系统状态
 - **Tasks** (tasks.html): 定时任务管理
 - **Config** (config.html): 系统配置
 - **Logs** (logs.html): 日志查看
@@ -271,18 +211,15 @@ this.register({
 | `QQ_BOT_APP_ID` | QQ 机器人 AppID | 是 |
 | `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
 | `ALLOWED_USERS` | 用户白名单 | 否 |
-| `GLM_API_KEY` | GLM API Key（Simple 模式） | 否 |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | 否 |
-| `TAVILY_API_KEY` | Tavily Search API Key | 否 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 代理设置 | 否 |
-| `AGENT_REACH_*` | Agent Reach 配置 | 否 |
 
 ## 安全铁律
 
 **禁止泄露敏感信息到 Git 仓库**
 
 以下信息**绝对禁止**提交到 Git：
-- API Keys (Tavily, GLM, Anthropic, OpenAI, etc.)
+- API Keys (Anthropic, OpenAI, etc.)
 - 密钥和密码 (QQ Bot Secret, Access Token, etc.)
 - 用户 OpenID 和个人标识信息
 
@@ -291,7 +228,6 @@ this.register({
 2. 代码中使用 `process.env.VARIABLE_NAME` 读取
 3. 提交前执行安全检查：
 ```bash
-git ls-files | xargs grep -l "tvly-"      # 检查 Tavily Key
 git ls-files | xargs grep -l "sk-ant-"     # 检查 Anthropic Key
 ```
 
@@ -306,17 +242,61 @@ git ls-files | xargs grep -l "sk-ant-"     # 检查 Anthropic Key
 
 **Claude Code CLI 无法启动**
 - 确保已全局安装：`npm install -g @anthropic-ai/claude-code`
+- 检查 CLI 版本：`claude --version`
 
-**Simple 模式无响应**
-- 检查 `GLM_API_KEY` 是否配置且有效
-- 检查网络连接到 GLM API 端点
+**Gateway 连接失败**
+- 检查端口 18789 是否被占用
+- 查看日志：`tail -f logs/app.log`
 
-**Agent Reach 搜索失败**
-- 确保已安装 `mcporter`: `npm install -g mcporter`
-- 确保已安装 `yt-dlp`: `pip install yt-dlp`
+**定时任务不执行**
+- 检查 `data/tasks.json` 文件格式
+- 确保任务配置的 `command` 使用正确的 claude 命令格式
+- 查看调度器日志：`grep -i "scheduler\|task" logs/app.log`
+
+**QQ Bot 无响应**
+- 检查 `QQ_BOT_APP_ID` 和 `QQ_BOT_SECRET` 是否正确
+- 查看日志：`tail -f logs/app.log | grep qqbot`
 
 ### 会话持久化
 
 每个用户/群组的会话独立存储在 `data/sessions/` 目录：
 - 用户会话：`user_{userId}.json`
 - 群组会话：`group_{groupId}.json`
+
+## 开发技巧
+
+### 调试 Gateway 消息
+
+```bash
+# 查看 Gateway 消息日志
+tail -f logs/app.log | grep -i "gateway\|message"
+
+# 查看 WebSocket 连接状态
+curl http://localhost:8080/api/status
+```
+
+### 性能分析
+
+```bash
+# 查看响应时间
+grep "处理耗时" logs/app.log | tail -20
+
+# 查看内存使用
+# 访问 http://localhost:8080 查看实时监控
+```
+
+### 测试 Claude Code CLI 集成
+
+```bash
+# 直接测试 CLI
+claude "你好"
+
+# 查看完整日志
+tail -f logs/app.log
+```
+
+## 相关文档
+
+- [Gateway 架构文档](docs/gateway-architecture.md)
+- [任务调度系统](docs/task-scheduler.md)
+- [部署指南](docs/deployment.md)
