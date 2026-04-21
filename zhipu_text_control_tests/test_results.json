@@ -1,0 +1,52 @@
+[
+  {
+    "test": 1,
+    "name": "Test1_Flowchart_MultipleTextLabels",
+    "success": true,
+    "elapsed": 18.2344753742218,
+    "file_size": 64783,
+    "local_path": "C:/Test/bot/zhipu_text_control_tests\\test_1_20260315_230604.png",
+    "url": "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/202603152305450d80230dc29c44bd_watermark.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=YGQjKAy%2BFGGmoBCBoxC5UvhGYAU%3D&Expires=1774191963",
+    "expected_ratio": "High (>30%)"
+  },
+  {
+    "test": 2,
+    "name": "Test2_ComparisonChart_DataLabels",
+    "success": true,
+    "elapsed": 22.688801765441895,
+    "file_size": 72817,
+    "local_path": "C:/Test/bot/zhipu_text_control_tests\\test_2_20260315_230630.png",
+    "url": "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/2026031523060677694fd8a14c4f0a_watermark.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=rBm0XwMKpTUiMF9Q9B%2FqhiZYOlU%3D&Expires=1774191989",
+    "expected_ratio": "High (>25%)"
+  },
+  {
+    "test": 3,
+    "name": "Test3_Poster_BigTitle",
+    "success": true,
+    "elapsed": 15.225534439086914,
+    "file_size": 231854,
+    "local_path": "C:/Test/bot/zhipu_text_control_tests\\test_3_20260315_230648.png",
+    "url": "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/2026031523063287bad68d04b34992_watermark.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=ozrNz9%2FuZIvaGENqr9Fi2YUT2Mc%3D&Expires=1774192007",
+    "expected_ratio": "Very High (>40%)"
+  },
+  {
+    "test": 4,
+    "name": "Test4_SocialCard_QuoteText",
+    "success": true,
+    "elapsed": 18.722672939300537,
+    "file_size": 76295,
+    "local_path": "C:/Test/bot/zhipu_text_control_tests\\test_4_20260315_230709.png",
+    "url": "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/20260315230650aa6665bd76034ac5_watermark.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=OiAY6YclHyYmQiRiSUooneTjENU%3D&Expires=1774192028",
+    "expected_ratio": "Very High (>50%)"
+  },
+  {
+    "test": 5,
+    "name": "Test5_MinimalText_Control",
+    "success": true,
+    "elapsed": 16.756653308868408,
+    "file_size": 171556,
+    "local_path": "C:/Test/bot/zhipu_text_control_tests\\test_5_20260315_230729.png",
+    "url": "https://maas-watermark-prod-new.cn-wlcb.ufileos.com/202603152307111f1e6d6bf0554231_watermark.png?UCloudPublicKey=TOKEN_6df395df-5d8c-4f69-90f8-a4fe46088958&Signature=XjMcutH%2F5qKHKC%2F%2FmDIsifV1xTg%3D&Expires=1774192048",
+    "expected_ratio": "Low (<10%)"
+  }
+]
