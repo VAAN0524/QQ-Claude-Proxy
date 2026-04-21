@@ -504,6 +504,7 @@ async function main(): Promise<void> {
     sandbox: config.channels.qqbot.sandbox,
   });
 
+  // 初始化 Claude Code Agent (纯 CLI 模式)
   logger.info('初始化 Claude Code Agent...');
   logger.info(`工作目录: ${workspacePath}`);
   logger.info(`存储目录: ${storagePath}`);
@@ -516,37 +517,13 @@ async function main(): Promise<void> {
     stateStore,
   });
 
-  // ========== Agent 系统 (已移除) ==========
-  // 多 Agent 系统已删除，现在只使用 Claude Code CLI 模式
-  logger.info('[系统] 使用纯 Claude Code CLI 模式');
-  // ===============================
-
-  // ========== 会话系统 (已移除) ==========
-  // 会话持久化系统已删除，现在只使用 Claude Code CLI 模式
-  // ===============================
-
-  // ========== Agent 初始化 (已移除) ==========
-  // Agent Dispatcher 和 SimpleCoordinatorAgent 已删除
-  // ===============================
-
-  // ========== Dashboard HTTP Server ==========
-  // 创建 HTTP Server（只包含基础 API）
+  // 创建 Dashboard HTTP Server
   const httpServer = new HttpServer({
     port: 8080,
     host: '0.0.0.0',
     staticPath: publicPath,
     apiHandlers,
   });
-  // ===============================
-
-  // 创建 HTTP Server 以使用完整的 API 处理器
-  const httpServer = new HttpServer({
-    port: 8080,
-    host: '0.0.0.0',
-    staticPath: publicPath,
-    apiHandlers,
-  });
-  // ===============================
 
   // 设置文件发送回调（CLI 模式）
   agent.setSendFileCallback(async (userId: string, filePath: string, groupId?: string) => {
