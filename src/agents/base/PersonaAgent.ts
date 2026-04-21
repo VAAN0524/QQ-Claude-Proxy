@@ -5,9 +5,13 @@
  */
 
 import type { IAgent, AgentConfig, AgentMessage, AgentContext, AgentResponse, AgentCapability } from './Agent.js';
-import type { AgentPersona } from '../personas.js';
-import { getAgentPersona } from '../personas.js';
+import type { AgentPersona } from './Agent.js';
 import { buildResponseStyleGuide } from '../PersonaPromptBuilder.js';
+
+// 临时的 getAgentPersona 实现，待移除
+function getAgentPersona(agentId: string): AgentPersona | undefined {
+  return undefined;
+}
 
 /**
  * 人格风格选项

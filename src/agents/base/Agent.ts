@@ -4,8 +4,20 @@
  * 所有内置 Agent 必须实现此接口
  */
 
-// 导入人格设定类型
-import type { AgentPersona } from '../personas.js';
+// 人格设定类型（临时定义，待移除）
+export interface AgentPersona {
+  id?: string;
+  role?: string;
+  name?: string;
+  description?: string;
+  responsibilities?: string[];
+  traits?: string[];
+  principles?: string[];
+  collaboration?: string;
+  tone?: 'professional' | 'friendly' | 'casual' | 'neutral';
+  verbosity?: 'concise' | 'normal' | 'detailed';
+  tags?: string[];
+}
 
 /**
  * Agent 能力标签
@@ -87,7 +99,7 @@ export interface AgentContext {
   /** 允许的用户列表 */
   allowedUsers: string[];
   /** 共享上下文（可选，用于跨会话记忆） */
-  sharedContext?: import('../SharedContext.js').SharedContext;
+  sharedContext?: unknown;
   /** 元数据 */
   metadata?: Record<string, unknown>;
 }

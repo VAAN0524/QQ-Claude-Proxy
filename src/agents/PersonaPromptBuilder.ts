@@ -4,7 +4,7 @@
  * 将 AgentPersona 配置转换为 LLM 可理解的 System Prompt
  */
 
-import type { AgentPersona } from './personas.js';
+import type { AgentPersona } from './base/Agent.js';
 
 /**
  * 构建人格设定 System Prompt
