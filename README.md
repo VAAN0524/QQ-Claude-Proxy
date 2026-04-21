@@ -82,6 +82,7 @@ claude  # 登录你的 Anthropic 账户
 git clone https://github.com/VAAN0524/QQ-Claude-Proxy.git
 cd QQ-Claude-Proxy
 npm install
+npm run build    # 编译 TypeScript
 ```
 
 ### 3️⃣ 配置 QQ Bot

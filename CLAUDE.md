@@ -71,7 +71,15 @@ npm run monitor       # 启动终端监控界面
 ```
 src/
 ├── agent/                     # Claude Code CLI 适配器
-│   └── ClaudeCodeAgent.ts     # 主要的 Agent 实现
+│   ├── index.ts               # 主 Agent 入口
+│   ├── claude-cli.ts          # Claude CLI 调用
+│   ├── cli-session-manager.ts # 会话管理
+│   ├── tools.ts               # 工具集成
+│   └── file-storage.ts        # 文件存储
+├── agents/                    # Agent 基础接口
+│   ├── base/                  # Agent 接口定义
+│   ├── memory/                # 记忆服务
+│   └── learning/              # 学习模块
 ├── gateway/                   # WebSocket 消息网关
 │   ├── server.ts              # WebSocket 服务器
 │   ├── http-server.ts         # HTTP 服务器（Dashboard）
@@ -79,8 +87,8 @@ src/
 │   ├── protocol.ts            # 消息协议定义
 │   └── router.ts              # 消息路由器
 ├── channels/qqbot/           # QQ Bot Channel
-│   ├── client.ts              # QQ Bot 客户端
-│   └── message-handler.ts     # 消息处理
+│   ├── index.ts               # QQ Bot 主入口
+│   └── client.ts              # QQ Bot 客户端
 ├── scheduler/                 # 定时任务调度器
 │   ├── task-runner.ts         # 任务执行器
 │   └── task-store.ts          # 任务存储
@@ -92,12 +100,13 @@ src/
 
 ## 核心组件
 
-### 1. ClaudeCodeAgent (`src/agent/ClaudeCodeAgent.ts`)
+### 1. Claude Code Agent (`src/agent/index.ts`)
 
 负责与本地 Claude Code CLI 通信的核心组件：
 - **命令执行**: 调用 `claude` 命令并捕获输出
 - **流式响应**: 实时返回 CLI 的输出
 - **会话管理**: 维护与 CLI 的持久连接
+- **文件传输**: 处理图片、视频等文件传输
 
 ### 2. Gateway 系统 (`src/gateway/`)
 
@@ -212,6 +221,8 @@ src/
 | `QQ_BOT_SECRET` | QQ 机器人 AppSecret | 是 |
 | `ALLOWED_USERS` | 用户白名单 | 否 |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | 否 |
+| `GLM_API_KEY` | GLM API Key (可选) | 否 |
+| `TAVILY_API_KEY` | Tavily Search API Key (可选) | 否 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 代理设置 | 否 |
 
 ## 安全铁律
@@ -297,6 +308,6 @@ tail -f logs/app.log
 
 ## 相关文档
 
-- [Gateway 架构文档](docs/gateway-architecture.md)
-- [任务调度系统](docs/task-scheduler.md)
-- [部署指南](docs/deployment.md)
+- [实施计划](docs/plans/2026-04-21-pure-cli-mode-implementation.md)
+- [设计文档](docs/plans/2026-04-21-pure-cli-mode-refactor-design.md)
+- [文档审查报告](docs/task-22-documentation-review-report.md)
