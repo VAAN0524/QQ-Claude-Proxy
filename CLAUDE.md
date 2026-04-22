@@ -2,18 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 项目概述
+## 📋 配置说明
+
+**本项目遵循全局配置** `~/.claude/CLAUDE.md` (v2.2) **的所有规则**：
+
+- ✅ **编程原则** - 编码前先思考、简单优先、精准修改、目标驱动执行
+- ✅ **工作流 Guardrails** - brainstorming、systematic-debugging、test-driven-development、verification-before-completion
+- ✅ **插件和 Skills 优先级** - context7、zhipu-vision、superpowers 等
+- ✅ **完成前检查清单** - 所有测试通过、无高危漏洞、Linter 通过
+- ✅ **回答格式要求** - "Vaan，你好，我经过全面思考后答复如下："
+
+**本文件只包含项目特定的配置、架构说明和开发指南。**
+
+---
+
+## 🎯 项目概述
 
 **QQ-Claude-Proxy** 是通过 QQ 远程控制本地 Claude Code CLI 的纯代理系统。
 
-**版本**: 2.0.0
+**版本**: 2.1.0
 **核心特性**:
 - 🚀 **纯 CLI 模式** - 直接调用 Claude Code CLI，无中间层
 - 💬 **QQ 集成** - 通过 QQ 机器人远程控制
 - 📊 **任务调度** - 支持定时任务和周期任务
 - 🎛️ **Web 监控** - 实时监控和管理界面
 
-## 核心架构
+---
+
+## 🏗️ 核心架构
 
 ```
 QQ Bot → QQ Gateway → Internal Gateway (WS, port 18789) → ClaudeCodeAgent → Claude Code CLI
@@ -35,7 +51,9 @@ Gateway 使用 WebSocket 实现三种消息类型：
 - `onMethod(method, handler)` - 注册 RPC 方法处理器
 - `onEvent(channel, handler)` - 注册事件处理器
 
-## 开发命令
+---
+
+## 💻 开发命令
 
 ```bash
 # 开发模式（热重载）
@@ -66,7 +84,9 @@ npm run watchdog:status # 查看状态
 npm run monitor       # 启动终端监控界面
 ```
 
-## 代码结构导航
+---
+
+## 📂 代码结构导航
 
 ```
 src/
@@ -98,7 +118,9 @@ src/
     └── logger.ts              # 日志工具
 ```
 
-## 核心组件
+---
+
+## 🔧 核心组件
 
 ### 1. Claude Code Agent (`src/agent/index.ts`)
 
@@ -151,7 +173,9 @@ src/
 }
 ```
 
-## 重要文件位置
+---
+
+## 📁 重要文件位置
 
 ### 配置文件
 - `config.json` - 主配置文件
@@ -167,7 +191,9 @@ src/
 - `workspace/` - Claude Code 工作目录
 - `data/tasks.json` - 定时任务存储
 
-## 重要约定
+---
+
+## 📐 重要约定
 
 ### ES Modules
 - 项目使用 `"type": "module"`
@@ -197,7 +223,9 @@ src/
 - 用户输入文件名必须经过 `sanitizeFileName()` 清理
 - 防止路径穿越攻击
 
-## Dashboard 功能
+---
+
+## 🎛️ Dashboard 功能
 
 访问 **http://localhost:8080**
 
@@ -206,14 +234,18 @@ src/
 - **Config** (config.html): 系统配置
 - **Logs** (logs.html): 日志查看
 
-## 端口说明
+---
+
+## 🔌 端口说明
 
 | 端口 | 服务 |
 |:----:|------|
 | 18789 | Gateway WebSocket (内部通信) |
 | 8080 | Dashboard HTTP |
 
-## 环境变量
+---
+
+## 🔑 环境变量
 
 | 变量 | 说明 | 必需 |
 |------|------|------|
@@ -225,7 +257,9 @@ src/
 | `TAVILY_API_KEY` | Tavily Search API Key (可选) | 否 |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 代理设置 | 否 |
 
-## 安全铁律
+---
+
+## 🔒 安全铁律
 
 **禁止泄露敏感信息到 Git 仓库**
 
@@ -242,7 +276,9 @@ src/
 git ls-files | xargs grep -l "sk-ant-"     # 检查 Anthropic Key
 ```
 
-## 调试与故障排除
+---
+
+## 🐛 调试与故障排除
 
 ### 日志位置
 - 应用日志：`logs/app.log`
@@ -274,7 +310,9 @@ git ls-files | xargs grep -l "sk-ant-"     # 检查 Anthropic Key
 - 用户会话：`user_{userId}.json`
 - 群组会话：`group_{groupId}.json`
 
-## 开发技巧
+---
+
+## 💡 开发技巧
 
 ### 调试 Gateway 消息
 
@@ -306,8 +344,12 @@ claude "你好"
 tail -f logs/app.log
 ```
 
-## 相关文档
+---
+
+## 📚 相关文档
 
 - [实施计划](docs/plans/2026-04-21-pure-cli-mode-implementation.md)
 - [设计文档](docs/plans/2026-04-21-pure-cli-mode-refactor-design.md)
 - [文档审查报告](docs/task-22-documentation-review-report.md)
+- [项目概览](PROJECT_OVERVIEW.md)
+- [测试指南](TEST_GUIDE.md)
