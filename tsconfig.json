@@ -13,8 +13,7 @@
     "declaration": true,
     "noImplicitAny": false,
     "strictNullChecks": false,
-    "resolveJsonModule": true,
-    "types": []
+    "resolveJsonModule": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
