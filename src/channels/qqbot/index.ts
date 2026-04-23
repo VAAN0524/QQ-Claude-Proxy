@@ -9,6 +9,8 @@ import { isQQMessage } from './types.js';
 import { QQBotAPI } from './api.js';
 import { QQGateway } from './gateway.js';
 import { logger } from '../../utils/logger.js';
+import { KnowledgeService } from '../../agent/knowledge-service/index.js';
+import { KnowledgeCommands } from '../../agent/knowledge-service/commands.js';
 
 export interface QQBotChannelOptions {
   config: QQBotConfig;
@@ -44,12 +46,23 @@ export class QQBotChannel extends EventEmitter {
   private api: QQBotAPI;
   private gateway: QQGateway;
   private mainGateway: any = null;
+  private knowledgeService?: KnowledgeService;
+  private knowledgeCommands?: KnowledgeCommands;
 
   constructor(config: QQBotConfig) {
     super();
     this.config = config;
     this.api = new QQBotAPI(config);
     this.gateway = new QQGateway(config);
+  }
+
+  async initializeKnowledgeService(): Promise<void> {
+    const path = await import('path');
+    const knowledgePath = path.join(process.cwd(), 'knowledge', 'knowledge.db');
+    this.knowledgeService = new KnowledgeService({ dbPath: knowledgePath });
+    await this.knowledgeService.initialize();
+    this.knowledgeCommands = new KnowledgeCommands(this.knowledgeService);
+    logger.info('[QQBot] 知识库服务已初始化');
   }
 
   async start(): Promise<void> {
@@ -82,10 +95,18 @@ export class QQBotChannel extends EventEmitter {
   }
 
   private handleC2CMessage(message: QQMessage): void {
+    const content = this.cleanContent(message.content);
+
+    // 处理知识库命令
+    if (content.startsWith('/kb ') && this.knowledgeCommands) {
+      this.handleKnowledgeCommand(message.author.id, undefined, content);
+      return;
+    }
+
     const channelMessage: ChannelMessage = {
       channel: 'qqbot',
       userId: message.author.id,
-      content: this.cleanContent(message.content),
+      content,
       attachments: message.attachments?.map(att => ({
         type: att.type,
         url: att.url || '',
@@ -107,6 +128,12 @@ export class QQBotChannel extends EventEmitter {
   private handleGroupMessage(message: QQMessage): void {
     // Remove @ mention from content
     const content = this.cleanContent(message.content);
+
+    // 处理知识库命令
+    if (content.startsWith('/kb ') && this.knowledgeCommands) {
+      this.handleKnowledgeCommand(message.author.id, message.group_id, content);
+      return;
+    }
 
     const channelMessage: ChannelMessage = {
       channel: 'qqbot',
@@ -248,6 +275,30 @@ export class QQBotChannel extends EventEmitter {
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 处理知识库命令
+   */
+  private async handleKnowledgeCommand(userId: string, groupId: string | undefined, content: string): Promise<void> {
+    try {
+      // 解析命令
+      const parts = content.substring(4).trim().split(/\s+/);
+      const command = parts.shift() || '';
+      const args = parts;
+
+      logger.info(`[KnowledgeCommand] command=${command}, args=${args.join(', ')}`);
+
+      // 执行命令
+      const response = await this.knowledgeCommands!.handleCommand(command, args);
+
+      // 发送响应（使用原有的 sendMessage 方法，msgId 设为 undefined）
+      await this.sendMessage(groupId, userId, response, undefined);
+    } catch (error) {
+      logger.error(`[KnowledgeCommand] 处理失败: ${error}`);
+      const errorMsg = `❌ 命令执行失败: ${error}`;
+      await this.sendMessage(groupId, userId, errorMsg, undefined);
+    }
   }
 
   async sendFile(userId: string, filePath: string, isGroup: boolean = false, message?: string): Promise<void> {

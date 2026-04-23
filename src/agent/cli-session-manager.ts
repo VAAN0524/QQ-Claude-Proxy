@@ -223,6 +223,17 @@ export class CliSessionManager {
                   const toolMessage = `Using ${toolName} tool`;
                   options.onProgress(toolMessage);
                 }
+              } else if (json.type === 'contentBlockDelta' && json.delta?.type === 'thinking') {
+                // ✨ 思考过程 - 这是 Claude 的推理过程
+                const thinkingContent = json.delta.content;
+                if (thinkingContent && thinkingContent.length > 0) {
+                  logger.info(`[CliSession ${taskId}] 💭 思考: ${thinkingContent.substring(0, 50)}...`);
+
+                  // 传递思考内容给 ProgressTracker（在详细模式下会显示）
+                  if (options.onProgress) {
+                    options.onProgress(`💭 [ Thinking ]: ${thinkingContent}`);
+                  }
+                }
               } else if (json.type === 'contentBlockDelta' && json.delta?.type === 'tool_result') {
                 // 工具执行输出
                 const toolResult = json.delta.content;

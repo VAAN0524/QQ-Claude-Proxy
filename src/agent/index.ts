@@ -33,6 +33,8 @@ export interface AgentConfig {
   dashboardState?: DashboardState;
   /** 状态持久化存储 (可选) */
   stateStore?: DashboardStateStore;
+  /** 是否启用详细进度模式 */
+  verboseProgress?: boolean;
 }
 
 export interface AgentMessage {
@@ -103,18 +105,21 @@ export class ClaudeCodeAgent implements IAgent {
     this.conversationManager.startAutoSave(30000);
 
     // 初始化进度追踪器，传入 Dashboard 状态
-    this.progressTracker = new ProgressTracker({
-      throttleInterval: 5000,   // 5 秒节流 - 更快的响应
-      maxMessageLength: 1900,   // QQ 消息长度限制
-      smartTriggerInterval: 2000, // 智能触发最小间隔 2 秒
-      dashboardState: config.dashboardState,  // 传入 Dashboard 状态
-      stateStore: config.stateStore,         // 传入持久化存储
-      sendCallback: async (userId, content, groupId) => {
-        if (this.sendMessageCallback) {
-          await this.sendMessageCallback(userId, content, groupId);
-        }
+    this.progressTracker = new ProgressTracker(
+      {
+        throttleInterval: 5000,   // 5 秒节流 - 更快的响应
+        maxMessageLength: 1900,   // QQ 消息长度限制
+        smartTriggerInterval: 2000, // 智能触发最小间隔 2 秒
+        dashboardState: config.dashboardState,  // 传入 Dashboard 状态
+        stateStore: config.stateStore,         // 传入持久化存储
+        sendCallback: async (userId, content, groupId) => {
+          if (this.sendMessageCallback) {
+            await this.sendMessageCallback(userId, content, groupId);
+          }
+        },
       },
-    });
+      config.verboseProgress ?? false  // 传入详细模式配置
+    );
 
     logger.info(`Claude Code Agent 初始化完成`);
     logger.info(`工作目录: ${config.workspacePath}`);

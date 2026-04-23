@@ -207,7 +207,15 @@ export class ProgressTracker {
     /异常/i,
   ];
 
-  constructor(options: ProgressTrackerOptions) {
+  // 详细模式：显示所有输出（不只是关键状态）
+  private verboseMode: boolean = false;
+
+  // 详细模式的消息缓冲区（用于批量发送，避免 QQ 限流）
+  private verboseBuffer: Map<string, string[]> = new Map();
+  private verboseFlushTimer: Map<string, NodeJS.Timeout> = new Map();
+
+  constructor(options: ProgressTrackerOptions, verboseMode: boolean = false) {
+    this.verboseMode = verboseMode;
     this.throttleInterval = options.throttleInterval ?? 5000;
     this.smartTriggerInterval = options.smartTriggerInterval ?? 2000;
     this.maxMessageLength = options.maxMessageLength ?? 1900;
@@ -215,7 +223,22 @@ export class ProgressTracker {
     this.dashboardState = options.dashboardState;
     this.stateStore = options.stateStore;
 
-    logger.info(`[ProgressTracker] 初始化完成: throttle=${this.throttleInterval}ms, smartTriggerInterval=${this.smartTriggerInterval}ms, persistence=${!!this.stateStore}`);
+    logger.info(`[ProgressTracker] 初始化完成: throttle=${this.throttleInterval}ms, smartTriggerInterval=${this.smartTriggerInterval}ms, persistence=${!!this.stateStore}, verbose=${verboseMode}`);
+  }
+
+  /**
+   * 设置详细模式
+   */
+  setVerboseMode(verbose: boolean): void {
+    this.verboseMode = verbose;
+    logger.info(`[ProgressTracker] 详细模式: ${verbose ? '启用' : '禁用'}`);
+  }
+
+  /**
+   * 获取详细模式状态
+   */
+  isVerboseMode(): boolean {
+    return this.verboseMode;
   }
 
   /**
@@ -289,6 +312,7 @@ export class ProgressTracker {
    * 1. 分析 chunk，检测事件类型（UPDATE/MILESTONE/ERROR）
    * 2. 如果是 MILESTONE 或 ERROR，立即发送（绕过节流，但有防轰炸保护）
    * 3. 如果是 UPDATE，记录到 buffer，等待心跳时发送
+   * 4. 如果启用详细模式（verbose），发送所有输出
    */
   async onProgress(taskId: string, chunk: string, userId: string, groupId?: string): Promise<void> {
     // 记录原始输出到 buffer
@@ -298,10 +322,85 @@ export class ProgressTracker {
     const cleanChunk = chunk.replace(/\x1b\[[0-9;]*m/g, '').trim();
 
     // 调试日志：记录收到的数据
-    logger.info(`[ProgressTracker] onProgress: taskId=${taskId}, chunk.length=${chunk.length}, clean.length=${cleanChunk.length}`);
+    logger.info(`[ProgressTracker] onProgress: taskId=${taskId}, chunk.length=${chunk.length}, clean.length=${cleanChunk.length}, verbose=${this.verboseMode}`);
 
     // 提取关键行（用于智能触发）
     const lines = cleanChunk.split('\n').filter(line => line.trim().length > 0);
+
+    // 详细模式：批量收集并发送（避免 QQ 限流）
+    if (this.verboseMode && lines.length > 0) {
+      // 初始化缓冲区
+      if (!this.verboseBuffer.has(taskId)) {
+        this.verboseBuffer.set(taskId, []);
+      }
+      const buffer = this.verboseBuffer.get(taskId)!;
+
+      // 添加新行到缓冲区
+      for (const line of lines) {
+        if (line.trim().length > 0) {
+          const truncatedLine = line.length > 200 ? line.substring(0, 197) + '...' : line;
+          buffer.push(truncatedLine);
+        }
+      }
+
+      // 如果缓冲区已满（超过 10 条）或已达到发送间隔，则发送
+      const shouldFlush = buffer.length >= 10;
+      const lastSendTime = this.lastSmartSend.get(taskId) ?? 0;
+      const now = Date.now();
+      const shouldSend = now - lastSendTime >= 3000; // 3 秒发送一次
+
+      if (shouldFlush || shouldSend) {
+        // 清除旧的定时器
+        const oldTimer = this.verboseFlushTimer.get(taskId);
+        if (oldTimer) {
+          clearTimeout(oldTimer);
+          this.verboseFlushTimer.delete(taskId);
+        }
+
+        // 合并发送
+        if (buffer.length > 0) {
+          const combinedMessage = buffer.join('\n');
+          const finalMessage = combinedMessage.length > 1800
+            ? combinedMessage.substring(0, 1800) + '\n... (更多内容已省略)'
+            : combinedMessage;
+
+          try {
+            await this.sendCallback(userId, finalMessage, groupId);
+            logger.debug(`[ProgressTracker] 详细模式批量发送: ${buffer.length}条消息`);
+          } catch (error) {
+            logger.error(`[ProgressTracker] 详细模式批量发送失败: ${error}`);
+          }
+
+          // 清空缓冲区
+          buffer.length = 0;
+          this.lastSmartSend.set(taskId, now);
+        }
+      } else {
+        // 如果缓冲区未满且未到发送时间，设置定时器确保最终发送
+        if (!this.verboseFlushTimer.has(taskId)) {
+          const timer = setTimeout(async () => {
+            if (buffer.length > 0) {
+              const combinedMessage = buffer.join('\n');
+              const finalMessage = combinedMessage.length > 1800
+                ? combinedMessage.substring(0, 1800) + '\n... (更多内容已省略)'
+                : combinedMessage;
+
+              try {
+                await this.sendCallback(userId, finalMessage, groupId);
+                logger.debug(`[ProgressTracker] 详细模式定时发送: ${buffer.length}条消息`);
+              } catch (error) {
+                logger.error(`[ProgressTracker] 详细模式定时发送失败: ${error}`);
+              }
+
+              buffer.length = 0;
+              this.verboseFlushTimer.delete(taskId);
+            }
+          }, 3000); // 3 秒后发送
+
+          this.verboseFlushTimer.set(taskId, timer);
+        }
+      }
+    }
 
     let milestoneDetected = false;
     for (const line of lines) {
@@ -349,7 +448,7 @@ export class ProgressTracker {
       }
     }
 
-    if (!milestoneDetected && lines.length > 0) {
+    if (!milestoneDetected && !this.verboseMode && lines.length > 0) {
       logger.info(`[ProgressTracker] 未检测到关键状态，样例行: "${lines[0].substring(0, 50)}..."`);
     }
 
@@ -707,6 +806,14 @@ export class ProgressTracker {
       this.heartbeatIntervals.delete(taskId);
     }
 
+    // 清除详细模式定时器和缓冲区
+    const flushTimer = this.verboseFlushTimer.get(taskId);
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      this.verboseFlushTimer.delete(taskId);
+    }
+    this.verboseBuffer.delete(taskId);
+
     // 更新 Dashboard 状态 - 标记任务为错误
     if (this.dashboardState) {
       const taskInfo = this.dashboardState.tasks.get(taskId);
@@ -754,6 +861,14 @@ export class ProgressTracker {
       clearInterval(heartbeatInterval);
       this.heartbeatIntervals.delete(taskId);
     }
+
+    // 清除详细模式定时器和缓冲区
+    const flushTimer = this.verboseFlushTimer.get(taskId);
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      this.verboseFlushTimer.delete(taskId);
+    }
+    this.verboseBuffer.delete(taskId);
 
     // 更新 Dashboard 状态 - 标记任务为已完成
     if (this.dashboardState) {

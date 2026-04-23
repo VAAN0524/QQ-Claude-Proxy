@@ -26,19 +26,6 @@
 - 项目使用 TypeScript，ES Modules
 - 关注系统简化和性能优化
 
-## 历史问题
-
-### 问题: 系统过于复杂
-- 用户认为多 Agent 系统过于复杂
-- ReAct 循环导致响应空缺
-- 需要简化为单一协调者模式
-
-### 解决方案
-- 采用 SimpleCoordinatorAgent
-- 技能通过 SKILL.md 动态加载
-- 记忆通过 MEMORY.md 管理
-- 移除复杂的 ReAct 循环
-
 ## 技术栈
 
 ### 前端

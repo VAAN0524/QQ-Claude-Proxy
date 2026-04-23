@@ -515,6 +515,7 @@ async function main(): Promise<void> {
     allowedUsers: config.agent.allowedUsers,
     dashboardState,
     stateStore,
+    verboseProgress: config.progress?.verbose ?? false,
   });
 
   // 创建 Dashboard HTTP Server
@@ -686,6 +687,17 @@ async function main(): Promise<void> {
   // 启动 QQ Bot Channel
   logger.info('连接 QQ Bot Gateway...');
   await qqChannel.start();
+
+  // 初始化知识库服务
+  if (qqChannel.initializeKnowledgeService) {
+    try {
+      await qqChannel.initializeKnowledgeService();
+      logger.info('✅ 知识库服务已初始化');
+    } catch (error) {
+      logger.warn(`⚠️ 知识库服务初始化失败: ${error}`);
+      logger.info('知识库功能将不可用，但系统继续运行');
+    }
+  }
 
   // 优雅退出
   shutdown = async (signal: string) => {

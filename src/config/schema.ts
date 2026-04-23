@@ -233,6 +233,15 @@ export interface Config {
   context?: ContextConfig;
   /** 记忆系统配置 */
   memory?: MemoryConfig;
+  /** 进度显示配置 */
+  progress?: {
+    /** 是否启用详细模式（显示所有输出） */
+    verbose?: boolean;
+    /** 心跳间隔（秒），0 表示禁用心跳 */
+    heartbeatInterval?: number;
+    /** 是否显示 ANSI 颜色码（QQ 不支持，会自动清理） */
+    showAnsiColors?: boolean;
+  };
 }
 
 export const defaultConfig: Config = {
@@ -406,5 +415,11 @@ export const defaultConfig: Config = {
     retentionDays: 30,
     enableSemanticSearch: false,
     enableAutoArchive: true
+  },
+  // 进度显示配置
+  progress: {
+    verbose: false,  // 默认不启用详细模式
+    heartbeatInterval: 20,  // 心跳间隔 20 秒
+    showAnsiColors: false  // QQ 不支持 ANSI 颜色
   }
 };
