@@ -141,8 +141,8 @@ test_folder/
 scripts/*.mjs
 *.mjs
 
-# Internal planning docs
-docs/plans/
+# Internal planning docs (临时规划和草稿不提交，正式设计文档提交)
+# docs/plans/ (已移除，正式设计文档需要版本控制)
 
 # Agent directories (local development, not committed)
 src/agents/autonomous/
