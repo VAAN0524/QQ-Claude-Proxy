@@ -73,6 +73,7 @@ export class ProgressTracker {
   private lastMilestone: Map<string, string> = new Map();  // 最后检测到的关键状态
   private lastSmartSend: Map<string, number> = new Map();  // 最后智能发送时间（防止智能消息轰炸）
   private spinnerFrameIndex: Map<string, number> = new Map();  // 旋转动画帧索引
+  private lastSentContent: Map<string, string> = new Map();  // 最后发送的内容（用于去重）
 
   // 关键词模式 - 匹配 Claude CLI 的实际输出（大幅增强）
   private readonly milestonePatterns = [
@@ -364,8 +365,17 @@ export class ProgressTracker {
             ? combinedMessage.substring(0, 1800) + '\n... (更多内容已省略)'
             : combinedMessage;
 
+          // 去重检查：如果与上次发送的内容相同，则跳过
+          const lastContent = this.lastSentContent.get(taskId);
+          if (lastContent === finalMessage) {
+            logger.debug(`[ProgressTracker] 跳过重复内容发送`);
+            buffer.length = 0;
+            return;
+          }
+
           try {
             await this.sendCallback(userId, finalMessage, groupId);
+            this.lastSentContent.set(taskId, finalMessage); // 记录已发送的内容
             logger.debug(`[ProgressTracker] 详细模式批量发送: ${buffer.length}条消息`);
           } catch (error) {
             logger.error(`[ProgressTracker] 详细模式批量发送失败: ${error}`);
@@ -439,8 +449,17 @@ export class ProgressTracker {
             }
           }
 
+          // 去重检查：如果与详细模式已发送的内容相同，则跳过
+          const lastSentContent = this.lastSentContent.get(taskId);
+          if (lastSentContent && (lastSentContent === line || lastSentContent.includes(line.substring(0, 100)))) {
+            logger.debug(`[ProgressTracker] 跳过关键状态重复发送: "${line.substring(0, 50)}..."`);
+            this.lastSmartSend.set(taskId, now);
+            return;
+          }
+
           // 立即发送关键状态更新
           await this.sendSmartUpdate(taskId, line, eventType, userId, groupId);
+          this.lastSentContent.set(taskId, line); // 记录单行关键状态
           this.lastSmartSend.set(taskId, now);
         } else {
           logger.info(`[ProgressTracker] 智能发送被防轰炸保护跳过:距上次${Math.floor((now - lastSmartSendTime) / 1000)}秒`);
