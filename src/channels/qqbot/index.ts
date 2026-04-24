@@ -9,8 +9,7 @@ import { isQQMessage } from './types.js';
 import { QQBotAPI } from './api.js';
 import { QQGateway } from './gateway.js';
 import { logger } from '../../utils/logger.js';
-import { KnowledgeService } from '../../agent/knowledge-service/index.js';
-import { KnowledgeCommands } from '../../agent/knowledge-service/commands.js';
+import { KnowledgeCommands } from '../../agent/knowledge-service/global-commands.js';
 
 export interface QQBotChannelOptions {
   config: QQBotConfig;
@@ -46,7 +45,6 @@ export class QQBotChannel extends EventEmitter {
   private api: QQBotAPI;
   private gateway: QQGateway;
   private mainGateway: any = null;
-  private knowledgeService?: KnowledgeService;
   private knowledgeCommands?: KnowledgeCommands;
 
   constructor(config: QQBotConfig) {
@@ -57,12 +55,9 @@ export class QQBotChannel extends EventEmitter {
   }
 
   async initializeKnowledgeService(): Promise<void> {
-    const path = await import('path');
-    const knowledgePath = path.join(process.cwd(), 'knowledge', 'knowledge.db');
-    this.knowledgeService = new KnowledgeService({ dbPath: knowledgePath });
-    await this.knowledgeService.initialize();
-    this.knowledgeCommands = new KnowledgeCommands(this.knowledgeService);
-    logger.info('[QQBot] 知识库服务已初始化');
+    this.knowledgeCommands = new KnowledgeCommands();
+    await this.knowledgeCommands.initialize();
+    logger.info('[QQBot] 知识库服务已初始化（使用全局skill）');
   }
 
   async start(): Promise<void> {
@@ -278,7 +273,7 @@ export class QQBotChannel extends EventEmitter {
   }
 
   /**
-   * 处理知识库命令
+   * 处理知识库命令（Phase 2: 支持自然语言）
    */
   private async handleKnowledgeCommand(userId: string, groupId: string | undefined, content: string): Promise<void> {
     try {
@@ -288,6 +283,14 @@ export class QQBotChannel extends EventEmitter {
       const args = parts;
 
       logger.info(`[KnowledgeCommand] command=${command}, args=${args.join(', ')}`);
+
+      // Phase 2: 特殊命令直接用自然语言处理
+      if (command === 'chat' || command === 'ask' || command === '帮我') {
+        const userInput = args.join(' ');
+        const response = await this.knowledgeCommands!.handleCommand('chat', [userInput]);
+        await this.sendMessage(groupId, userId, response, undefined);
+        return;
+      }
 
       // 执行命令
       const response = await this.knowledgeCommands!.handleCommand(command, args);

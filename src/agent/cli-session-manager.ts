@@ -212,17 +212,10 @@ export class CliSessionManager {
                   options.onProgress(content);
                 }
               } else if (json.type === 'contentBlockStart' && json.contentBlock?.type === 'tool_use') {
-                // ✨ 关键修复：捕获工具调用事件
+                // 工具调用开始 - 只记录日志，不调用onProgress（避免与message事件重复）
                 const toolName = json.contentBlock.name;
                 const toolInput = json.contentBlock.input;
-
                 logger.info(`[CliSession ${taskId}] 🔧 工具调用: ${toolName} - ${JSON.stringify(toolInput)}`);
-
-                // 传递给进度追踪器 - 这将触发 progress-tracker 的智能检测
-                if (options.onProgress) {
-                  const toolMessage = `Using ${toolName} tool`;
-                  options.onProgress(toolMessage);
-                }
               } else if (json.type === 'contentBlockDelta' && json.delta?.type === 'thinking') {
                 // ✨ 思考过程 - 这是 Claude 的推理过程
                 const thinkingContent = json.delta.content;

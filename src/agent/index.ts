@@ -85,6 +85,13 @@ export class ClaudeCodeAgent implements IAgent {
   private sendMessageCallback: ((userId: string, content: string, groupId?: string) => Promise<void>) | null = null;
   private progressTracker: ProgressTracker | null = null;
 
+  // Phase 3: 知识库服务（自动保存建议）
+  private knowledgeService: any = null;
+  private autoSaveEnabled = false;
+
+  // 统一知识库入口
+  private unifiedKnowledgeEntrance: any = null;
+
   constructor(config: AgentConfig) {
     this.config_internal = config;
     // 使用 CLI 会话管理器（长期运行的进程）
@@ -103,6 +110,11 @@ export class ClaudeCodeAgent implements IAgent {
 
     // 启动自动保存 (每 30 秒)
     this.conversationManager.startAutoSave(30000);
+
+    // Phase 3: 初始化知识库服务（如果可用）
+    this.initializeKnowledgeService().catch(error => {
+      logger.warn(`知识库服务初始化失败: ${error}`);
+    });
 
     // 初始化进度追踪器，传入 Dashboard 状态
     this.progressTracker = new ProgressTracker(
@@ -262,6 +274,38 @@ export class ClaudeCodeAgent implements IAgent {
       }
     }
 
+    // Phase 3: 优先检查知识库相关请求（统一入口）
+    if (this.unifiedKnowledgeEntrance) {
+      try {
+        const kbResponse = await this.unifiedKnowledgeEntrance.handleNaturalInput(message.content);
+
+        // 如果返回的是知识库相关的响应，直接返回
+        if (kbResponse && !kbResponse.includes('可以这样对我说')) {
+          // 记录到知识库（用于自动提取）
+          await this.unifiedKnowledgeEntrance.recordDialogue('user', message.content);
+
+          // 检查是否需要提示保存
+          const saveSuggestion = await this.unifiedKnowledgeEntrance.checkAndSuggestSave();
+          if (saveSuggestion) {
+            return {
+              userId: message.userId,
+              groupId: message.groupId,
+              content: kbResponse + '\n\n' + saveSuggestion
+            };
+          }
+
+          return {
+            userId: message.userId,
+            groupId: message.groupId,
+            content: kbResponse
+          };
+        }
+      } catch (error) {
+        logger.error(`知识库统一入口处理失败: ${error}`);
+        // 继续处理其他请求
+      }
+    }
+
     // 声明 taskId 以便在 catch 块中访问
     let taskId: string | null = null;
 
@@ -286,6 +330,15 @@ export class ClaudeCodeAgent implements IAgent {
 
       // 记录用户消息到对话历史（用于备份和查看）
       this.conversationManager.addUserMessage(message.userId, message.groupId, message.content);
+
+      // Phase 3: 记录到知识库（用于自动提取）
+      if (this.knowledgeService && this.autoSaveEnabled) {
+        try {
+          await this.knowledgeService.recordDialogue('user', message.content);
+        } catch (error) {
+          logger.error(`记录用户消息到知识库失败: ${error}`);
+        }
+      }
 
       // 构建提示（CLI 会话会自己维护上下文，所以不需要每次都传历史）
       let fullPrompt = message.content;
@@ -352,6 +405,20 @@ ${filePaths}
       );
 
       logger.info(`[Agent] CLI 执行完成, output.length=${output.length}`);
+
+      // Phase 3: 记录Claude响应到知识库（用于自动提取）
+      if (this.knowledgeService && this.autoSaveEnabled) {
+        try {
+          // 只记录较长的响应（避免记录简短的确认消息）
+          if (output.length > 100) {
+            await this.knowledgeService.recordDialogue('assistant', output);
+          }
+        } catch (error) {
+          logger.error(`记录Claude响应到知识库失败: ${error}`);
+        }
+      }
+
+      // 结束进度追踪并发送最终结果
 
       // 结束进度追踪并发送最终结果
       if (this.progressTracker) {
@@ -737,6 +804,115 @@ ${filePaths}
    */
   getConversationManager(): ConversationManager {
     return this.conversationManager;
+  }
+
+  // Phase 3: 知识库相关方法
+
+  /**
+   * 初始化知识库服务
+   */
+  private async initializeKnowledgeService(): Promise<void> {
+    try {
+      // 动态导入知识库服务
+      const skillPath = './knowledge-service/skill/index.js';
+      const module = await import(skillPath);
+      const KnowledgeService = module.KnowledgeService;
+
+      // 初始化知识库服务
+      this.knowledgeService = new KnowledgeService({
+        enableAutoExtraction: true,  // Phase 3: 启用自动提取
+        enableSemantic: true        // Phase 2: 启用语义搜索
+      });
+
+      await this.knowledgeService.initialize();
+
+      // 初始化统一知识库入口
+      const entranceModule = await import('./knowledge-service/unified-entrance.js');
+      const UnifiedKnowledgeEntrance = entranceModule.UnifiedKnowledgeEntrance;
+      this.unifiedKnowledgeEntrance = new UnifiedKnowledgeEntrance(this.knowledgeService);
+
+      logger.info('统一知识库入口已初始化');
+
+      // 检查是否应该建议保存
+      if (this.knowledgeService.shouldSuggestSave()) {
+        const suggestions = await this.knowledgeService.generateSaveSuggestions();
+
+        if (suggestions.length > 0) {
+          // 生成建议消息
+          const message = this.knowledgeService.generateSuggestionMessage(suggestions);
+
+          // 发送建议通知（可以通过Gateway发送）
+          logger.info(`[知识库] 发现 ${suggestions.length} 条建议保存的知识:\n${message}`);
+
+          // 这里可以添加逻辑来实际发送建议给用户
+          // 暂时只记录日志
+        }
+      }
+
+      this.autoSaveEnabled = true;
+      logger.info('[知识库] 自动保存建议系统已启用');
+    } catch (error) {
+      logger.warn(`知识库服务初始化失败: ${error}`);
+      this.autoSaveEnabled = false;
+    }
+  }
+
+  /**
+   * 检查并生成保存建议
+   */
+  async checkAndSuggestSave(): Promise<string | null> {
+    if (!this.knowledgeService || !this.autoSaveEnabled) {
+      return null;
+    }
+
+    if (this.knowledgeService.shouldSuggestSave()) {
+      const suggestions = await this.knowledgeService.generateSaveSuggestions();
+
+      if (suggestions.length > 0) {
+        return this.knowledgeService.generateSuggestionMessage(suggestions);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 处理用户对保存建议的响应
+   */
+  async handleSaveSuggestionResponse(response: string): Promise<string> {
+    if (!this.knowledgeService) {
+      return '知识库功能未启用';
+    }
+
+    const suggestions = await this.knowledgeService.generateSaveSuggestions();
+    const result = await this.knowledgeService.handleSuggestionResponse(response, suggestions);
+
+    return result.message;
+  }
+
+  /**
+   * 手动保存知识
+   */
+  async saveKnowledge(content: string, tags: string[]): Promise<string> {
+    if (!this.knowledgeService) {
+      throw new Error('知识库功能未启用');
+    }
+
+    const tagHierarchy = {
+      level1: tags[0] || '工作',
+      level2: tags[1] || '通用',
+      level3: tags[2] || '其他'
+    };
+
+    const id = await this.knowledgeService.save(content, tagHierarchy, {
+      source: 'manual',
+      metadata: {
+        timestamp: Date.now(),
+        source: 'agent'
+      }
+    });
+
+    return `知识已保存，ID: ${id}`;
   }
 
   /**
