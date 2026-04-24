@@ -365,7 +365,7 @@ ${filePaths}
       const newFiles = this.findNewFiles();
       if (newFiles.length > 0) {
         responseContent += `\n\n📄 新生成的文件：\n${newFiles.map(f => `- ${path.basename(f)}`).join('\n')}`;
-        responseContent += '\n如需发送文件，请说"把 xxx 文件发给我"';
+        responseContent += '\n💡 如需发送文件，请使用文件名（如：把 test.docx 发给我）';
       }
 
       // 注意：不再限制消息长度，Channel 会自动分段发送长消息
@@ -404,18 +404,30 @@ ${filePaths}
    */
   private isFileSendRequest(content: string): boolean {
     // 更精确的关键词匹配，避免误判
+    // 必须明确提到"发送文件"或类似的表述
     const sendPatterns = [
-      /把.+文件.*发[给 me我]/,
-      /把\s*\S+\.\w+.*发[给 me我]/,
-      /发送文件/,
-      /传给我.*文件/,
-      /发文件给/,
-      /文件.*发[给 me我]/,
-      /通过.*[Bb]ot.*发[给me我]/,  // "通过QQ Bot发送给我"
-      /qq.*bot.*发[给me我]/i,
-      /使用.*bot.*发送/,
-      /把.*文件夹.*文件.*发/,  // "把文件夹内的文件发给我"
+      /把\s*\S+\.\w+.*发[给me我]/i,      // "把 xxx.jpeg 发给我"
+      /把.+文件.*发[给me我]/i,         // "把 xxx 文件发给我"
+      /发送文件\s*\S+/i,               // "发送文件 xxx"
+      /把.*文件夹.*文件.*发/i,       // "把文件夹内的文件发"
+      /通过.*bot.*发[给me我]/i,       // "通过QQ Bot发给我"
+      /传\s*\S+\.\w+.*[给me我]/i,      // "传 xxx.pdf 给我"
+      /发.*文件.*给[我我]/i,             // "发 xxx 文件给我"
     ];
+
+    // 排除常见误触发场景
+    const excludePatterns = [
+      /不要传给我/i,                   // "不要传给我"
+      /不用.*传/i,                   // "不用传给我"
+      /传.*给.*其他人/i,              // "传给其他人"
+      /传送.*其他/i,                  // "传送其他"
+    ];
+
+    // 先检查排除模式
+    if (excludePatterns.some(p => p.test(content))) {
+      return false;
+    }
+
     return sendPatterns.some(p => p.test(content));
   }
 
