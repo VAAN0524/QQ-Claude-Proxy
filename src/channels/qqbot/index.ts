@@ -10,6 +10,7 @@ import { QQBotAPI } from './api.js';
 import { QQGateway } from './gateway.js';
 import { logger } from '../../utils/logger.js';
 import { KnowledgeCommands } from '../../agent/knowledge-service/global-commands.js';
+import { getGlobalDeduplicator } from '../../utils/message-deduplicator.js';
 
 export interface QQBotChannelOptions {
   config: QQBotConfig;
@@ -222,6 +223,15 @@ export class QQBotChannel extends EventEmitter {
     content: string,
     msgId?: string
   ): Promise<void> {
+    // 去重检查：防止重复消息
+    const deduplicator = getGlobalDeduplicator();
+    const targetUserId = userId || groupId || 'unknown';
+
+    if (deduplicator.isDuplicate(targetUserId, content, groupId)) {
+      logger.warn(`[QQChannel] 阻止重复消息: userId=${targetUserId}, groupId=${groupId || 'none'}`);
+      return;
+    }
+
     if (groupId) {
       // 群消息
       await this.api.sendGroupMessage(groupId, content, msgId);
