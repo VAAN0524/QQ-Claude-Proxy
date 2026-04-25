@@ -1,2 +1,5 @@
 # Document Graph Builder Dependencies
 pytest>=7.4.0
+
+# Vector Store Dependencies
+sentence-transformers>=5.4.0
