@@ -317,11 +317,47 @@ export class ClaudeCodeAgent implements IAgent {
         for (const att of message.attachments) {
           logger.info(`处理附件: ${att.filename} (${att.type})`);
 
+          // 检查是否是已经被预处理模块处理的文件（相对路径）
+          // 预处理模块已经下载了QQ图片，保存到workspace
+          if (att.url && !att.url.startsWith('http://') && !att.url.startsWith('https://')) {
+            // 不是HTTP URL，可能是预处理模块已经处理的文件
+            // 尝试从workspace读取
+            const workspacePath = this.storage.getWorkspacePath();
+            const filePath = path.join(workspacePath, att.url);
+
+            try {
+              // 检查文件是否存在
+              const fs = await import('fs');
+              if (fs.existsSync(filePath)) {
+                // 文件已存在，直接使用
+                const stats = fs.statSync(filePath);
+                const storedFile: StoredFile = {
+                  id: att.url,
+                  originalName: att.filename || att.url,
+                  storedPath: filePath,
+                  mimeType: att.type || 'application/octet-stream',
+                  size: stats.size,
+                  createdAt: new Date(),
+                };
+                storedFiles.push(storedFile);
+                logger.info(`使用预处理模块保存的文件: ${filePath}`);
+                continue;
+              }
+            } catch (error) {
+              logger.warn(`检查文件失败: ${error}`);
+            }
+
+            // 文件不存在，跳过
+            logger.warn(`跳过非HTTP URL的附件: ${att.url}`);
+            continue;
+          }
+
+          // HTTP URL，需要下载
           try {
             // 下载并存储附件
             const storedFile = await this.storage.storeFromUrl(att.url, att.filename);
             storedFiles.push(storedFile);
-            logger.info(`附件已存储: ${storedFile.storedPath}`);
+            logger.info(`附件已下载并存储: ${storedFile.storedPath}`);
           } catch (error) {
             logger.error(`存储附件失败: ${error}`);
             // 图片下载失败时，明确告知用户
@@ -329,12 +365,11 @@ export class ClaudeCodeAgent implements IAgent {
               return {
                 userId: message.userId,
                 groupId: message.groupId,
-                content: `❌ 无法获取您发送的图片（QQ图片URL可能需要鉴权）。
+                content: `❌ 无法获取您发送的图片。
 
 💡 请尝试以下方法：
-1. 将图片保存到本地，然后发送本地文件路径（如：C:\\path\\to\\image.png）
-2. 或者将图片放到项目目录，告诉我路径
-3. 或者描述图片内容，我尽力帮您处理
+1. 直接描述图片内容，我尽力帮您处理
+2. 将图片保存到本地，然后告诉我文件路径
 
 您的消息：${message.content}`
               };
@@ -733,11 +768,32 @@ ${filePaths}
 
   /**
    * 查找新生成的文件
+   * 排除用户上传的附件文件
    */
   private findNewFiles(): string[] {
-    // 简单实现：返回工作区中最近修改的文件
+    const taskStartTime = Date.now(); // 当前任务开始时间
     const files: { path: string; mtime: number }[] = [];
     const workspacePath = this.config_internal.workspacePath;
+
+    // 获取任务开始前已存在的文件（避免重复）
+    const existingFiles = new Set<string>();
+    try {
+      const items = fs.readdirSync(workspacePath);
+      for (const item of items) {
+        if (item === 'node_modules' || item === '.git' || item === 'dist' || item.startsWith('.')) continue;
+        const fullPath = path.join(workspacePath, item);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile()) {
+            existingFiles.add(fullPath);
+          }
+        } catch {
+          // 忽略错误
+        }
+      }
+    } catch (error) {
+      // 忽略错误
+    }
 
     const scanDir = (dir: string) => {
       try {
@@ -748,7 +804,13 @@ ${filePaths}
           const stat = fs.statSync(fullPath);
           if (stat.isDirectory()) {
             scanDir(fullPath);
-          } else if (stat.mtimeMs > Date.now() - 120000) { // 最近2分钟内修改的
+          } else if (stat.mtimeMs > taskStartTime) { // 任务开始后才修改的文件
+            // 排除用户上传的图片（文件名包含 qq_ 前缀）
+            const fileName = path.basename(fullPath);
+            if (fileName.startsWith('qq_') || fileName.startsWith('embedded_')) {
+              logger.debug(`[findNewFiles] 跳过用户上传的文件: ${fileName}`);
+              continue;
+            }
             files.push({ path: fullPath, mtime: stat.mtimeMs });
           }
         }
