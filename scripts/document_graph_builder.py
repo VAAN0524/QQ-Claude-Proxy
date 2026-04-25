@@ -8,6 +8,7 @@ This module builds a document graph from an Obsidian vault.
 from pathlib import Path
 from typing import Dict, List, Any
 import json
+import re
 from datetime import datetime
 
 
@@ -43,6 +44,29 @@ class DocumentGraphBuilder:
         # 移除 .md 扩展名并统一使用正斜杠
         doc_id = str(relative_path).replace('.md', '').replace('\\', '/')
         return doc_id
+
+    def extract_wikilinks(self, content: str) -> List[Dict[str, str]]:
+        """
+        从文本中提取 Wiki 链接
+
+        Args:
+            content: 要分析的文本内容
+
+        Returns:
+            Wiki 链接列表，每个链接包含 target 和可选的 alias
+        """
+        # 匹配 [[target]] 或 [[target|alias]]
+        pattern = r'\[\[([^\]|]+)(?:\|([^\]]+))?\]\]'
+        matches = re.findall(pattern, content)
+
+        links = []
+        for target, alias in matches:
+            links.append({
+                "target": target.strip(),
+                "alias": alias.strip() if alias else None
+            })
+
+        return links
 
     def build(self):
         """

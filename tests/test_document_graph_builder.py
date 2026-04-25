@@ -27,3 +27,23 @@ def test_extract_doc_id_from_project(tmp_path):
     path = Path("projects/Project Alpha.md")
     doc_id = builder.extract_doc_id(path)
     assert doc_id == "projects/Project Alpha"
+
+
+def test_extract_wikilinks():
+    """测试 Wiki 链接提取"""
+    builder = DocumentGraphBuilder(Path("/test"))
+    content = "See [[Project Alpha]] for details and [[Bob]] for contact"
+    links = builder.extract_wikilinks(content)
+    assert len(links) == 2
+    assert links[0]["target"] == "Project Alpha"
+    assert links[1]["target"] == "Bob"
+
+
+def test_extract_wikilinks_with_alias():
+    """测试带别名的 Wiki 链接"""
+    builder = DocumentGraphBuilder(Path("/test"))
+    content = "Click [[Project Alpha|here]] for info"
+    links = builder.extract_wikilinks(content)
+    assert len(links) == 1
+    assert links[0]["target"] == "Project Alpha"
+    assert links[0]["alias"] == "here"
