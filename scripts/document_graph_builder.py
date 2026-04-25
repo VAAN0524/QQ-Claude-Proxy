@@ -73,7 +73,7 @@ class DocumentGraphBuilder:
         return {
             "doc_id": doc_id,
             "type": self.map_path_to_type(file_path),
-            "path": str(file_path.relative_to(self.vault_path)),
+            "path": str(file_path.relative_to(self.vault_path)).replace('\\', '/'),
             "created_at": datetime.fromtimestamp(file_path.stat().st_ctime).isoformat(),
             "modified_at": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat(),
             "outbound_links": [],
