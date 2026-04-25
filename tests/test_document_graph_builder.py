@@ -47,3 +47,19 @@ def test_extract_wikilinks_with_alias():
     assert len(links) == 1
     assert links[0]["target"] == "Project Alpha"
     assert links[0]["alias"] == "here"
+
+
+def test_extract_document_with_links(tmp_path):
+    """测试从文件中提取文档（包含 Wiki 链接）"""
+    # 创建测试文件
+    test_file = tmp_path / "references" / "contacts" / "Alice.md"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("# Alice Johnson\n\nAssigned to [[Project Alpha]].", encoding='utf-8')
+
+    builder = DocumentGraphBuilder(tmp_path)
+    doc = builder.extract_document(test_file)
+
+    assert doc["doc_id"] == "references/contacts/Alice"
+    assert doc["type"] == "contact"
+    assert len(doc["outbound_links"]) == 1
+    assert doc["outbound_links"][0]["target"] == "Project Alpha"

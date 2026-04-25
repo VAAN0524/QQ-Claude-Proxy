@@ -94,13 +94,24 @@ class DocumentGraphBuilder:
         """
         doc_id = self.extract_doc_id(file_path)
 
+        # 读取文件内容
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            content = ""
+
+        # 提取 Wiki 链接
+        outbound_links = self.extract_wikilinks(content)
+
         return {
             "doc_id": doc_id,
             "type": self.map_path_to_type(file_path),
             "path": str(file_path.relative_to(self.vault_path)).replace('\\', '/'),
             "created_at": datetime.fromtimestamp(file_path.stat().st_ctime).isoformat(),
             "modified_at": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat(),
-            "outbound_links": [],
+            "outbound_links": outbound_links,
             "inbound_links": [],
             "entity_mentions": []
         }
