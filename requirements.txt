@@ -1,0 +1,2 @@
+# Document Graph Builder Dependencies
+pytest>=7.4.0
