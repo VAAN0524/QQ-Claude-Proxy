@@ -324,6 +324,21 @@ export class ClaudeCodeAgent implements IAgent {
             logger.info(`附件已存储: ${storedFile.storedPath}`);
           } catch (error) {
             logger.error(`存储附件失败: ${error}`);
+            // 图片下载失败时，明确告知用户
+            if (att.type.startsWith('image/')) {
+              return {
+                userId: message.userId,
+                groupId: message.groupId,
+                content: `❌ 无法获取您发送的图片（QQ图片URL可能需要鉴权）。
+
+💡 请尝试以下方法：
+1. 将图片保存到本地，然后发送本地文件路径（如：C:\\path\\to\\image.png）
+2. 或者将图片放到项目目录，告诉我路径
+3. 或者描述图片内容，我尽力帮您处理
+
+您的消息：${message.content}`
+              };
+            }
           }
         }
       }
