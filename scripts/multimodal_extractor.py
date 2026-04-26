@@ -98,10 +98,102 @@ class MultimodalExtractor:
         key = f"{source_doc}:{image_path}"
         return hashlib.md5(key.encode()).hexdigest()
 
+    def extract_formula(self, text: str, source_doc: str, metadata: dict) -> Dict[str, Any]:
+        """解析 LaTeX 公式"""
+
+        import re
+
+        # 提取行内公式 $...$
+        inline_patterns = re.findall(r'\$([^$]+)\$', text)
+        inline_formulas = []
+
+        for formula in inline_patterns:
+            inline_formulas.append({
+                "latex": formula,
+                "type": "inline"
+            })
+
+        # 提取块级公式 $$...$$ 或 \[...\]
+        block_patterns = re.findall(r'\$\$([^$]+)\$\$', text, re.DOTALL)
+        block_patterns.extend(re.findall(r'\\\[([^\\]+)\\\]', text, re.DOTALL))
+
+        block_formulas = []
+        for formula in block_patterns:
+            block_formulas.append({
+                "latex": formula.strip(),
+                "type": "block"
+            })
+
+        # 根据类型返回
+        formula_type = metadata.get("type", "inline")
+
+        if formula_type == "inline" and inline_formulas:
+            formula_data = inline_formulas[0]
+        elif formula_type == "block" and block_formulas:
+            formula_data = block_formulas[0]
+        elif inline_formulas:
+            formula_data = inline_formulas[0]
+            formula_type = "inline"
+        elif block_formulas:
+            formula_data = block_formulas[0]
+            formula_type = "block"
+        else:
+            return {"error": "No formula found"}
+
+        return {
+            "formula_id": self._generate_formula_id(source_doc, metadata),
+            "source_doc": source_doc,
+            "formula_type": formula_type,
+            "latex": formula_data["latex"],
+            "metadata": metadata,
+            # 简化的语义表示
+            "semantic_representation": self._parse_formula_semantics(formula_data["latex"])
+        }
+
+    def _generate_formula_id(self, source_doc: str, metadata: dict) -> str:
+        """生成公式 ID"""
+        position = metadata.get("position", 0)
+        key = f"{source_doc}:formula:{position}"
+        return hashlib.md5(key.encode()).hexdigest()
+
     def _generate_table_id(self, source_doc: str, position: dict) -> str:
         """生成表格 ID"""
         key = f"{source_doc}:{position['line']}"
         return hashlib.md5(key.encode()).hexdigest()
+
+    def _parse_formula_semantics(self, latex: str) -> Dict[str, Any]:
+        """解析公式的语义表示（简化版）"""
+        semantics = {
+            "variables": [],
+            "operators": [],
+            "functions": [],
+            "type": "unknown"
+        }
+
+        # 识别变量（单个字母）
+        import re
+        variables = re.findall(r'\b[a-zA-Z]\b', latex)
+        semantics["variables"] = list(set(variables))
+
+        # 识别运算符
+        operators = re.findall(r'[+\-*/=^_\{\}]', latex)
+        semantics["operators"] = list(set(operators))
+
+        # 识别函数（\命令）
+        functions = re.findall(r'\\([a-zA-Z]+)', latex)
+        semantics["functions"] = list(set(functions))
+
+        # 简单分类
+        if r"\int" in latex:
+            semantics["type"] = "integral"
+        elif r"\sum" in latex:
+            semantics["type"] = "summation"
+        elif r"\frac" in latex:
+            semantics["type"] = "fraction"
+        elif "=" in latex and not semantics["functions"]:
+            semantics["type"] = "equation"
+
+        return semantics
 
     def _encode_image_clip(self, image_path: str):
         """使用 CLIP 编码图像"""

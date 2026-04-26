@@ -44,3 +44,24 @@ def test_extract_table():
     result = extractor.extract_table(markdown_table, "test_doc", {"line": 10})
     assert result["structured_data"]["columns"] == ["Name", "Role"]
     assert len(result["structured_data"]["rows"]) == 1
+
+def test_extract_formula():
+    """测试 LaTeX 公式解析"""
+    extractor = MultimodalExtractor()
+
+    # 行内公式
+    inline_formula = r"Einstein's famous equation is $E = mc^2$."
+    result = extractor.extract_formula(inline_formula, "test_doc", {"type": "inline", "position": 0})
+
+    assert result["formula_type"] == "inline"
+    assert "E = mc^2" in result["latex"]
+
+    # 块级公式
+    block_formula = r"""The Gaussian integral:
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$"""
+    result = extractor.extract_formula(block_formula, "test_doc", {"type": "block", "position": 0})
+
+    assert result["formula_type"] == "block"
+    assert r"\int" in result["latex"]
