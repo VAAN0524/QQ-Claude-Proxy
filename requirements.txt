@@ -3,3 +3,14 @@ pytest>=7.4.0
 
 # Vector Store Dependencies
 sentence-transformers>=5.4.0
+
+# Multimodal Dependencies
+ftfy
+regex
+git+https://github.com/openai/CLIP.git
+Pillow>=9.0.0
+torch>=1.10.0
+torchvision>=0.11.0
+
+# Performance Optimization
+faiss-cpu>=1.7.0

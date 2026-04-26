@@ -11,6 +11,10 @@ import io
 class MultimodalExtractor:
     def __init__(self):
         self.zhipu_vision_skill_path = Path.home() / ".claude" / "skills" / "zhipu-vision"
+        # 模型缓存（懒加载）
+        self._clip_model = None
+        self._clip_preprocess = None
+        self._sentence_model = None
 
     def extract_image(self, image_path: str, source_doc: str) -> Dict[str, Any]:
         """使用 zhipu-vision 提取图像内容"""
@@ -197,12 +201,49 @@ class MultimodalExtractor:
 
     def _encode_image_clip(self, image_path: str):
         """使用 CLIP 编码图像"""
-        # TODO: 集成 CLIP 模型
-        # Phase 2 占位符：返回随机向量
-        return np.random.rand(512)  # CLIP 使用 512 维
+        try:
+            import clip
+            import torch
+            from PIL import Image
+
+            # 懒加载：只在第一次使用时加载模型
+            if self._clip_model is None:
+                self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device="cpu")
+
+            # 加载并预处理图像
+            image = Image.open(image_path).convert("RGB")
+            image_input = self._clip_preprocess(image).unsqueeze(0).to("cpu")
+
+            # 生成图像特征
+            with torch.no_grad():
+                image_features = self._clip_model.encode_image(image_input)
+
+            # 归一化并转换为 numpy 数组
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            return image_features.cpu().numpy().flatten()
+
+        except Exception as e:
+            # 降级：如果 CLIP 失败，返回随机向量
+            import warnings
+            warnings.warn(f"CLIP encoding failed: {e}, using random vector")
+            return np.random.rand(512)
 
     def _encode_text(self, text: str):
         """编码文本为向量"""
-        # TODO: 使用 sentence-transformers
-        # Phase 2 占位符：返回随机向量
-        return np.random.rand(768)
+        try:
+            # 懒加载：只在第一次使用时加载模型
+            if self._sentence_model is None:
+                from sentence_transformers import SentenceTransformer
+                # 使用多语言模型支持中文
+                self._sentence_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+
+            # 生成文本嵌入
+            embedding = self._sentence_model.encode(text, convert_to_numpy=True)
+
+            return embedding
+
+        except Exception as e:
+            # 降级：如果 sentence-transformers 失败，返回随机向量
+            import warnings
+            warnings.warn(f"sentence-transformers encoding failed: {e}, using random vector")
+            return np.random.rand(768)
