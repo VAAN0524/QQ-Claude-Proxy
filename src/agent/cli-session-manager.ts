@@ -331,11 +331,21 @@ export class CliSessionManager {
           try {
             // 构建完整输入
             let fullPrompt = prompt;
+            const resources: string[] = [];
+
+            // 添加图片资源（引导 Claude 使用 Read 工具）
             if (options.imagePath) {
-              fullPrompt = `[图片: ${options.imagePath}]\n${prompt}`;
+              resources.push(`图片：${options.imagePath}`);
             }
+
+            // 添加文件资源
             if (options.attachmentPath) {
-              fullPrompt = `[文件: ${options.attachmentPath}]\n${prompt}`;
+              resources.push(`文件：${options.attachmentPath}`);
+            }
+
+            // 如果有资源，在 prompt 前添加资源说明
+            if (resources.length > 0) {
+              fullPrompt = `${resources.join('\n')}\n\n${prompt}`;
             }
 
             cliProcess.stdin.write(fullPrompt + '\n');

@@ -327,6 +327,50 @@ export class ClaudeCodeAgent implements IAgent {
         for (const att of message.attachments) {
           logger.info(`处理附件: ${att.filename} (${att.type}), url=${att.url}`);
 
+          // 检查是否是 file:// 协议的本地文件（QQ发送的图片）
+          if (att.url && att.url.startsWith('file://')) {
+            // 提取真实文件路径（去掉 file:// 前缀）
+            const realPath = att.url.replace(/^file:\/\//, '');
+            logger.info(`[图片] 检测到file://协议，提取路径: ${realPath}`);
+
+            try {
+              const fs = await import('fs');
+              if (fs.existsSync(realPath)) {
+                // 文件存在，直接使用
+                const stats = fs.statSync(realPath);
+                const storedFile: StoredFile = {
+                  id: att.url,
+                  originalName: att.filename || path.basename(realPath),
+                  storedPath: realPath,
+                  mimeType: att.type || 'image/png',
+                  size: stats.size,
+                  createdAt: new Date(),
+                };
+                storedFiles.push(storedFile);
+                logger.info(`[图片] 使用本地文件: ${realPath} (${stats.size} 字节)`);
+                continue;
+              } else {
+                logger.warn(`[图片] 文件不存在: ${realPath}`);
+                return {
+                  userId: message.userId,
+                  groupId: message.groupId,
+                  content: `❌ 图片文件不存在：${realPath}
+
+💡 请确保图片路径正确，或者尝试：
+1. 重新发送图片
+2. 将图片复制到项目目录，告诉我路径`
+                };
+              }
+            } catch (error) {
+              logger.error(`[图片] 处理本地文件失败: ${error}`);
+              return {
+                userId: message.userId,
+                groupId: message.groupId,
+                content: `❌ 处理图片失败：${error}`
+              };
+            }
+          }
+
           // 检查是否是已经被预处理模块处理的文件（相对路径）
           // 预处理模块已经下载了QQ图片，保存到workspace
           if (att.url && !att.url.startsWith('http://') && !att.url.startsWith('https://')) {
@@ -406,12 +450,25 @@ export class ClaudeCodeAgent implements IAgent {
       // 如果有附件，告诉 Claude 附件的路径
       if (storedFiles.length > 0) {
         const filePaths = storedFiles.map(f => `- ${f.storedPath}`).join('\n');
+
+        // 判断是否有图片附件
+        const hasImage = storedFiles.some(f => f.mimeType.startsWith('image/'));
+
+        // 如果用户只发送了图片（没有文字），生成默认的分析请求
+        if (!message.content || message.content.trim() === '') {
+          if (hasImage) {
+            fullPrompt = '请分析这张图片的内容';
+          } else {
+            fullPrompt = '请查看这个文件';
+          }
+        }
+
         fullPrompt = `用户发送了以下附件，已保存到本地：
 ${filePaths}
 
-用户消息：${message.content}
+用户消息：${fullPrompt}
 
-请先读取/查看用户发送的附件（使用 read_file 工具），然后处理用户的请求。`;
+请使用 Read 工具读取附件内容，然后处理用户的请求。`;
       }
 
       // 优先检查列表请求（避免被文件发送请求误判）
@@ -498,6 +555,12 @@ ${filePaths}
       // 注意：不再限制消息长度，Channel 会自动分段发送长消息
 
       logger.info(`[Agent] 准备返回响应: userId=${message.userId}, content.length=${responseContent.length}`);
+
+      // 🔒 关键修复：在返回最终响应前，清除 ProgressTracker 缓冲区，避免进度消息和最终响应重复
+      if (taskId && this.progressTracker) {
+        this.progressTracker.clearTaskBuffer(taskId);
+        logger.info(`[Agent] 已清除任务 ${taskId} 的进度缓冲区，避免与最终响应重复`);
+      }
 
       // 记录助手响应到对话历史
       this.conversationManager.addAssistantMessage(message.userId, message.groupId, responseContent);

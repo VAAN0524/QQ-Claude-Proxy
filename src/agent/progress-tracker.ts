@@ -243,6 +243,27 @@ export class ProgressTracker {
   }
 
   /**
+   * 清除任务缓冲区（在最终响应前调用，避免重复）
+   */
+  clearTaskBuffer(taskId: string): void {
+    // 清除 verbose 缓冲区
+    const buffer = this.verboseBuffer.get(taskId);
+    if (buffer) {
+      buffer.length = 0;
+      this.verboseBuffer.delete(taskId);
+    }
+
+    // 清除定时器
+    const timer = this.verboseFlushTimer.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.verboseFlushTimer.delete(taskId);
+    }
+
+    logger.debug(`[ProgressTracker] 清除任务缓冲区: ${taskId}`);
+  }
+
+  /**
    * 开始追踪新任务
    */
   startTask(taskId: string, userId: string, groupId?: string, prompt?: string): void {
@@ -376,10 +397,10 @@ export class ProgressTracker {
             ? combinedMessage.substring(0, 1800) + '\n... (更多内容已省略)'
             : combinedMessage;
 
-          // 去重检查：如果与上次发送的内容相同，则跳过
+          // 去重检查：如果与上次发送的内容相同或包含，则跳过
           const lastContent = this.lastSentContent.get(taskId);
-          if (lastContent === finalMessage) {
-            logger.debug(`[ProgressTracker] 跳过重复内容发送`);
+          if (lastContent && this.isDuplicateContent(lastContent, finalMessage)) {
+            logger.debug(`[ProgressTracker] 跳过重复内容发送 (last=${lastContent.length}字, current=${finalMessage.length}字)`);
             buffer.length = 0;
             return;
           }
@@ -406,8 +427,18 @@ export class ProgressTracker {
                 ? combinedMessage.substring(0, 1800) + '\n... (更多内容已省略)'
                 : combinedMessage;
 
+              // 去重检查
+              const lastContent = this.lastSentContent.get(taskId);
+              if (lastContent && this.isDuplicateContent(lastContent, finalMessage)) {
+                logger.debug(`[ProgressTracker] 定时发送跳过重复内容 (last=${lastContent.length}字, current=${finalMessage.length}字)`);
+                buffer.length = 0;
+                this.verboseFlushTimer.delete(taskId);
+                return;
+              }
+
               try {
                 await this.sendCallback(userId, finalMessage, groupId);
+                this.lastSentContent.set(taskId, finalMessage);
                 logger.debug(`[ProgressTracker] 详细模式定时发送: ${buffer.length}条消息`);
               } catch (error) {
                 logger.error(`[ProgressTracker] 详细模式定时发送失败: ${error}`);
@@ -708,6 +739,43 @@ export class ProgressTracker {
 
     // 如果匹配2个或以上模式，认为是最终输出
     return matchCount >= 2;
+  }
+
+  /**
+   * 检查内容是否重复
+   * 检查逻辑：
+   * 1. 严格相等
+   * 2. 一个包含另一个（检查较长内容的 90% 以上）
+   * 3. 前缀相同（防止渐进式重复）
+   */
+  private isDuplicateContent(content1: string, content2: string): boolean {
+    // 1. 严格相等
+    if (content1 === content2) {
+      return true;
+    }
+
+    // 2. 一个包含另一个
+    const longer = content1.length > content2.length ? content1 : content2;
+    const shorter = content1.length > content2.length ? content2 : content1;
+
+    if (longer.includes(shorter) && shorter.length > 50) {
+      // 如果较短内容超过 50 字符，且被较长内容包含，则认为是重复
+      logger.debug(`[ProgressTracker] 检测到包含重复: shorter=${shorter.length}, longer=${longer.length}`);
+      return true;
+    }
+
+    // 3. 前缀相同（检查前 100 个字符）
+    const minLen = Math.min(content1.length, content2.length, 100);
+    if (minLen > 20) {
+      const prefix1 = content1.substring(0, minLen);
+      const prefix2 = content2.substring(0, minLen);
+      if (prefix1 === prefix2) {
+        logger.debug(`[ProgressTracker] 检测到前缀重复: prefix_len=${minLen}`);
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

@@ -79,7 +79,8 @@ export class MessageDeduplicator {
   }
 
   /**
-   * 生成内容哈希（简单版本）
+   * 生成内容哈希（改进版本）
+   * 使用前缀+后缀的组合，更好地识别包含式重复
    */
   private hashContent(content: string): string {
     // 移除时间戳、进度等动态内容
@@ -89,11 +90,24 @@ export class MessageDeduplicator {
       .replace(/\d+%/g, 'X%')
       .replace(/\[\d+\/\d+\]/g, '[X/Y]')
       .replace(/任务执行中\.\.\. \d+秒/g, '任务执行中...')
+      // 移除工具调用提示（这些是动态添加的）
+      .replace(/\nUsing \w+ tool$/gm, '')
+      .replace(/\n🔧 \[ Tool \]:\[ \w+ \]$/gm, '')
       .trim();
 
-    // 简单哈希：取前100字符 + 长度
-    const prefix = normalized.length > 100 ? normalized.substring(0, 100) : normalized;
-    return `${prefix.substring(0, 50)}_${normalized.length}`;
+    // 改进的哈希：前 80 字符 + 后 80 字符 + 长度
+    let hash = '';
+    if (normalized.length <= 160) {
+      // 短内容：全部使用
+      hash = normalized;
+    } else {
+      // 长内容：前 80 + 后 80
+      const prefix = normalized.substring(0, 80);
+      const suffix = normalized.substring(normalized.length - 80);
+      hash = `${prefix}...${suffix}`;
+    }
+
+    return `${hash}_${normalized.length}`;
   }
 
   /**
