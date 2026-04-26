@@ -5,6 +5,8 @@ import subprocess
 import json
 import hashlib
 import numpy as np
+import pandas as pd
+import io
 
 class MultimodalExtractor:
     def __init__(self):
@@ -57,9 +59,48 @@ class MultimodalExtractor:
             "semantic_vector": semantic_vector
         }
 
+    def extract_table(self, markdown_table: str, source_doc: str, position: dict) -> Dict[str, Any]:
+        """解析 Markdown 表格"""
+
+        # 解析 markdown 表格
+        lines = markdown_table.strip().split('\n')
+        lines = [line.strip() for line in lines if line.strip()]
+
+        # 分隔符行
+        separator_line = lines[1]
+        columns = [col.strip() for col in lines[0].split('|') if col.strip()]
+        rows = []
+
+        # 解析数据行
+        for line in lines[2:]:
+            values = [val.strip() for val in line.split('|') if val.strip()]
+            if values:
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    if i < len(values):
+                        row_dict[col] = values[i]
+                rows.append(row_dict)
+
+        return {
+            "table_id": self._generate_table_id(source_doc, position),
+            "source_doc": source_doc,
+            "table_position": position,
+            "markdown_table": markdown_table,
+            "structured_data": {
+                "columns": columns,
+                "rows": rows
+            },
+            "entity_mentions": []
+        }
+
     def _generate_image_id(self, source_doc: str, image_path: str) -> str:
         """生成图像 ID"""
         key = f"{source_doc}:{image_path}"
+        return hashlib.md5(key.encode()).hexdigest()
+
+    def _generate_table_id(self, source_doc: str, position: dict) -> str:
+        """生成表格 ID"""
+        key = f"{source_doc}:{position['line']}"
         return hashlib.md5(key.encode()).hexdigest()
 
     def _encode_image_clip(self, image_path: str):

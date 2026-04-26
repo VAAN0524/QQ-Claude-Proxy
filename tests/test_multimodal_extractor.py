@@ -32,3 +32,15 @@ def test_extract_image_content():
     finally:
         # 清理临时文件
         tmp_path.unlink()
+
+def test_extract_table():
+    """测试表格解析"""
+    extractor = MultimodalExtractor()
+
+    markdown_table = """| Name | Role |
+|------|------|
+| Alice | Dev |"""
+
+    result = extractor.extract_table(markdown_table, "test_doc", {"line": 10})
+    assert result["structured_data"]["columns"] == ["Name", "Role"]
+    assert len(result["structured_data"]["rows"]) == 1
