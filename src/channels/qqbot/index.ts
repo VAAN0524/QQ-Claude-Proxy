@@ -223,14 +223,20 @@ export class QQBotChannel extends EventEmitter {
     content: string,
     msgId?: string
   ): Promise<void> {
+    const targetUserId = userId || groupId || 'unknown';
+    const contentPreview = content.substring(0, 50);
+
+    logger.info(`[QQChannel.sendMessage] 开始: userId=${targetUserId}, groupId=${groupId || 'none'}, content="${contentPreview}..."`);
+
     // 去重检查：防止重复消息
     const deduplicator = getGlobalDeduplicator();
-    const targetUserId = userId || groupId || 'unknown';
 
     if (deduplicator.isDuplicate(targetUserId, content, groupId)) {
       logger.warn(`[QQChannel] 阻止重复消息: userId=${targetUserId}, groupId=${groupId || 'none'}`);
       return;
     }
+
+    logger.info(`[QQChannel.sendMessage] 通过去重检查，准备发送`);
 
     if (groupId) {
       // 群消息
@@ -239,6 +245,8 @@ export class QQBotChannel extends EventEmitter {
       // 私聊消息
       await this.api.sendC2CMessage(userId, content, msgId);
     }
+
+    logger.info(`[QQChannel.sendMessage] 发送完成`);
   }
 
   /**

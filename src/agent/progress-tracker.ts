@@ -325,11 +325,22 @@ export class ProgressTracker {
     // 调试日志：记录收到的数据
     logger.info(`[ProgressTracker] onProgress: taskId=${taskId}, chunk.length=${chunk.length}, clean.length=${cleanChunk.length}, verbose=${this.verboseMode}`);
 
+    // 🔒 强制禁用：不发送超过500字符的大块内容（由 Agent 负责发送最终响应）
+    if (this.verboseMode && chunk.length > 500) {
+      logger.info(`[ProgressTracker] 跳过大块内容发送（${chunk.length}字符，由 Agent 负责最终响应）`);
+      // 清空缓冲区，不发送
+      const buffer = this.verboseBuffer.get(taskId);
+      if (buffer) {
+        buffer.length = 0;
+      }
+      // 继续处理其他逻辑（milestone 检测等）
+    }
+
     // 提取关键行（用于智能触发）
     const lines = cleanChunk.split('\n').filter(line => line.trim().length > 0);
 
-    // 详细模式：批量收集并发送（避免 QQ 限流）
-    if (this.verboseMode && lines.length > 0) {
+    // 详细模式：只发送短内容（进度消息、工具调用等）
+    if (this.verboseMode && lines.length > 0 && chunk.length <= 500) {
       // 初始化缓冲区
       if (!this.verboseBuffer.has(taskId)) {
         this.verboseBuffer.set(taskId, []);
@@ -666,6 +677,37 @@ export class ProgressTracker {
     if (/complete|done|finished|success/i.test(lower)) return 'complete';
 
     return 'generic';
+  }
+
+  /**
+   * 检测是否是最终输出（包含总结性关键词的长文本）
+   * 最终输出的特征：
+   * 1. 长度 > 500 字符
+   * 2. 包含总结性关键词
+   * 3. 包含结构化内容（如"##"、"**"、编号列表等）
+   */
+  private detectFinalOutput(chunk: string): boolean {
+    // 如果内容太短，不是最终输出
+    if (chunk.length < 500) {
+      return false;
+    }
+
+    // 总结性关键词模式
+    const finalOutputPatterns = [
+      /已成功读取.*张图片/,
+      /## .*内容汇总/,
+      /## .*图片内容/,
+      /这些图片涵盖了/,
+      /请告诉我你希望如何处理/,
+      /我可以帮你/,
+      /---/m,  // markdown 分隔线
+    ];
+
+    // 检查是否包含至少一个总结性关键词
+    const matchCount = finalOutputPatterns.filter(pattern => pattern.test(chunk)).length;
+
+    // 如果匹配2个或以上模式，认为是最终输出
+    return matchCount >= 2;
   }
 
   /**

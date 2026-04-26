@@ -207,16 +207,24 @@ export class ClaudeCodeAgent implements IAgent {
    */
   async processAgent(message: IAgentMessage, context: AgentContext): Promise<IAgentResponse> {
     // 将 IAgentMessage 转换为内部使用的 AgentMessage
+    const workspacePath = this.storage.getWorkspacePath();
     const internalMessage: AgentMessage = {
       channel: message.channel,
       userId: message.userId,
       groupId: message.groupId,
       content: message.content,
-      attachments: message.attachments?.map(a => ({
-        type: a.type as string,
-        url: a.path,
-        filename: a.name,
-      })),
+      attachments: message.attachments?.map(a => {
+        // 转换相对路径为绝对路径
+        let attachmentUrl = a.path;
+        if (a.path && !a.path.startsWith('http://') && !a.path.startsWith('https://') && !path.isAbsolute(a.path)) {
+          attachmentUrl = path.join(workspacePath, a.path);
+        }
+        return {
+          type: a.type as string,
+          url: attachmentUrl,
+          filename: a.name,
+        };
+      }),
       timestamp: message.timestamp,
     };
 
@@ -275,7 +283,9 @@ export class ClaudeCodeAgent implements IAgent {
     }
 
     // Phase 3: 优先检查知识库相关请求（统一入口）
-    if (this.unifiedKnowledgeEntrance) {
+    // 🔒 临时禁用：防止知识库误拦截用户请求
+    // 只有明确包含"/kb "命令时才处理知识库
+    if (this.unifiedKnowledgeEntrance && message.content.trim().startsWith('/kb ')) {
       try {
         const kbResponse = await this.unifiedKnowledgeEntrance.handleNaturalInput(message.content);
 
@@ -315,15 +325,15 @@ export class ClaudeCodeAgent implements IAgent {
 
       if (message.attachments && message.attachments.length > 0) {
         for (const att of message.attachments) {
-          logger.info(`处理附件: ${att.filename} (${att.type})`);
+          logger.info(`处理附件: ${att.filename} (${att.type}), url=${att.url}`);
 
           // 检查是否是已经被预处理模块处理的文件（相对路径）
           // 预处理模块已经下载了QQ图片，保存到workspace
           if (att.url && !att.url.startsWith('http://') && !att.url.startsWith('https://')) {
             // 不是HTTP URL，可能是预处理模块已经处理的文件
-            // 尝试从workspace读取
-            const workspacePath = this.storage.getWorkspacePath();
-            const filePath = path.join(workspacePath, att.url);
+            // 尝试从workspace读取（注意：预处理模块保存到 workspacePath，不是 storagePath）
+            const filePath = path.join(this.config_internal.workspacePath, att.url);
+            logger.info(`[DEBUG] 非HTTP URL，尝试从workspace读取: filePath=${filePath}`);
 
             try {
               // 检查文件是否存在

@@ -146,6 +146,8 @@ export class CliSessionManager {
         }
 
         // 收集 stdout 输出（stream-json 格式）
+        let finalResultReceived = false;  // 标记是否已收到最终结果
+
         cliProcess.stdout.on('data', (data: Buffer) => {
           const chunk = data.toString();
           logger.info(`[CliSession ${taskId}] stdout 收到数据 (${chunk.length} 字符)`);
@@ -239,14 +241,34 @@ export class CliSessionManager {
               } else if (json.type === 'result' && json.result) {
                 // CLI 最终结果（stream-json 格式的 result 类型）
                 // 这是 Claude Code CLI 返回的最终答案
+
+                // 检查是否已经处理过最终结果（避免重复发送）
+                if (finalResultReceived) {
+                  logger.debug(`[CliSession ${taskId}] 最终结果已处理，跳过重复的 result 事件`);
+                  continue;
+                }
+
                 const result = json.result;
-                if (result && result !== output) {  // 避免重复添加相同内容
+
+                // 🔍 增强重复检测：检查是否与现有输出相同
+                const isDuplicate = result === output ||
+                  (output.length >= result.length && output.includes(result)) ||
+                  (result.length >= 100 && output.length >= 100 &&
+                   output.substring(0, 100) === result.substring(0, 100));
+
+                if (result && !isDuplicate) {
                   output = result;  // 直接替换为最终结果
                   hasOutput = true;
+                  finalResultReceived = true;  // 标记已处理
 
                   if (options.onProgress) {
                     options.onProgress(result);
                   }
+                } else if (result && isDuplicate) {
+                  // result 与 output 相同或已包含在 output 中
+                  // 标记已处理，避免后续重复
+                  finalResultReceived = true;
+                  logger.debug(`[CliSession ${taskId}] result 重复（output=${output.length}, result=${result.length}），跳过 onProgress 避免重复发送`);
                 }
               } else if (json.type === 'error') {
                 const error = json.error || json.message;
