@@ -9,7 +9,7 @@ import { isQQMessage } from './types.js';
 import { QQBotAPI } from './api.js';
 import { QQGateway } from './gateway.js';
 import { logger } from '../../utils/logger.js';
-import { KnowledgeCommands } from '../../agent/knowledge-service/global-commands.js';
+import { WikiCommands } from '../../wiki/wiki-commands.js';
 import { getGlobalDeduplicator } from '../../utils/message-deduplicator.js';
 
 export interface QQBotChannelOptions {
@@ -46,7 +46,7 @@ export class QQBotChannel extends EventEmitter {
   private api: QQBotAPI;
   private gateway: QQGateway;
   private mainGateway: any = null;
-  private knowledgeCommands?: KnowledgeCommands;
+  private wikiCommands?: WikiCommands;
 
   constructor(config: QQBotConfig) {
     super();
@@ -55,10 +55,9 @@ export class QQBotChannel extends EventEmitter {
     this.gateway = new QQGateway(config);
   }
 
-  async initializeKnowledgeService(): Promise<void> {
-    this.knowledgeCommands = new KnowledgeCommands();
-    await this.knowledgeCommands.initialize();
-    logger.info('[QQBot] 知识库服务已初始化（使用全局skill）');
+  async initializeWikiService(): Promise<void> {
+    this.wikiCommands = new WikiCommands();
+    logger.info('[QQBot] Wiki 服务已初始化');
   }
 
   async start(): Promise<void> {
@@ -93,9 +92,9 @@ export class QQBotChannel extends EventEmitter {
   private handleC2CMessage(message: QQMessage): void {
     const content = this.cleanContent(message.content);
 
-    // 处理知识库命令
-    if (content.startsWith('/kb ') && this.knowledgeCommands) {
-      this.handleKnowledgeCommand(message.author.id, undefined, content);
+    // 处理 Wiki 命令
+    if (content.startsWith('/wiki ') && this.wikiCommands) {
+      this.handleWikiCommand(message.author.id, undefined, content);
       return;
     }
 
@@ -125,9 +124,9 @@ export class QQBotChannel extends EventEmitter {
     // Remove @ mention from content
     const content = this.cleanContent(message.content);
 
-    // 处理知识库命令
-    if (content.startsWith('/kb ') && this.knowledgeCommands) {
-      this.handleKnowledgeCommand(message.author.id, message.group_id, content);
+    // 处理 Wiki 命令
+    if (content.startsWith('/wiki ') && this.wikiCommands) {
+      this.handleWikiCommand(message.author.id, message.group_id, content);
       return;
     }
 
@@ -291,33 +290,29 @@ export class QQBotChannel extends EventEmitter {
   }
 
   /**
-   * 处理知识库命令（Phase 2: 支持自然语言）
+   * 处理 Wiki 命令
    */
-  private async handleKnowledgeCommand(userId: string, groupId: string | undefined, content: string): Promise<void> {
+  private async handleWikiCommand(userId: string, groupId: string | undefined, content: string): Promise<void> {
     try {
       // 解析命令
-      const parts = content.substring(4).trim().split(/\s+/);
+      const parts = content.substring(6).trim().split(/\s+/);
       const command = parts.shift() || '';
       const args = parts;
 
-      logger.info(`[KnowledgeCommand] command=${command}, args=${args.join(', ')}`);
-
-      // Phase 2: 特殊命令直接用自然语言处理
-      if (command === 'chat' || command === 'ask' || command === '帮我') {
-        const userInput = args.join(' ');
-        const response = await this.knowledgeCommands!.handleCommand('chat', [userInput]);
-        await this.sendMessage(groupId, userId, response, undefined);
-        return;
-      }
+      logger.info(`[WikiCommand] command=${command}, args=${args.join(', ')}`);
 
       // 执行命令
-      const response = await this.knowledgeCommands!.handleCommand(command, args);
+      const response = await this.wikiCommands!.handleCommand({
+        userId,
+        groupId,
+        args: [command, ...args]
+      });
 
-      // 发送响应（使用原有的 sendMessage 方法，msgId 设为 undefined）
+      // 发送响应
       await this.sendMessage(groupId, userId, response, undefined);
     } catch (error) {
-      logger.error(`[KnowledgeCommand] 处理失败: ${error}`);
-      const errorMsg = `❌ 命令执行失败: ${error}`;
+      logger.error(`[WikiCommand] 处理失败: ${error}`);
+      const errorMsg = `❌ Wiki命令执行失败: ${error}`;
       await this.sendMessage(groupId, userId, errorMsg, undefined);
     }
   }

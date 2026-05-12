@@ -6,7 +6,7 @@
 
 ## 🔒 代码不出本地，纯净架构，专注核心功能
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/VAAN0524/QQ-Claude-Proxy)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/VAAN0524/QQ-Claude-Proxy)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/typescript-5.8.0-blue.svg)](https://www.typescriptlang.org)
@@ -49,6 +49,8 @@
 │                                                                  │
 │  用户消息 → WebSocket 路由 → 直接调用本地 CLI → 返回结果          │
 │                                                                  │
+│  附加功能: Wiki 知识库 (/wiki 命令)                              │
+│                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,6 +60,7 @@
 - 📁 **文件传输** - 支持图片、视频、文档等各种格式
 - ⚙️ **配置管理** - 灵活的配置系统
 - 📊 **Dashboard** - 实时监控和管理界面
+- 📚 **Wiki 知识库** - 三层标签体系，持久化知识管理
 
 ---
 
@@ -158,6 +161,18 @@ quick-start.bat
 | `清空历史` | 重置对话 |
 | `列出任务` | 查看定时任务 |
 
+### Wiki 知识库命令
+
+| 命令 | 说明 |
+|:---|:---|
+| `/wiki save <内容> <一级> <二级> <三级>` | 保存知识 |
+| `/wiki search <关键词>` | 搜索知识 |
+| `/wiki get <页面名>` | 获取页面详情 |
+| `/wiki list [标签]` | 列出页面 |
+| `/wiki tags` | 查看所有标签 |
+| `/wiki stats` | 查看统计信息 |
+| `/wiki lint` | 健康检查 |
+
 ### 使用示例
 
 ```
@@ -219,9 +234,13 @@ npm start
 ```
 QQ-Claude-Proxy/
 ├── src/
-│   ├── agents/                    # Claude Code CLI 适配器
-│   │   ├── ClaudeCodeAgent.ts    # 主 Agent 实现
-│   │   └── base/                 # Agent 基础接口
+│   ├── agent/                     # Claude Code CLI 适配器
+│   │   ├── index.ts              # 主 Agent 实现
+│   │   ├── claude-cli.ts         # CLI 调用
+│   │   └── cli-session-manager.ts # 会话管理
+│   ├── wiki/                      # Wiki 知识库服务
+│   │   ├── wiki-service.ts       # 核心服务 (sql.js)
+│   │   └── wiki-commands.ts      # QQ 命令处理器
 │   ├── gateway/                   # WebSocket 消息网关
 │   ├── channels/qqbot/           # QQ Bot Channel
 │   ├── scheduler/                 # 定时任务调度器
@@ -231,20 +250,27 @@ QQ-Claude-Proxy/
 └── workspace/                     # Claude Code 工作目录
 ```
 
+**代码统计** (不含 Dashboard):
+
+- 源代码: ~17,000 行 TypeScript
+- 编译后: ~36,000 行 JavaScript
+
 ---
 
-## 🔥 最新更新 (v2.0.0)
+## 🔥 最新更新 (v2.1.0)
 
-### ✨ 架构重构
+### ✨ 新增 Wiki 知识库
+
+- **📚 知识管理** - 整合 Karpathy Wiki 架构与三层标签体系
+- **🏷️ 三层标签** - 一级大类目 → 二级语义脉络 → 三级关键词
+- **🔍 智能搜索** - 全文搜索 + 标签过滤 + 使用统计
+- **📄 Markdown 同步** - 自动同步到 Markdown 文件
+- **🔧 健康检查** - 孤岛检测、断链检测、覆盖率检查
+
+### ✨ 架构重构 (v2.0.0)
 
 - **🎯 纯 CLI 模式** - 移除双模式系统，专注单一架构
 - **📦 简化设计** - 移除 60-70% 的复杂代码
-- **🔧 移除组件**:
-  - 删除多 Agent 协调系统
-  - 删除技能管理系统
-  - 删除模式切换功能
-  - 删除分层记忆系统
-  - 删除智能意图识别
 - **⚡ 性能提升** - 直接调用 Claude Code CLI，响应更快
 - **🛠️ 易维护性** - 代码结构更清晰，易于理解和扩展
 
